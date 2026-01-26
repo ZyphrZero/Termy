@@ -1,0 +1,10 @@
+{
+  "id": "obsidian-terminal",
+  "name": "Terminal",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "A full-featured terminal plugin for Obsidian with xterm.js and Rust PTY backend.",
+  "author": "ZyphrZero",
+  "authorUrl": "https://github.com/ZyphrZero",
+  "isDesktopOnly": true
+}

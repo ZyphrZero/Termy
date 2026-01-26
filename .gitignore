@@ -1,0 +1,46 @@
+# Node modules
+node_modules/
+
+# Rust
+target/
+
+# Binaries (excluded in development, included in release)
+binaries/
+
+# Build output
+main.js
+*.js.map
+
+# Plugin package (release artifacts)
+plugin-package/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test
+coverage/
+
+# Misc
+.env
+.env.local
+.dev-install-config.json
+
+# Kiro
+.kiro/
+
+# ACE Tool
+.ace-tool/
