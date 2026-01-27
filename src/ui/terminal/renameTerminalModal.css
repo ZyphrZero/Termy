@@ -1,0 +1,157 @@
+/**
+ * 重命名终端模态框样式
+ */
+
+/* 模态框容器 */
+.rename-terminal-modal .modal {
+  max-width: 250px;
+  padding: 20px 24px;
+}
+
+/* 标题区域 */
+.rename-terminal-modal .modal-title {
+  margin-bottom: 16px;
+}
+
+.rename-terminal-modal .modal-title h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-normal);
+  line-height: 1.4;
+}
+
+/* 输入区域容器 */
+.rename-terminal-modal .rename-input-container {
+  margin-bottom: 20px;
+}
+
+/* 输入框标签 */
+.rename-terminal-modal .rename-input-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* 输入框 */
+.rename-terminal-modal .rename-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-normal);
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 5px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rename-terminal-modal .rename-input:hover {
+  border-color: var(--background-modifier-border-hover);
+}
+
+.rename-terminal-modal .rename-input:focus {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.rename-terminal-modal .rename-input::placeholder {
+  color: var(--text-faint);
+}
+
+/* 按钮容器 */
+.rename-terminal-modal .modal-button-container {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+/* 按钮基础样式 */
+.rename-terminal-modal .modal-button-container button {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+  min-width: 70px;
+}
+
+.rename-terminal-modal .modal-button-container button:hover {
+  transform: translateY(-1px);
+}
+
+.rename-terminal-modal .modal-button-container button:active {
+  transform: translateY(0);
+}
+
+/* 取消按钮 */
+.rename-terminal-modal .modal-button-container button.mod-cancel {
+  color: var(--text-normal);
+  background-color: var(--background-modifier-form-field);
+}
+
+.rename-terminal-modal .modal-button-container button.mod-cancel:hover {
+  background-color: var(--background-modifier-form-field-highlighted);
+}
+
+/* 确认按钮 */
+.rename-terminal-modal .modal-button-container button.mod-cta {
+  color: var(--text-on-accent);
+  background-color: var(--interactive-accent);
+}
+
+.rename-terminal-modal .modal-button-container button.mod-cta:hover {
+  background-color: var(--interactive-accent-hover);
+}
+
+/* 响应式设计 */
+@media (max-width: 600px) {
+  .rename-terminal-modal .modal {
+    max-width: 90vw;
+    padding: 16px 20px;
+  }
+  
+  .rename-terminal-modal .modal-title {
+    margin-bottom: 12px;
+  }
+  
+  .rename-terminal-modal .rename-input-container {
+    margin-bottom: 16px;
+  }
+  
+  .rename-terminal-modal .modal-button-container {
+    flex-direction: column-reverse;
+    margin-top: 16px;
+  }
+  
+  .rename-terminal-modal .modal-button-container button {
+    width: 100%;
+  }
+}
+
+/* 暗色主题优化 */
+.theme-dark .rename-terminal-modal .rename-input {
+  background-color: var(--background-primary-alt);
+}
+
+/* 动画效果 */
+.rename-terminal-modal .modal-content {
+  animation: rename-modal-fade-in 0.2s ease-out;
+}
+
+@keyframes rename-modal-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -1,6 +1,6 @@
 {
-  "id": "obsidian-terminal",
-  "name": "Terminal",
+  "id": "obsidian-termy",
+  "name": "Termy",
   "version": "1.0.0",
   "minAppVersion": "0.15.0",
   "description": "A full-featured terminal plugin for Obsidian with xterm.js and Rust PTY backend.",

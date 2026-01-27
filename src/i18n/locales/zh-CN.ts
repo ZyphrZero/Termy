@@ -1,0 +1,326 @@
+/**
+ * 中文语言资源
+ */
+
+import type { TranslationKeys } from '../types';
+
+export const zhCN: TranslationKeys = {
+  common: {
+    confirm: '确认',
+    cancel: '取消',
+    save: '保存',
+    delete: '删除',
+    reset: '重置',
+    loading: '加载中...',
+    success: '成功',
+    error: '错误',
+    warning: '警告',
+    info: '信息',
+  },
+
+  plugin: {
+    name: 'Obsidian Termy',
+    loadingMessage: '正在加载 Obsidian Termy 插件',
+    loadedMessage: 'Obsidian Termy 插件已加载',
+    unloadingMessage: '正在卸载 Obsidian Termy 插件',
+    unloadedMessage: 'Obsidian Termy 插件已卸载',
+  },
+
+  terminal: {
+    defaultTitle: 'Terminal',
+    loading: '正在加载终端...',
+    initFailed: '初始化终端失败：{{message}}',
+    notInitialized: '终端尚未初始化，请稍候再试',
+    renameTerminal: '重命名终端',
+    contextMenu: {
+      copy: '复制',
+      copyAsPlainText: '复制为纯文本',
+      paste: '粘贴',
+      selectAll: '全选',
+      selectLine: '选择当前行',
+      search: '搜索',
+      copyPath: '复制当前路径',
+      openInExplorer: '在文件管理器中打开',
+      newTerminal: '新建终端',
+      splitTerminal: '拆分终端',
+      splitHorizontal: '水平拆分',
+      splitVertical: '垂直拆分',
+      fontSize: '字体大小',
+      fontIncrease: '增大字体',
+      fontDecrease: '减小字体',
+      fontReset: '重置字体',
+      clear: '清屏',
+      clearBuffer: '清空缓冲区',
+    },
+  },
+
+  commands: {
+    openTerminal: '打开终端',
+    terminalSearch: '终端：搜索',
+    terminalClear: '终端：清屏',
+    terminalCopy: '终端：复制',
+    terminalPaste: '终端：粘贴',
+    terminalFontIncrease: '终端：增大字体',
+    terminalFontDecrease: '终端：减小字体',
+    terminalFontReset: '终端：重置字体',
+    terminalSplitHorizontal: '终端：水平分屏',
+    terminalSplitVertical: '终端：垂直分屏',
+    terminalClearBuffer: '终端：清空缓冲区',
+  },
+
+  ribbon: {
+    terminalTooltip: '打开终端',
+  },
+
+  visibility: {
+    showInCommandPalette: '在命令面板中显示',
+    showInCommandPaletteDesc: '在命令面板中显示终端命令',
+    showInRibbon: '在侧边栏显示图标',
+    showInRibbonDesc: '在左侧边栏显示终端图标',
+    showInNewTab: '在新标签页显示',
+    showInNewTabDesc: '在新标签页中显示"打开终端"按钮',
+    showInStatusBar: '在状态栏显示',
+    showInStatusBarDesc: '在底部状态栏显示终端图标',
+    visibilitySettings: '功能显示设置',
+  },
+
+  notices: {
+    serverStartFailed: '终端服务器启动失败：{{message}}',
+    wsReconnectFailed: 'WebSocket 重连失败',
+    wsReconnectSuccess: 'WebSocket 重连成功',
+    downloadingBinary: '正在下载终端服务器二进制文件...',
+    updatingBinary: '正在更新终端服务器二进制文件...',
+    verifyingBinary: '正在验证二进制文件完整性...',
+    binaryDownloadComplete: '二进制文件下载完成',
+    binaryUpdateComplete: '二进制文件更新完成',
+    binaryNotAvailable: '当前平台不支持终端服务器二进制文件',
+    checksumMismatch: '二进制文件校验和不匹配，请重试',
+    binaryInUse: '二进制文件正在使用中，请关闭所有终端后重试',
+    terminal: {
+      serverCrashed: '终端服务器崩溃（代码：{{code}}，信号：{{signal}}）',
+      sessionClosed: '终端会话已关闭',
+      reconnecting: '正在重新连接终端服务器...',
+    },
+    settings: {
+      backgroundColorReset: '背景颜色已重置为默认值',
+      foregroundColorReset: '前景颜色已重置为默认值',
+      backgroundImageCleared: '背景图片已清除',
+      rendererUpdated: '渲染器已更新，请重新打开终端以应用更改',
+      scrollbackRangeError: '回滚缓冲区大小必须在 100 到 10000 之间',
+      heightRangeError: '高度必须在 100 到 1000 之间',
+    },
+  },
+
+  settings: {
+    tabs: {
+      terminal: '终端',
+      advanced: '高级选项',
+    },
+    header: {
+      title: 'Obsidian Termy',
+      feedbackText: '感谢使用！欢迎反馈：',
+      feedbackLink: 'GitHub',
+      reload: '重载插件',
+    },
+  },
+
+  settingsDetails: {
+    terminal: {
+      appearanceSettings: '外观设置',
+      behaviorSettings: '行为设置',
+      blurEffect: '毛玻璃效果',
+      blurEffectDesc: '对背景图片应用毛玻璃模糊效果',
+      rendererType: '渲染器类型',
+      rendererTypeDesc: '终端渲染引擎（WebGL 更快但可能存在兼容性问题）',
+      pathValid: '✓ 路径有效',
+      pathInvalid: '✗ 路径不存在或无法访问',
+      renameTerminalPlaceholder: '输入新的终端名称',
+      shellSettings: 'Shell 设置',
+      defaultShell: '默认 Shell',
+      defaultShellDesc: '选择默认使用的 Shell',
+      customShellPath: '自定义 Shell 路径',
+      customShellPathDesc: '自定义 Shell 可执行文件路径（仅当 Shell 类型为"自定义"时使用）',
+      customShellPathPlaceholder: '例如：/usr/local/bin/fish',
+      defaultArgs: '默认参数',
+      defaultArgsDesc: '传递给 Shell 的默认参数',
+      defaultArgsPlaceholder: '例如：PowerShell 使用 -NoLogo',
+      autoEnterVault: '自动进入仓库目录',
+      autoEnterVaultDesc: '打开终端时自动切换到仓库目录',
+      instanceBehavior: '实例行为',
+      newInstanceLayout: '新实例布局',
+      newInstanceLayoutDesc: '如何打开新的终端实例',
+      createNearExisting: '在现有实例附近创建',
+      createNearExistingDesc: '在现有终端面板附近创建新实例',
+      focusNewInstance: '聚焦新实例',
+      focusNewInstanceDesc: '自动聚焦新创建的终端实例',
+      lockNewInstance: '锁定新实例',
+      lockNewInstanceDesc: '默认锁定新创建的终端实例',
+      themeSettings: '主题设置',
+      useObsidianTheme: '使用 Obsidian 主题',
+      useObsidianThemeDesc: '使用 Obsidian 主题颜色作为终端配色',
+      backgroundColor: '背景颜色',
+      backgroundColorDesc: '终端背景颜色（十六进制格式）',
+      foregroundColor: '前景颜色',
+      foregroundColorDesc: '终端文本颜色（十六进制格式）',
+      backgroundImage: '背景图片',
+      backgroundImageDesc: '背景图片的 URL 或路径',
+      backgroundImagePlaceholder: '例如：https://example.com/image.jpg',
+      backgroundImageOpacity: '背景图片不透明度',
+      backgroundImageOpacityDesc: '背景图片的不透明度（0-1）',
+      backgroundImageSize: '背景图片尺寸',
+      backgroundImageSizeDesc: '背景图片的尺寸设置',
+      backgroundImagePosition: '背景图片位置',
+      backgroundImagePositionDesc: '背景图片的位置（CSS 格式）',
+      enableBlur: '启用模糊',
+      enableBlurDesc: '对背景图片应用模糊效果',
+      blurAmount: '模糊程度',
+      blurAmountDesc: '应用的模糊程度（像素）',
+      textOpacity: '文本不透明度',
+      textOpacityDesc: '终端文本的不透明度（0-1）',
+      fontSettings: '字体设置',
+      fontSize: '字体大小',
+      fontSizeDesc: '终端字体大小（像素）',
+      fontFamily: '字体族',
+      fontFamilyDesc: '终端字体族',
+      fontFamilyPlaceholder: '例如：Consolas, Monaco, monospace',
+      cursorStyle: '光标样式',
+      cursorStyleDesc: '终端光标样式',
+      cursorBlink: '光标闪烁',
+      cursorBlinkDesc: '启用光标闪烁',
+      rendererSettings: '渲染器设置',
+      preferredRenderer: '首选渲染器',
+      preferredRendererDesc: '终端渲染引擎（WebGL 更快但可能存在兼容性问题）',
+      scrollback: '回滚缓冲',
+      scrollbackDesc: '回滚缓冲区保留的行数',
+      defaultHeight: '默认高度',
+      defaultHeightDesc: '默认终端高度（像素）',
+    },
+    advanced: {
+      performanceAndDebug: '性能与调试',
+      debugMode: '调试模式',
+      debugModeDesc: '启用控制台调试日志',
+      serverConnection: '服务器连接',
+      offlineMode: '离线模式',
+      offlineModeDesc: '使用本地二进制文件，不检查更新',
+      customServerPort: '自定义服务器端口',
+      customServerPortDesc: '终端服务器的自定义端口（留空则自动分配）',
+      customServerPortPlaceholder: '例如：8765',
+    },
+  },
+
+  modals: {
+    renameTerminal: {
+      title: '重命名终端',
+      placeholder: '输入新的终端名称',
+    },
+  },
+
+  errors: {
+    serverNotRunning: '终端服务器未运行',
+    connectionLost: '与终端服务器的连接已断开',
+    invalidMessage: '从服务器收到无效消息',
+  },
+
+  terminalInstance: {
+    rendererNotSupported: '不支持该渲染器，回退到 canvas',
+    webglContextLost: 'WebGL 上下文丢失，回退到 canvas',
+    rendererLoadFailed: '加载渲染器插件失败',
+    instanceDestroyed: '终端实例已被销毁',
+    startFailed: '启动终端失败',
+    connectionTimeout: '连接超时',
+    cannotConnect: '无法连接到终端服务器',
+    xtermLoadFailed: '加载 xterm.js 模块失败：{{message}}',
+    xtermInitFailed: '初始化 xterm.js 失败：{{message}}',
+  },
+
+  terminalService: {
+    processNotStarted: '终端服务器进程未启动',
+    portInfoTimeout: '等待端口信息超时',
+    startFailedWithCode: '终端服务器启动失败（退出代码：{{code}}）',
+  },
+
+  shellTypes: {
+    cmd: '命令提示符',
+    powershell: 'PowerShell',
+    wsl: 'WSL',
+    gitbash: 'Git Bash',
+    bash: 'Bash',
+    zsh: 'Zsh',
+    custom: '自定义',
+  },
+
+  newInstanceBehavior: {
+    newTab: '新标签页',
+    newPane: '新面板',
+    newWindow: '新窗口',
+  },
+
+  cursorStyles: {
+    block: '方块',
+    underline: '下划线',
+    bar: '竖线',
+  },
+
+  rendererTypes: {
+    canvas: 'Canvas',
+    webgl: 'WebGL',
+  },
+
+  backgroundImageSizes: {
+    cover: '覆盖',
+    contain: '包含',
+    auto: '自动',
+  },
+
+  shellOptions: {
+    cmd: '命令提示符',
+    powershell: 'PowerShell',
+    wsl: 'WSL',
+    gitbash: 'Git Bash',
+    bash: 'Bash',
+    zsh: 'Zsh',
+    custom: '自定义',
+  },
+
+  layoutOptions: {
+    replaceTab: '替换当前标签页',
+    newTab: '新标签页',
+    newLeftTab: '新标签页（左侧）',
+    newLeftSplit: '新分屏（左侧）',
+    newRightTab: '新标签页（右侧）',
+    newRightSplit: '新分屏（右侧）',
+    newHorizontalSplit: '水平分屏',
+    newVerticalSplit: '垂直分屏',
+    newWindow: '新窗口',
+  },
+
+  backgroundSizeOptions: {
+    cover: '覆盖',
+    contain: '包含',
+    auto: '自动',
+  },
+
+  backgroundPositionOptions: {
+    center: '居中',
+    top: '顶部',
+    bottom: '底部',
+    left: '左侧',
+    right: '右侧',
+    topLeft: '左上',
+    topRight: '右上',
+    bottomLeft: '左下',
+    bottomRight: '右下',
+  },
+
+  cursorStyleOptions: {
+    block: '方块',
+    underline: '下划线',
+    bar: '竖线',
+  },
+
+  rendererOptions: {
+    canvas: 'Canvas',
+    webgl: 'WebGL',
+  },
+};
+

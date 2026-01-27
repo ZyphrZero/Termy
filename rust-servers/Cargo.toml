@@ -1,9 +1,9 @@
-# Rust Terminal Server
+# Rust 终端服务器
 [package]
 name = "terminal-server"
 version = "1.0.0"
 edition = "2021"
-description = "Terminal server for obsidian-terminal plugin"
+description = "Terminal server for Obsidian-Termy plugin"
 
 [[bin]]
 name = "terminal-server"
@@ -26,6 +26,9 @@ serde_json = "1.0"
 
 # 错误处理
 thiserror = "2.0"
+
+# 异步 trait 支持
+async-trait = "0.1"
 
 # UUID 生成
 uuid = { version = "1.0", features = ["v4"] }

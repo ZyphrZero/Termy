@@ -1,0 +1,523 @@
+/* Obsidian Terminal Styles */
+
+/* ==================== Rename Terminal Modal Styles ==================== */
+/* 模态框容器 */
+.rename-terminal-modal .modal {
+  max-width: 420px;
+  padding: 20px 24px;
+}
+
+/* 标题区域 */
+.rename-terminal-modal .modal-title {
+  margin-bottom: 16px;
+}
+
+.rename-terminal-modal .modal-title h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-normal);
+  line-height: 1.4;
+}
+
+/* 输入区域容器 */
+.rename-terminal-modal .rename-input-container {
+  margin-bottom: 20px;
+}
+
+/* 输入框标签 */
+.rename-terminal-modal .rename-input-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* 输入框 */
+.rename-terminal-modal .rename-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-normal);
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 5px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rename-terminal-modal .rename-input:hover {
+  border-color: var(--background-modifier-border-hover);
+}
+
+.rename-terminal-modal .rename-input:focus {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.rename-terminal-modal .rename-input::placeholder {
+  color: var(--text-faint);
+}
+
+/* 按钮容器 */
+.rename-terminal-modal .modal-button-container {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+/* 按钮基础样式 */
+.rename-terminal-modal .modal-button-container button {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+  min-width: 70px;
+}
+
+.rename-terminal-modal .modal-button-container button:hover {
+  transform: translateY(-1px);
+}
+
+.rename-terminal-modal .modal-button-container button:active {
+  transform: translateY(0);
+}
+
+/* 取消按钮 */
+.rename-terminal-modal .modal-button-container button.mod-cancel {
+  color: var(--text-normal);
+  background-color: var(--background-modifier-form-field);
+}
+
+.rename-terminal-modal .modal-button-container button.mod-cancel:hover {
+  background-color: var(--background-modifier-form-field-highlighted);
+}
+
+/* 确认按钮 */
+.rename-terminal-modal .modal-button-container button.mod-cta {
+  color: var(--text-on-accent);
+  background-color: var(--interactive-accent);
+}
+
+.rename-terminal-modal .modal-button-container button.mod-cta:hover {
+  background-color: var(--interactive-accent-hover);
+}
+
+/* 响应式设计 */
+@media (max-width: 600px) {
+  .rename-terminal-modal .modal {
+    max-width: 90vw;
+    padding: 16px 20px;
+  }
+  
+  .rename-terminal-modal .modal-title {
+    margin-bottom: 12px;
+  }
+  
+  .rename-terminal-modal .rename-input-container {
+    margin-bottom: 16px;
+  }
+  
+  .rename-terminal-modal .modal-button-container {
+    flex-direction: column-reverse;
+    margin-top: 16px;
+  }
+  
+  .rename-terminal-modal .modal-button-container button {
+    width: 100%;
+  }
+}
+
+/* 暗色主题优化 */
+.theme-dark .rename-terminal-modal .rename-input {
+  background-color: var(--background-primary-alt);
+}
+
+/* 动画效果 */
+.rename-terminal-modal .modal-content {
+  animation: rename-modal-fade-in 0.2s ease-out;
+}
+
+@keyframes rename-modal-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ==================== Terminal Styles ==================== */
+/* 工作区叶子内容 - 终端视图 */
+.workspace-leaf-content[data-type="terminal-view"] {
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  height: 100% !important;
+}
+/* 隐藏终端视图的标题栏 */
+.workspace-leaf-content[data-type="terminal-view"] .view-header {
+  display: none !important;
+}
+.workspace-leaf-content[data-type="terminal-view"] .view-content {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+/* 终端视图主容器 */
+.terminal-view-container {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background-color: var(--background-primary);
+}
+/* 终端视图主容器 - 有背景图片时 */
+.terminal-view-container.has-background-image {
+  background-color: transparent !important;
+}
+/* 终端容器 */
+.terminal-container {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  position: relative !important;
+  width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background-color: var(--background-primary);
+  isolation: isolate;
+}
+/* 终端容器 - 有背景图片时 */
+.terminal-container.has-background-image {
+  background-color: transparent !important;
+}
+/* 终端背景图片层 - 独立的背景层，透明度只影响背景 */
+.terminal-background-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+/* 终端实例容器 - 文字层保持完全不透明 */
+.terminal-instance {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  position: relative !important;
+  z-index: 1;
+  background-color: transparent !important;
+  opacity: 1 !important;
+}
+/* ==================== Xterm.js 核心样式 ==================== */
+/* Xterm 主容器 */
+.terminal-container .xterm,
+.terminal-instance .xterm {
+  position: relative !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
+  padding: 4px !important;
+  cursor: text;
+  outline: none;
+  opacity: 1 !important;
+}
+/* 有背景图片时，xterm 容器背景透明 */
+.terminal-container.has-background-image .xterm {
+  background-color: transparent !important;
+}
+/* Xterm 辅助元素 - 隐藏输入框 */
+.xterm-helpers {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -5;
+  opacity: 0;
+  pointer-events: none;
+}
+.xterm-helper-textarea {
+  position: absolute;
+  opacity: 0;
+  left: -9999px;
+  top: -9999px;
+  width: 0;
+  height: 0;
+  z-index: -5;
+  white-space: nowrap;
+  overflow: hidden;
+  resize: none;
+  padding: 0;
+  border: 0;
+  outline: none;
+}
+/* Xterm 屏幕 */
+.xterm-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+/* 有背景图片时，xterm 屏幕背景透明 */
+.terminal-container.has-background-image .xterm-screen {
+  background-color: transparent !important;
+}
+/* Xterm 视口（滚动容器） */
+.xterm-viewport {
+  overflow-y: auto;
+  overflow-x: hidden;
+  cursor: default;
+  position: absolute;
+  right: 0;
+  left: 0;
+  top: 0;
+  bottom: 0;
+}
+/* 有背景图片时，视口背景透明 */
+.terminal-container.has-background-image .xterm-viewport {
+  background-color: transparent !important;
+}
+/* ==================== 光标样式 ==================== */
+/* 光标层 - 确保在最上层 */
+.xterm-cursor-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3 !important;
+  pointer-events: none;
+}
+/* 光标 - 块状光标 */
+.xterm-cursor {
+  position: absolute;
+  background-color: var(--text-accent) !important;
+  opacity: 1 !important;
+  z-index: 3 !important;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+/* 光标闪烁动画 */
+.xterm-cursor.xterm-cursor-blink {
+  animation: xterm-cursor-blink 1.2s steps(2, start) infinite;
+}
+@keyframes xterm-cursor-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+/* 光标样式变体 */
+.xterm-cursor.xterm-cursor-block {
+  background-color: var(--text-accent) !important;
+  height: 1.2em;
+  width: 1ch;
+}
+.xterm-cursor.xterm-cursor-outline {
+  background-color: transparent !important;
+  border: 1px solid var(--text-accent) !important;
+  box-sizing: border-box;
+  height: 1.2em;
+  width: 1ch;
+}
+.xterm-cursor.xterm-cursor-bar {
+  background-color: var(--text-accent) !important;
+  width: 1px !important;
+  height: 1.2em;
+}
+.xterm-cursor.xterm-cursor-underline {
+  background-color: transparent !important;
+  border-bottom: 1px solid var(--text-accent) !important;
+  height: 1px !important;
+  bottom: 0;
+  width: 1ch;
+}
+/* ==================== 文本和渲染层 ==================== */
+/* 文本层 */
+.xterm-text-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  color: var(--text-normal);
+  font-family: var(--font-monospace);
+  font-size: 14px;
+  line-height: 1.2;
+  contain: strict;
+  opacity: var(--terminal-text-opacity, 1) !important;
+}
+/* 链接层 */
+.xterm-link-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+}
+/* 选择层 */
+.xterm-selection-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+/* 选择文本样式 */
+.xterm-selection {
+  position: absolute;
+  background-color: var(--text-selection) !important;
+  opacity: 0.3 !important;
+}
+/* ==================== Canvas 渲染器样式 ==================== */
+.xterm-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: var(--terminal-text-opacity, 1) !important;
+}
+/* 当有背景图片时，Canvas 渲染器也需要透明背景 */
+.terminal-container.has-background-image .xterm-canvas,
+.terminal-container.has-background-image canvas {
+  background-color: transparent !important;
+}
+/* ==================== 滚动条样式 ==================== */
+.xterm-viewport::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.xterm-viewport::-webkit-scrollbar-track {
+  background: var(--background-secondary);
+}
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--background-modifier-border);
+  border-radius: 5px;
+}
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+.xterm-viewport::-webkit-scrollbar-corner {
+  background: var(--background-secondary);
+}
+/* ==================== 链接样式 ==================== */
+.xterm-link {
+  cursor: pointer;
+  text-decoration: underline;
+  color: var(--text-accent);
+}
+.xterm-link:hover {
+  text-decoration: underline;
+  color: var(--text-accent-hover);
+}
+/* ==================== 错误和状态消息 ==================== */
+.terminal-error-message {
+  padding: 12px;
+  margin: 8px;
+  background-color: var(--background-modifier-error);
+  border: 1px solid var(--background-modifier-error-border);
+  border-radius: 4px;
+  color: var(--text-error);
+  font-family: var(--font-monospace);
+  font-size: 13px;
+}
+.terminal-exit-message {
+  padding: 12px;
+  margin: 8px;
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  font-size: 13px;
+}
+/* ==================== 主题兼容性 ==================== */
+.theme-dark .terminal-view-container,
+.theme-dark .terminal-container {
+  background-color: #1e1e1e;
+}
+/* 有背景图片时，主题背景色不生效 */
+.theme-dark .terminal-view-container.has-background-image,
+.theme-dark .terminal-container.has-background-image {
+  background-color: transparent !important;
+}
+.theme-dark .xterm-text-layer {
+  color: #d4d4d4;
+}
+.theme-dark .xterm-cursor {
+  background-color: #aeafad !important;
+}
+.theme-light .terminal-view-container,
+.theme-light .terminal-container {
+  background-color: #ffffff;
+}
+/* 有背景图片时，主题背景色不生效 */
+.theme-light .terminal-view-container.has-background-image,
+.theme-light .terminal-container.has-background-image {
+  background-color: transparent !important;
+}
+.theme-light .xterm-text-layer {
+  color: #000000;
+}
+.theme-light .xterm-cursor {
+  background-color: #000000 !important;
+}
+/* ==================== 焦点样式 ==================== */
+.xterm:focus {
+  outline: none;
+}
+.xterm.focus .xterm-cursor {
+  opacity: 1 !important;
+}
+.xterm:not(.focus) .xterm-cursor {
+  opacity: 0.5;
+}
+/* ==================== 响应式设计 ==================== */
+@media (max-width: 768px) {
+  .terminal-container {
+    padding: 0;
+  }
+  .terminal-error-message,
+  .terminal-exit-message {
+    margin: 4px;
+    padding: 8px;
+    font-size: 12px;
+  }
+  .xterm-text-layer {
+    font-size: 12px;
+  }
+}
+/* ==================== 性能优化 ==================== */
+.xterm-rows {
+  will-change: transform;
+}
+.xterm-cursor-layer,
+.xterm-text-layer,
+.xterm-selection-layer,
+.xterm-link-layer {
+  contain: strict;
+}

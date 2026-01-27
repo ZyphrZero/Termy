@@ -1,4 +1,4 @@
-# Obsidian Terminal
+# Obsidian Termy
 
 A full-featured terminal plugin for Obsidian with xterm.js and Rust PTY backend.
 
@@ -30,14 +30,14 @@ A full-featured terminal plugin for Obsidian with xterm.js and Rust PTY backend.
 
 1. Open Obsidian Settings
 2. Go to Community Plugins
-3. Search for "Terminal"
+3. Search for "Termy"
 4. Click Install
 5. Enable the plugin
 
 ### Manual Installation
 
-1. Download the latest release from [GitHub Releases](https://github.com/ZyphrZero/Obsidian-Terminal/releases)
-2. Extract the files to your vault's .obsidian/plugins/obsidian-terminal/ directory
+1. Download the latest release from [GitHub Releases](https://github.com/ZyphrZero/Obsidian-Termy/releases)
+2. Extract the files to your vault's .obsidian/plugins/obsidian-termy/ directory
 3. Reload Obsidian
 4. Enable the plugin in Settings → Community Plugins
 
@@ -49,7 +49,7 @@ A full-featured terminal plugin for Obsidian with xterm.js and Rust PTY backend.
 
 ## Configuration
 
-Access plugin settings in Obsidian Settings → Terminal to configure:
+Access plugin settings in Obsidian Settings → Termy to configure:
 
 - Default shell and arguments
 - Font size and family
@@ -75,5 +75,5 @@ GPL-3.0 License - see [LICENSE](LICENSE) for details.
 
 ## Support
 
-- Report issues: [GitHub Issues](https://github.com/ZyphrZero/Obsidian-Terminal/issues)
-- Discussions: [GitHub Discussions](https://github.com/ZyphrZero/Obsidian-Terminal/discussions)
+- Report issues: [GitHub Issues](https://github.com/ZyphrZero/Obsidian-Termy/issues)
+- Discussions: [GitHub Discussions](https://github.com/ZyphrZero/Obsidian-Termy/discussions)
