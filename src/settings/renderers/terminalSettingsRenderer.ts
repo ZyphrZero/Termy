@@ -41,6 +41,10 @@ function validateShellPath(path: string): boolean {
  * 处理 Shell 程序、实例行为、主题和外观设置的渲染
  */
 export class TerminalSettingsRenderer extends BaseSettingsRenderer {
+  private themePreviewEl: HTMLElement | null = null;
+  private themePreviewBackgroundEl: HTMLElement | null = null;
+  private themePreviewContentEl: HTMLElement | null = null;
+
   /**
    * 渲染终端设置
    * @param context 渲染器上下文
@@ -259,6 +263,8 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       .setName(t('settingsDetails.terminal.themeSettings'))
       .setHeading();
 
+    this.renderThemePreview(themeCard);
+
     // 使用 Obsidian 主题
     const useObsidianThemeSetting = new Setting(themeCard)
       .setName(t('settingsDetails.terminal.useObsidianTheme'))
@@ -366,7 +372,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       .setDesc(t('settingsDetails.terminal.backgroundImageDesc'));
 
     let backgroundImageInput: TextComponent | null = null;
-    
+
     bgImageSetting.addText(text => {
       backgroundImageInput = text;
       const inputEl = text
@@ -374,6 +380,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         .setValue(this.context.plugin.settings.backgroundImage || '')
         .onChange(async (value) => {
           this.context.plugin.settings.backgroundImage = value.trim() || undefined;
+          this.updateThemePreview();
         });
       
       // 失去焦点时使用局部更新
@@ -657,7 +664,81 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   private async updateThemeSetting(update: () => void): Promise<void> {
     update();
     await this.saveSettings();
+    this.updateThemePreview();
     this.requestThemeRefresh();
+  }
+
+  private renderThemePreview(container: HTMLElement): void {
+    const previewSection = container.createDiv({ cls: 'terminal-theme-preview-section' });
+    previewSection.createDiv({
+      cls: 'terminal-theme-preview-title',
+      text: t('settingsDetails.terminal.themePreview'),
+    });
+
+    this.themePreviewEl = previewSection.createDiv({ cls: 'terminal-theme-preview' });
+    this.themePreviewBackgroundEl = this.themePreviewEl.createDiv({ cls: 'terminal-theme-preview-bg' });
+    this.themePreviewContentEl = this.themePreviewEl.createDiv({ cls: 'terminal-theme-preview-content' });
+
+    this.themePreviewContentEl.createDiv({ text: '$ echo "Obsidian Termy"' });
+    this.themePreviewContentEl.createDiv({ text: 'Obsidian Termy' });
+    this.themePreviewContentEl.createDiv({ text: '$ ls' });
+    this.themePreviewContentEl.createDiv({ text: 'README.md  scripts  src  package.json' });
+    this.themePreviewContentEl.createDiv({ text: '$' });
+
+    this.updateThemePreview();
+  }
+
+  private updateThemePreview(): void {
+    if (!this.themePreviewEl) return;
+    const settings = this.context.plugin.settings;
+
+    const useObsidianTheme = settings.useObsidianTheme;
+    const backgroundColor = useObsidianTheme
+      ? 'var(--background-primary)'
+      : (settings.backgroundColor || '#000000');
+    const foregroundColor = useObsidianTheme
+      ? 'var(--text-normal)'
+      : (settings.foregroundColor || '#FFFFFF');
+
+    const showBackgroundImage = !useObsidianTheme
+      && settings.preferredRenderer === 'canvas'
+      && !!settings.backgroundImage;
+
+    this.themePreviewEl.style.setProperty('--terminal-preview-bg', backgroundColor);
+    this.themePreviewEl.style.setProperty('--terminal-preview-fg', foregroundColor);
+
+    if (showBackgroundImage) {
+      const backgroundImageOpacity = settings.backgroundImageOpacity ?? 0.5;
+      const overlayOpacity = 1 - backgroundImageOpacity;
+      const overlayGradient = `linear-gradient(rgba(0, 0, 0, ${overlayOpacity}), rgba(0, 0, 0, ${overlayOpacity}))`;
+
+      this.themePreviewEl.classList.add('has-background-image');
+      this.themePreviewEl.style.setProperty('--terminal-preview-bg-overlay', overlayGradient);
+      this.themePreviewEl.style.setProperty('--terminal-preview-bg-image', `url("${settings.backgroundImage}")`);
+      this.themePreviewEl.style.setProperty('--terminal-preview-bg-size', settings.backgroundImageSize || 'cover');
+      this.themePreviewEl.style.setProperty('--terminal-preview-bg-position', settings.backgroundImagePosition || 'center');
+
+      if (settings.enableBlur && (settings.blurAmount ?? 0) > 0) {
+        this.themePreviewEl.style.setProperty('--terminal-preview-bg-blur', `${settings.blurAmount}px`);
+        this.themePreviewEl.style.setProperty('--terminal-preview-bg-scale', '1.05');
+      } else {
+        this.themePreviewEl.style.setProperty('--terminal-preview-bg-blur', '0px');
+        this.themePreviewEl.style.setProperty('--terminal-preview-bg-scale', '1');
+      }
+      this.themePreviewEl.style.setProperty(
+        '--terminal-preview-text-opacity',
+        String(settings.textOpacity ?? 1.0)
+      );
+    } else {
+      this.themePreviewEl.classList.remove('has-background-image');
+      this.themePreviewEl.style.setProperty('--terminal-preview-bg-overlay', 'none');
+      this.themePreviewEl.style.setProperty('--terminal-preview-bg-image', 'none');
+      this.themePreviewEl.style.setProperty('--terminal-preview-bg-size', 'cover');
+      this.themePreviewEl.style.setProperty('--terminal-preview-bg-position', 'center');
+      this.themePreviewEl.style.setProperty('--terminal-preview-bg-blur', '0px');
+      this.themePreviewEl.style.setProperty('--terminal-preview-bg-scale', '1');
+      this.themePreviewEl.style.setProperty('--terminal-preview-text-opacity', '1');
+    }
   }
 
   /**

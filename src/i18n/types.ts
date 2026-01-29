@@ -179,6 +179,7 @@ export interface TranslationKeys {
       lockNewInstance: string;
       lockNewInstanceDesc: string;
       themeSettings: string;
+      themePreview: string;
       useObsidianTheme: string;
       useObsidianThemeDesc: string;
       backgroundColor: string;
