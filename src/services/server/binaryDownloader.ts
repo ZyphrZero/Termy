@@ -48,7 +48,7 @@ interface BinaryInfo {
 
 export class BinaryDownloader {
   /** GitHub 仓库 */
-  private readonly repo = 'ZyphrZero/Obsidian-Terminal';
+  private readonly repo = 'ZyphrZero/Obsidian-Termy';
   
   /** 插件目录 */
   private pluginDir: string;
