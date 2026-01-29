@@ -18,10 +18,17 @@ export class TerminalView extends ItemView {
   private searchContainer: HTMLElement | null = null;
   private searchInput: HTMLInputElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private initPromise: Promise<TerminalInstance> | null = null;
+  private initResolve: ((terminal: TerminalInstance) => void) | null = null;
+  private initReject: ((error: Error) => void) | null = null;
 
   constructor(leaf: WorkspaceLeaf, terminalService: TerminalService | null) {
     super(leaf);
     this.terminalService = terminalService;
+    this.initPromise = new Promise<TerminalInstance>((resolve, reject) => {
+      this.initResolve = resolve;
+      this.initReject = reject;
+    });
   }
 
   getViewType(): string { return TERMINAL_VIEW_TYPE; }
@@ -223,6 +230,9 @@ export class TerminalView extends ItemView {
       }
 
       this.terminalInstance = await this.terminalService.createTerminal();
+      this.initResolve?.(this.terminalInstance);
+      this.initResolve = null;
+      this.initReject = null;
 
       this.terminalInstance.onTitleChange(() => {
         (this.leaf as any).updateHeader();
@@ -252,6 +262,11 @@ export class TerminalView extends ItemView {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorLog('[TerminalView] Init failed:', errorMessage);
+      if (this.initReject) {
+        this.initReject(error instanceof Error ? error : new Error(errorMessage));
+        this.initResolve = null;
+        this.initReject = null;
+      }
       new Notice(t('notices.terminal.initFailed', { message: errorMessage }));
       this.leaf.detach();
     }
@@ -451,5 +466,18 @@ export class TerminalView extends ItemView {
    */
   getTerminalInstance(): TerminalInstance | null {
     return this.terminalInstance;
+  }
+
+  async waitForTerminalInstance(timeoutMs = 8000): Promise<TerminalInstance> {
+    if (this.terminalInstance) return this.terminalInstance;
+    if (!this.initPromise) {
+      throw new Error(t('terminal.notInitialized'));
+    }
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(t('terminal.notInitialized'))), timeoutMs);
+    });
+
+    return Promise.race([this.initPromise, timeoutPromise]);
   }
 }

@@ -72,6 +72,7 @@ export const zhCN: TranslationKeys = {
     terminalSplitHorizontal: '终端：水平分屏',
     terminalSplitVertical: '终端：垂直分屏',
     terminalClearBuffer: '终端：清空缓冲区',
+    presetScriptPrefix: '终端：',
   },
 
   ribbon: {
@@ -114,6 +115,12 @@ export const zhCN: TranslationKeys = {
       rendererUpdated: '渲染器已更新，请重新打开终端以应用更改',
       scrollbackRangeError: '回滚缓冲区大小必须在 100 到 10000 之间',
       heightRangeError: '高度必须在 100 到 1000 之间',
+    },
+    presetScript: {
+      notFound: '预设脚本不存在或已被删除',
+      emptyCommand: '脚本命令为空，请先配置命令',
+      terminalUnavailable: '未找到可用终端，请先打开终端',
+      runFailed: '执行脚本失败：{{message}}',
     },
   },
 
@@ -205,6 +212,29 @@ export const zhCN: TranslationKeys = {
       preferredRendererDesc: '终端渲染引擎（WebGL 更快但可能存在兼容性问题）',
       scrollback: '回滚缓冲',
       scrollbackDesc: '回滚缓冲区保留的行数',
+      presetScripts: '预设脚本',
+      presetScriptsDesc: '配置可通过快捷键或状态栏触发的脚本',
+      presetScriptsAdd: '新增脚本',
+      presetScriptsEmpty: '暂无脚本，可点击“新增脚本”创建',
+      presetScriptsUnnamed: '未命名脚本',
+      presetScriptsEmptyCommand: '（未设置命令）',
+      presetScriptsDeleteConfirm: '确定删除脚本“{{name}}”吗？',
+      presetScriptsMoveUp: '上移',
+      presetScriptsMoveDown: '下移',
+      presetScriptName: '脚本名称',
+      presetScriptNamePlaceholder: '例如：Claude Code 更新并启动',
+      presetScriptIcon: '脚本图标',
+      presetScriptIconPlaceholder: '例如：sparkles / terminal / wand-2',
+      presetScriptCommand: '脚本命令',
+      presetScriptCommandPlaceholder: '例如：claude --update && claude',
+      presetScriptTerminalTitle: '终端名称',
+      presetScriptTerminalTitlePlaceholder: '例如：Claude Code',
+      presetScriptShowInStatusBar: '在状态栏菜单显示',
+      presetScriptShowInStatusBarDesc: '允许在状态栏菜单中触发该脚本',
+      presetScriptAutoOpenTerminal: '自动打开终端',
+      presetScriptAutoOpenTerminalDesc: '触发脚本时自动打开或激活终端',
+      presetScriptRunInNewTerminal: '在新终端执行',
+      presetScriptRunInNewTerminalDesc: '每次触发时创建新的终端实例执行脚本',
     },
     advanced: {
       performanceAndDebug: '性能与调试',
@@ -228,6 +258,10 @@ export const zhCN: TranslationKeys = {
     renameTerminal: {
       title: '重命名终端',
       placeholder: '输入新的终端名称',
+    },
+    presetScript: {
+      titleCreate: '新增预设脚本',
+      titleEdit: '编辑预设脚本',
     },
   },
 

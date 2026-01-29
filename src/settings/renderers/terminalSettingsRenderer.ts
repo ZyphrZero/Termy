@@ -4,9 +4,9 @@
  */
 
 import type { ColorComponent, TextComponent } from 'obsidian';
-import { Setting, Notice, Platform } from 'obsidian';
+import { Setting, Notice, Platform, setIcon } from 'obsidian';
 import type { RendererContext } from '../types';
-import type { ShellType } from '../settings';
+import type { PresetScript, ShellType } from '../settings';
 import { 
   DEFAULT_SERVER_CONNECTION_SETTINGS,
   getCurrentPlatformShell, 
@@ -16,6 +16,8 @@ import {
 } from '../settings';
 import { BaseSettingsRenderer } from './baseRenderer';
 import { t } from '../../i18n';
+import { PresetScriptModal } from '../../ui/terminal/presetScriptModal';
+import { PRESET_SCRIPT_ICON_OPTIONS, renderPresetScriptIcon } from '../../ui/terminal/presetScriptIcons';
 
 /**
  * 验证 Shell 路径是否有效（仅桌面端可用）
@@ -59,6 +61,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
 
     // 实例行为设置卡片
     this.renderInstanceBehaviorSettings(containerEl);
+
+    // 预设脚本设置卡片
+    this.renderPresetScriptsSettings(containerEl);
 
     // 主题设置卡片
     this.renderThemeSettings(containerEl);
@@ -282,6 +287,161 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         }));
 
     this.updateCustomColorSettingsVisibility(themeCard, useObsidianThemeSetting.settingEl);
+  }
+
+  /**
+   * 渲染预设脚本设置
+   */
+  private renderPresetScriptsSettings(containerEl: HTMLElement): void {
+    const scriptCard = containerEl.createDiv({ cls: 'settings-card' });
+
+    const headerEl = scriptCard.createDiv({ cls: 'preset-scripts-header' });
+    const headerText = headerEl.createDiv({ cls: 'preset-scripts-header-text' });
+    headerText.createDiv({
+      cls: 'preset-scripts-title',
+      text: t('settingsDetails.terminal.presetScripts')
+    });
+    headerText.createDiv({
+      cls: 'preset-scripts-desc',
+      text: t('settingsDetails.terminal.presetScriptsDesc')
+    });
+
+    const addBtn = headerEl.createEl('button', { cls: 'preset-scripts-add-btn' });
+    addBtn.textContent = t('settingsDetails.terminal.presetScriptsAdd');
+    addBtn.addEventListener('click', () => {
+          const newScript: PresetScript = {
+            id: this.createPresetScriptId(),
+            name: '',
+            icon: PRESET_SCRIPT_ICON_OPTIONS[0] || 'terminal',
+            command: '',
+            terminalTitle: '',
+            showInStatusBar: true,
+            autoOpenTerminal: true,
+            runInNewTerminal: false,
+          };
+      this.openPresetScriptModal(newScript, true, listEl);
+    });
+
+    const listEl = scriptCard.createDiv({ cls: 'preset-scripts-list' });
+    this.renderPresetScriptsList(listEl);
+  }
+
+  private renderPresetScriptsList(listEl: HTMLElement): void {
+    listEl.empty();
+
+    const scripts = this.context.plugin.settings.presetScripts ?? [];
+
+    if (scripts.length === 0) {
+      listEl.createDiv({
+        cls: 'preset-scripts-empty',
+        text: t('settingsDetails.terminal.presetScriptsEmpty')
+      });
+      return;
+    }
+
+    scripts.forEach((script, index) => {
+      const row = listEl.createDiv({ cls: 'preset-script-row' });
+
+      const iconEl = row.createDiv({ cls: 'preset-script-icon' });
+      renderPresetScriptIcon(iconEl, script.icon || 'terminal');
+
+      const contentEl = row.createDiv({ cls: 'preset-script-content' });
+      contentEl.createDiv({
+        cls: 'preset-script-name',
+        text: script.name?.trim() || t('settingsDetails.terminal.presetScriptsUnnamed')
+      });
+      contentEl.createDiv({
+        cls: 'preset-script-command',
+        text: this.getPresetScriptCommandPreview(script.command)
+      });
+
+      const actionsEl = row.createDiv({ cls: 'preset-script-actions' });
+
+      const moveUpBtn = actionsEl.createEl('button', { cls: 'clickable-icon' }) as HTMLButtonElement;
+      setIcon(moveUpBtn, 'arrow-up');
+      moveUpBtn.setAttribute('aria-label', t('settingsDetails.terminal.presetScriptsMoveUp'));
+      moveUpBtn.disabled = index === 0;
+      moveUpBtn.addEventListener('click', async () => {
+        if (index === 0) return;
+        await this.movePresetScript(listEl, index, index - 1);
+      });
+
+      const moveDownBtn = actionsEl.createEl('button', { cls: 'clickable-icon' }) as HTMLButtonElement;
+      setIcon(moveDownBtn, 'arrow-down');
+      moveDownBtn.setAttribute('aria-label', t('settingsDetails.terminal.presetScriptsMoveDown'));
+      moveDownBtn.disabled = index === scripts.length - 1;
+      moveDownBtn.addEventListener('click', async () => {
+        if (index >= scripts.length - 1) return;
+        await this.movePresetScript(listEl, index, index + 1);
+      });
+
+      const editBtn = actionsEl.createEl('button', { cls: 'clickable-icon' });
+      setIcon(editBtn, 'pencil');
+      editBtn.setAttribute('aria-label', t('common.save'));
+      editBtn.addEventListener('click', () => {
+        this.openPresetScriptModal({ ...script }, false, listEl);
+      });
+
+      const deleteBtn = actionsEl.createEl('button', { cls: 'clickable-icon preset-script-delete' });
+      setIcon(deleteBtn, 'trash');
+      deleteBtn.setAttribute('aria-label', t('common.delete'));
+      deleteBtn.addEventListener('click', async () => {
+        const confirmed = window.confirm(t('settingsDetails.terminal.presetScriptsDeleteConfirm', {
+          name: script.name?.trim() || t('settingsDetails.terminal.presetScriptsUnnamed')
+        }));
+        if (!confirmed) return;
+
+        this.context.plugin.settings.presetScripts = scripts.filter(item => item.id !== script.id);
+        await this.saveSettings();
+        this.renderPresetScriptsList(listEl);
+      });
+    });
+  }
+
+  private openPresetScriptModal(script: PresetScript, isNew: boolean, listEl: HTMLElement): void {
+    const modal = new PresetScriptModal(this.context.app, script, async (updatedScript) => {
+      const scripts = this.context.plugin.settings.presetScripts ?? [];
+      const index = scripts.findIndex(item => item.id === updatedScript.id);
+
+      if (index >= 0) {
+        scripts[index] = updatedScript;
+      } else {
+        scripts.push(updatedScript);
+      }
+
+      this.context.plugin.settings.presetScripts = scripts;
+      await this.saveSettings();
+      this.renderPresetScriptsList(listEl);
+    }, isNew);
+
+    modal.open();
+  }
+
+  private async movePresetScript(listEl: HTMLElement, from: number, to: number): Promise<void> {
+    const scripts = this.context.plugin.settings.presetScripts ?? [];
+    if (from < 0 || from >= scripts.length || to < 0 || to >= scripts.length) {
+      return;
+    }
+    const updated = [...scripts];
+    const [item] = updated.splice(from, 1);
+    updated.splice(to, 0, item);
+    this.context.plugin.settings.presetScripts = updated;
+    await this.saveSettings();
+    this.renderPresetScriptsList(listEl);
+  }
+
+  private createPresetScriptId(): string {
+    const random = Math.random().toString(36).slice(2, 8);
+    return `preset-${Date.now()}-${random}`;
+  }
+
+  private getPresetScriptCommandPreview(command: string): string {
+    const trimmed = (command || '').trim();
+    if (!trimmed) {
+      return t('settingsDetails.terminal.presetScriptsEmptyCommand');
+    }
+    const normalized = trimmed.replace(/\r?\n/g, ' \\n ');
+    return normalized.length > 160 ? `${normalized.slice(0, 157)}...` : normalized;
   }
 
   /**

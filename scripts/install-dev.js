@@ -340,17 +340,13 @@ async function main() {
   // 5. Copy files
   log('📋 Copying files...', 'cyan');
 
-  const coreFiles = ['main.js', 'manifest.json', 'styles.css', 'main.css'];
+  const coreFiles = ['main.js', 'manifest.json', 'styles.css'];
   for (const file of coreFiles) {
     const srcPath = path.join(ROOT_DIR, file);
     const destPath = path.join(targetDir, file);
     
-    // Skip if file doesn't exist (main.css is optional)
+    // Skip if file doesn't exist
     if (!fs.existsSync(srcPath)) {
-      if (file === 'main.css') {
-        log(`  ⚠️  ${file} (optional, skipped)`, 'gray');
-        continue;
-      }
       log(`  ❌ ${file}: File not found`, 'red');
       closeReadline();
       process.exit(1);

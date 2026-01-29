@@ -99,8 +99,25 @@ export interface TerminalSettings {
   // 服务器连接设置
   serverConnection: ServerConnectionSettings;
 
+  // 预设脚本
+  presetScripts: PresetScript[];
+
   // 调试设置
   enableDebugLog: boolean;
+}
+
+/**
+ * 预设脚本定义
+ */
+export interface PresetScript {
+  id: string;
+  name: string;
+  icon: string;
+  command: string;
+  terminalTitle: string;
+  showInStatusBar: boolean;
+  autoOpenTerminal: boolean;
+  runInNewTerminal: boolean;
 }
 
 /**
@@ -118,6 +135,42 @@ export const DEFAULT_SERVER_CONNECTION_SETTINGS: ServerConnectionSettings = {
   downloadAcceleratorUrl: '',
   offlineMode: false,
 };
+
+/**
+ * 默认预设脚本
+ */
+export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
+  {
+    id: 'claude-code',
+    name: 'Claude Code Open',
+    icon: 'claude',
+    command: 'claude',
+    terminalTitle: 'Claude Code',
+    showInStatusBar: true,
+    autoOpenTerminal: true,
+    runInNewTerminal: false,
+  },
+  {
+    id: 'codex',
+    name: 'Codex Open',
+    icon: 'openai',
+    command: 'codex',
+    terminalTitle: 'Codex',
+    showInStatusBar: true,
+    autoOpenTerminal: true,
+    runInNewTerminal: false,
+  },
+  {
+    id: 'gemini-cli',
+    name: 'Gemini Open',
+    icon: 'google',
+    command: 'gemini',
+    terminalTitle: 'Gemini CLI',
+    showInStatusBar: true,
+    autoOpenTerminal: true,
+    runInNewTerminal: false,
+  },
+];
 
 /**
  * 默认平台 Shell 配置
@@ -229,6 +282,7 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
     showInStatusBar: false,
   },
   serverConnection: { ...DEFAULT_SERVER_CONNECTION_SETTINGS },
+  presetScripts: [...DEFAULT_PRESET_SCRIPTS],
   enableDebugLog: false,
 };
 

@@ -1,6 +1,7 @@
 import type { WorkspaceLeaf } from 'obsidian';
-import { Plugin, Platform } from 'obsidian';
-import type { TerminalSettings } from './settings/settings';
+import { Notice, Plugin } from 'obsidian';
+import type { PresetScript, TerminalSettings } from './settings/settings';
+import { renderPresetScriptIcon } from './ui/terminal/presetScriptIcons';
 import { DEFAULT_SETTINGS } from './settings/settings';
 import { TerminalSettingTab } from './settings/settingsTab';
 import type { TerminalService } from './services/terminal/terminalService';
@@ -26,6 +27,11 @@ export default class TerminalPlugin extends Plugin {
   
   // 状态栏元素
   private _statusBarItem: HTMLElement | null = null;
+  private _presetScriptsMenuEl: HTMLElement | null = null;
+  private _presetScriptsMenuCleanup: (() => void) | null = null;
+
+  // 已注册的预设脚本命令
+  private registeredPresetScriptCommandIds: Set<string> = new Set();
 
   /**
    * 获取服务器管理器（延迟初始化）
@@ -164,6 +170,9 @@ export default class TerminalPlugin extends Plugin {
    */
   async loadSettings() {
     const loaded = await this.loadData();
+    const presetScripts = Array.isArray(loaded?.presetScripts)
+      ? loaded.presetScripts
+      : DEFAULT_SETTINGS.presetScripts;
     this.settings = {
       ...DEFAULT_SETTINGS,
       ...loaded,
@@ -177,6 +186,8 @@ export default class TerminalPlugin extends Plugin {
         ...DEFAULT_SETTINGS.serverConnection,
         ...loaded?.serverConnection,
       },
+      // 确保 presetScripts 配置存在
+      presetScripts,
     };
   }
 
@@ -201,6 +212,9 @@ export default class TerminalPlugin extends Plugin {
     if (this._terminalService) {
       this._terminalService.updateSettings(this.settings);
     }
+
+    // 注册新增的预设脚本命令
+    this.registerPresetScriptCommands();
   }
 
   /**
@@ -243,8 +257,16 @@ export default class TerminalPlugin extends Plugin {
     this._statusBarItem.style.cursor = 'pointer';
     
     // 添加点击事件
-    this._statusBarItem.addEventListener('click', () => {
-      this.activateTerminalView();
+    this._statusBarItem.addEventListener('click', (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.togglePresetScriptsMenu(event);
+    });
+    
+    // 右键菜单：预设脚本
+    this._statusBarItem.addEventListener('contextmenu', (event: MouseEvent) => {
+      event.preventDefault();
+      this.togglePresetScriptsMenu(event);
     });
     
     // 根据设置决定是否显示
@@ -497,6 +519,38 @@ export default class TerminalPlugin extends Plugin {
         return false;
       }
     });
+
+    // 注册预设脚本命令
+    this.registerPresetScriptCommands();
+  }
+
+  private registerPresetScriptCommands(): void {
+    const scripts = this.settings.presetScripts ?? [];
+    scripts.forEach((script) => {
+      const commandId = this.getPresetScriptCommandId(script.id);
+      if (this.registeredPresetScriptCommandIds.has(commandId)) return;
+
+      this.registeredPresetScriptCommandIds.add(commandId);
+
+      this.addCommand({
+        id: commandId,
+        name: `${t('commands.presetScriptPrefix')}${script.name || t('settingsDetails.terminal.presetScriptsUnnamed')}`,
+        checkCallback: (checking: boolean) => {
+          if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+            return false;
+          }
+          const currentScript = this.getPresetScriptById(script.id);
+          if (!currentScript) return false;
+          if (!checking) {
+            this.runPresetScript(currentScript).catch((error) => {
+              const message = error instanceof Error ? error.message : String(error);
+              new Notice(t('notices.presetScript.runFailed', { message }));
+            });
+          }
+          return true;
+        }
+      });
+    });
   }
 
   /**
@@ -664,6 +718,11 @@ export default class TerminalPlugin extends Plugin {
     }
   }
 
+  private getPresetScriptById(scriptId: string): PresetScript | null {
+    const scripts = this.settings.presetScripts ?? [];
+    return scripts.find(script => script.id === scriptId) ?? null;
+  }
+
   private findLeafByEmptyView(emptyView: Element): WorkspaceLeaf | null {
     const leaves = this.app.workspace.getLeavesOfType('empty');
     for (const leaf of leaves) {
@@ -673,6 +732,186 @@ export default class TerminalPlugin extends Plugin {
       }
     }
     return null;
+  }
+
+  private getPresetScriptCommandId(scriptId: string): string {
+    return `preset-script-${scriptId}`;
+  }
+
+  private togglePresetScriptsMenu(event: MouseEvent): void {
+    if (this._presetScriptsMenuEl) {
+      this.closePresetScriptsMenu();
+      return;
+    }
+    const anchorRect = this._statusBarItem?.getBoundingClientRect();
+    if (anchorRect) {
+      this.showPresetScriptsMenuAtRect(anchorRect);
+    } else {
+      this.showPresetScriptsMenuAtPoint(event.clientX, event.clientY);
+    }
+  }
+
+  private showPresetScriptsMenuAtPoint(x: number, y: number): void {
+    const menu = this.buildPresetScriptsMenu();
+    if (!menu) return;
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+    this.mountPresetScriptsMenu(menu);
+    this.adjustPresetScriptsMenuPosition(menu);
+  }
+
+  private showPresetScriptsMenuAtRect(rect: DOMRect): void {
+    const menu = this.buildPresetScriptsMenu();
+    if (!menu) return;
+    menu.style.left = `${rect.left}px`;
+    menu.style.top = `${rect.top}px`;
+    this.mountPresetScriptsMenu(menu);
+    const menuRect = menu.getBoundingClientRect();
+    let top = rect.top - menuRect.height - 8;
+    if (top < 8) {
+      top = rect.bottom + 8;
+    }
+    let left = rect.left;
+    if (left + menuRect.width > window.innerWidth - 8) {
+      left = window.innerWidth - menuRect.width - 8;
+    }
+    if (left < 8) left = 8;
+    menu.style.top = `${top}px`;
+    menu.style.left = `${left}px`;
+  }
+
+  private mountPresetScriptsMenu(menu: HTMLElement): void {
+    this.closePresetScriptsMenu();
+    document.body.appendChild(menu);
+    this._presetScriptsMenuEl = menu;
+
+    const onOutsideClick = (event: MouseEvent) => {
+      if (!menu.contains(event.target as Node)) {
+        this.closePresetScriptsMenu();
+      }
+    };
+    const onKeydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        this.closePresetScriptsMenu();
+      }
+    };
+    document.addEventListener('mousedown', onOutsideClick, true);
+    document.addEventListener('keydown', onKeydown, true);
+    this._presetScriptsMenuCleanup = () => {
+      document.removeEventListener('mousedown', onOutsideClick, true);
+      document.removeEventListener('keydown', onKeydown, true);
+    };
+  }
+
+  private adjustPresetScriptsMenuPosition(menu: HTMLElement): void {
+    const rect = menu.getBoundingClientRect();
+    let left = rect.left;
+    let top = rect.top;
+    if (rect.right > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - rect.width - 8);
+    }
+    if (rect.bottom > window.innerHeight - 8) {
+      top = Math.max(8, window.innerHeight - rect.height - 8);
+    }
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+  }
+
+  private buildPresetScriptsMenu(): HTMLElement | null {
+    const scripts = (this.settings.presetScripts ?? []);
+    const menu = document.createElement('div');
+    menu.className = 'preset-scripts-menu';
+    menu.setAttribute('role', 'menu');
+
+    if (scripts.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'preset-scripts-menu-item is-disabled';
+      empty.textContent = t('settingsDetails.terminal.presetScriptsEmpty');
+      menu.appendChild(empty);
+      return menu;
+    }
+
+    scripts.forEach((script) => {
+      const item = document.createElement('div');
+      item.className = 'preset-scripts-menu-item';
+      item.setAttribute('role', 'menuitem');
+
+      const iconEl = document.createElement('div');
+      iconEl.className = 'preset-scripts-menu-icon';
+      renderPresetScriptIcon(iconEl, script.icon || 'terminal');
+
+      const labelEl = document.createElement('div');
+      labelEl.className = 'preset-scripts-menu-label';
+      labelEl.textContent = script.name || t('settingsDetails.terminal.presetScriptsUnnamed');
+
+      item.appendChild(iconEl);
+      item.appendChild(labelEl);
+      item.addEventListener('click', () => {
+        this.closePresetScriptsMenu();
+        this.runPresetScript(script).catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          new Notice(t('notices.presetScript.runFailed', { message }));
+        });
+      });
+
+      menu.appendChild(item);
+    });
+
+    return menu;
+  }
+
+  private closePresetScriptsMenu(): void {
+    if (this._presetScriptsMenuCleanup) {
+      this._presetScriptsMenuCleanup();
+      this._presetScriptsMenuCleanup = null;
+    }
+    if (this._presetScriptsMenuEl) {
+      this._presetScriptsMenuEl.remove();
+      this._presetScriptsMenuEl = null;
+    }
+  }
+
+  private async runPresetScript(script: PresetScript): Promise<void> {
+    if (!script) {
+      new Notice(t('notices.presetScript.notFound'));
+      return;
+    }
+
+    const command = (script.command || '').trim();
+    if (!command) {
+      new Notice(t('notices.presetScript.emptyCommand'));
+      return;
+    }
+
+    let terminalView = this.getActiveTerminalView();
+
+    if (script.runInNewTerminal) {
+      await this.activateTerminalView(this.getLeafForNewTerminal());
+      terminalView = this.getActiveTerminalView();
+    } else if (script.autoOpenTerminal && !terminalView) {
+      await this.activateTerminalView();
+      terminalView = this.getActiveTerminalView();
+    }
+
+    if (!terminalView) {
+      new Notice(t('notices.presetScript.terminalUnavailable'));
+      return;
+    }
+
+    const terminal = await terminalView.waitForTerminalInstance();
+    const title = (script.terminalTitle || '').trim();
+    if (title) {
+      terminal.setTitle(title);
+      (terminalView.leaf as any).updateHeader();
+    }
+    const normalizedCommand = this.normalizePresetScriptCommand(command);
+    terminal.write(normalizedCommand);
+    terminal.focus();
+  }
+
+  private normalizePresetScriptCommand(command: string): string {
+    const normalized = command.replace(/\r?\n/g, '\r').trimEnd();
+    return normalized.endsWith('\r') ? normalized : `${normalized}\r`;
   }
 
   /**

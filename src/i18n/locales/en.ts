@@ -72,6 +72,7 @@ export const en: TranslationKeys = {
     terminalSplitHorizontal: 'Terminal: Split Horizontal',
     terminalSplitVertical: 'Terminal: Split Vertical',
     terminalClearBuffer: 'Terminal: Clear Buffer',
+    presetScriptPrefix: 'Terminal: ',
   },
 
   ribbon: {
@@ -114,6 +115,12 @@ export const en: TranslationKeys = {
       rendererUpdated: 'Renderer updated, please reopen terminal to apply changes',
       scrollbackRangeError: 'Scrollback must be between 100 and 10000',
       heightRangeError: 'Height must be between 100 and 1000',
+    },
+    presetScript: {
+      notFound: 'Preset script not found or removed',
+      emptyCommand: 'Script command is empty, please configure it first',
+      terminalUnavailable: 'No available terminal, please open a terminal first',
+      runFailed: 'Failed to run script: {{message}}',
     },
   },
 
@@ -205,6 +212,29 @@ export const en: TranslationKeys = {
       preferredRendererDesc: 'Terminal rendering engine (WebGL is faster but may have compatibility issues)',
       scrollback: 'Scrollback',
       scrollbackDesc: 'Number of lines to keep in scrollback buffer',
+      presetScripts: 'Preset Scripts',
+      presetScriptsDesc: 'Configure scripts that can be triggered by hotkeys or status bar',
+      presetScriptsAdd: 'Add Script',
+      presetScriptsEmpty: 'No scripts yet. Click "Add Script" to create one.',
+      presetScriptsUnnamed: 'Untitled Script',
+      presetScriptsEmptyCommand: '(No command)',
+      presetScriptsDeleteConfirm: 'Delete script "{{name}}"?',
+      presetScriptsMoveUp: 'Move Up',
+      presetScriptsMoveDown: 'Move Down',
+      presetScriptName: 'Script Name',
+      presetScriptNamePlaceholder: 'e.g., Claude Code Update & Open',
+      presetScriptIcon: 'Script Icon',
+      presetScriptIconPlaceholder: 'e.g., sparkles / terminal / wand-2',
+      presetScriptCommand: 'Script Command',
+      presetScriptCommandPlaceholder: 'e.g., claude --update && claude',
+      presetScriptTerminalTitle: 'Terminal Title',
+      presetScriptTerminalTitlePlaceholder: 'e.g., Claude Code',
+      presetScriptShowInStatusBar: 'Show in Status Bar Menu',
+      presetScriptShowInStatusBarDesc: 'Allow this script to appear in the status bar menu',
+      presetScriptAutoOpenTerminal: 'Auto Open Terminal',
+      presetScriptAutoOpenTerminalDesc: 'Open or activate terminal when triggering the script',
+      presetScriptRunInNewTerminal: 'Run in New Terminal',
+      presetScriptRunInNewTerminalDesc: 'Create a new terminal instance for each run',
     },
     advanced: {
       performanceAndDebug: 'Performance & Debug',
@@ -228,6 +258,10 @@ export const en: TranslationKeys = {
     renameTerminal: {
       title: 'Rename Terminal',
       placeholder: 'Enter new terminal name',
+    },
+    presetScript: {
+      titleCreate: 'Create Preset Script',
+      titleEdit: 'Edit Preset Script',
     },
   },
 

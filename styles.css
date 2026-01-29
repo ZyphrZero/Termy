@@ -195,6 +195,367 @@
   }
 }
 
+/* ==================== Preset Script Modal Styles ==================== */
+.preset-script-modal .modal {
+  max-width: 520px;
+  padding: 20px 24px;
+}
+
+.preset-script-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preset-script-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.preset-script-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.preset-script-input,
+.preset-script-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-normal);
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 5px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.preset-script-textarea {
+  min-height: 120px;
+  resize: vertical;
+  font-family: var(--font-monospace);
+}
+
+.preset-script-input:hover,
+.preset-script-textarea:hover {
+  border-color: var(--background-modifier-border-hover);
+}
+
+.preset-script-input:focus,
+.preset-script-textarea:focus {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.preset-script-input::placeholder,
+.preset-script-textarea::placeholder {
+  color: var(--text-faint);
+}
+
+/* 图标选择器 */
+.preset-script-icon-selector {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preset-script-icon-preview {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  background-color: var(--background-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.preset-script-icon-preview:hover {
+  border-color: var(--interactive-accent);
+}
+
+.preset-script-icon-picker-panel {
+  position: absolute;
+  top: 46px;
+  left: 0;
+  min-width: 260px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background-color: var(--background-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  display: none;
+  z-index: 10;
+}
+
+.preset-script-icon-picker-panel.is-open {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preset-script-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+  gap: 8px;
+}
+
+.preset-script-icon-option {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background-color: var(--background-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+}
+
+.preset-script-icon-option:hover {
+  border-color: var(--interactive-accent);
+  transform: translateY(-1px);
+}
+
+.preset-script-icon-option.is-active {
+  border-color: var(--interactive-accent);
+  color: var(--text-normal);
+  box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.preset-script-icon-preview svg {
+  width: 20px;
+  height: 20px;
+}
+
+.preset-script-icon-preview.preset-script-custom-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* 默认 Obsidian 图标大小 */
+.preset-script-icon-option svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Simple Icons 自定义图标大小 - 需要更高优先级 */
+.preset-script-icon-option.preset-script-custom-icon svg {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+.preset-script-icon-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.preset-script-icon-page-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background-color: var(--background-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.preset-script-icon-page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.preset-script-icon-page-info {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ==================== Preset Scripts List ==================== */
+.preset-scripts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+.preset-scripts-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.preset-scripts-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preset-scripts-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.preset-scripts-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.preset-scripts-add-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  transition: background-color 0.15s ease, transform 0.1s ease;
+  white-space: nowrap;
+}
+
+.preset-scripts-add-btn:hover {
+  background-color: var(--interactive-accent-hover);
+  transform: translateY(-1px);
+}
+
+.preset-scripts-empty {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 6px;
+}
+
+.preset-script-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background-color: var(--background-primary);
+}
+
+.preset-script-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.preset-script-icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.preset-script-icon.preset-script-custom-icon svg {
+  width: 18px !important;
+  height: 18px !important;
+  display: block;
+}
+
+.preset-script-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preset-script-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.preset-script-command {
+  font-size: 12px;
+  color: var(--text-muted);
+  word-break: break-word;
+}
+
+.preset-script-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.preset-script-actions .clickable-icon:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ==================== Preset Scripts Status Menu ==================== */
+.preset-scripts-menu {
+  position: fixed;
+  min-width: 220px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 6px 0;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+  z-index: 10000;
+}
+
+.preset-scripts-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--text-normal);
+  cursor: pointer;
+  user-select: none;
+}
+
+.preset-scripts-menu-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+.preset-scripts-menu-item.is-disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.preset-scripts-menu-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preset-scripts-menu-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.preset-scripts-menu-label {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.preset-script-delete {
+  color: var(--text-error);
+}
+
 /* ==================== Terminal Styles ==================== */
 /* 工作区叶子内容 - 终端视图 */
 .workspace-leaf-content[data-type="terminal-view"] {

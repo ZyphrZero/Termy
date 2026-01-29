@@ -84,6 +84,7 @@ export interface TranslationKeys {
     terminalSplitHorizontal: string;
     terminalSplitVertical: string;
     terminalClearBuffer: string;
+    presetScriptPrefix: string;
   };
 
   // 侧边栏
@@ -129,6 +130,12 @@ export interface TranslationKeys {
       rendererUpdated: string;
       scrollbackRangeError: string;
       heightRangeError: string;
+    };
+    presetScript: {
+      notFound: string;
+      emptyCommand: string;
+      terminalUnavailable: string;
+      runFailed: string;
     };
   };
 
@@ -222,6 +229,29 @@ export interface TranslationKeys {
       preferredRendererDesc: string;
       scrollback: string;
       scrollbackDesc: string;
+      presetScripts: string;
+      presetScriptsDesc: string;
+      presetScriptsAdd: string;
+      presetScriptsEmpty: string;
+      presetScriptsUnnamed: string;
+      presetScriptsEmptyCommand: string;
+      presetScriptsDeleteConfirm: string;
+      presetScriptsMoveUp: string;
+      presetScriptsMoveDown: string;
+      presetScriptName: string;
+      presetScriptNamePlaceholder: string;
+      presetScriptIcon: string;
+      presetScriptIconPlaceholder: string;
+      presetScriptCommand: string;
+      presetScriptCommandPlaceholder: string;
+      presetScriptTerminalTitle: string;
+      presetScriptTerminalTitlePlaceholder: string;
+      presetScriptShowInStatusBar: string;
+      presetScriptShowInStatusBarDesc: string;
+      presetScriptAutoOpenTerminal: string;
+      presetScriptAutoOpenTerminalDesc: string;
+      presetScriptRunInNewTerminal: string;
+      presetScriptRunInNewTerminalDesc: string;
     };
     advanced: {
       performanceAndDebug: string;
@@ -246,6 +276,10 @@ export interface TranslationKeys {
     renameTerminal: {
       title: string;
       placeholder: string;
+    };
+    presetScript: {
+      titleCreate: string;
+      titleEdit: string;
     };
   };
 
