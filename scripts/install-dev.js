@@ -27,10 +27,10 @@ const KILL_OBSIDIAN = args.includes('--kill');
 const RESET_CONFIG = args.includes('--reset');
 const SKIP_BUILD = args.includes('--no-build');
 
-// Terminal server configuration
+// Termy server configuration
 const SERVER_CONFIG = {
-  name: 'terminal-server',
-  displayName: 'Terminal Server'
+  name: 'termy-server',
+  displayName: 'Termy Server'
 };
 
 // Color output
@@ -123,13 +123,13 @@ function killTerminalServer() {
   
   try {
     if (platform === 'windows') {
-      execSync(`taskkill /F /IM terminal-server-win32-${arch}.exe 2>nul`, { stdio: 'ignore' });
+      execSync(`taskkill /F /IM termy-server-win32-${arch}.exe 2>nul`, { stdio: 'ignore' });
     } else if (platform === 'macos') {
-      execSync('pkill -f terminal-server-darwin 2>/dev/null || true', { stdio: 'ignore' });
+      execSync('pkill -f termy-server-darwin 2>/dev/null || true', { stdio: 'ignore' });
     } else {
-      execSync('pkill -f terminal-server-linux 2>/dev/null || true', { stdio: 'ignore' });
+      execSync('pkill -f termy-server-linux 2>/dev/null || true', { stdio: 'ignore' });
     }
-    log('  ✓ Terminal server process terminated', 'green');
+    log('  ✓ Termy server process terminated', 'green');
     return true;
   } catch (e) {
     // Process may not exist, ignore error
@@ -317,7 +317,7 @@ async function main() {
   }
 
   // 3. Create plugin directory
-  const targetDir = path.join(pluginsDir, 'obsidian-terminal');
+  const targetDir = path.join(pluginsDir, 'obsidian-termy');
   
   if (!fs.existsSync(targetDir)) {
     fs.mkdirSync(targetDir, { recursive: true });

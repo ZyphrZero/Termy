@@ -3,10 +3,12 @@
  * 负责渲染终端相关的所有设置
  */
 
+import type { ColorComponent, TextComponent } from 'obsidian';
 import { Setting, Notice, Platform } from 'obsidian';
 import type { RendererContext } from '../types';
 import type { ShellType } from '../settings';
 import { 
+  DEFAULT_SERVER_CONNECTION_SETTINGS,
   getCurrentPlatformShell, 
   setCurrentPlatformShell, 
   getCurrentPlatformCustomShellPath, 
@@ -61,6 +63,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
 
     // 行为设置卡片
     this.renderBehaviorSettings(containerEl);
+
+    // 服务器连接设置卡片
+    this.renderServerConnectionSettings(containerEl);
 
     // 功能显示设置卡片
     this.renderVisibilitySettings(containerEl);
@@ -261,8 +266,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       .addToggle(toggle => toggle
         .setValue(this.context.plugin.settings.useObsidianTheme)
         .onChange(async (value) => {
-          this.context.plugin.settings.useObsidianTheme = value;
-          await this.saveSettings();
+          await this.updateThemeSetting(() => {
+            this.context.plugin.settings.useObsidianTheme = value;
+          });
           
           // 使用局部更新替代全量刷新
           this.toggleConditionalSection(
@@ -289,22 +295,31 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
    * 提取为独立方法，用于 toggleConditionalSection 调用
    */
   private renderCustomColorSettingsContent(container: HTMLElement): void {
+    let backgroundColorPicker: ColorComponent | null = null;
+    let foregroundColorPicker: ColorComponent | null = null;
+
     // 背景色
     new Setting(container)
       .setName(t('settingsDetails.terminal.backgroundColor'))
       .setDesc(t('settingsDetails.terminal.backgroundColorDesc'))
-      .addColorPicker(color => color
-        .setValue(this.context.plugin.settings.backgroundColor || '#000000')
-        .onChange(async (value) => {
-          this.context.plugin.settings.backgroundColor = value;
-          await this.saveSettings();
-        }))
+      .addColorPicker(color => {
+        backgroundColorPicker = color;
+        return color
+          .setValue(this.context.plugin.settings.backgroundColor || '#000000')
+          .onChange(async (value) => {
+            await this.updateThemeSetting(() => {
+              this.context.plugin.settings.backgroundColor = value;
+            });
+          });
+      })
       .addExtraButton(button => button
         .setIcon('reset')
         .setTooltip(t('common.reset'))
         .onClick(async () => {
-          this.context.plugin.settings.backgroundColor = undefined;
-          await this.saveSettings();
+          await this.updateThemeSetting(() => {
+            this.context.plugin.settings.backgroundColor = undefined;
+          });
+          backgroundColorPicker?.setValue('#000000');
           new Notice(t('notices.settings.backgroundColorReset'));
         }));
 
@@ -312,18 +327,24 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     new Setting(container)
       .setName(t('settingsDetails.terminal.foregroundColor'))
       .setDesc(t('settingsDetails.terminal.foregroundColorDesc'))
-      .addColorPicker(color => color
-        .setValue(this.context.plugin.settings.foregroundColor || '#FFFFFF')
-        .onChange(async (value) => {
-          this.context.plugin.settings.foregroundColor = value;
-          await this.saveSettings();
-        }))
+      .addColorPicker(color => {
+        foregroundColorPicker = color;
+        return color
+          .setValue(this.context.plugin.settings.foregroundColor || '#FFFFFF')
+          .onChange(async (value) => {
+            await this.updateThemeSetting(() => {
+              this.context.plugin.settings.foregroundColor = value;
+            });
+          });
+      })
       .addExtraButton(button => button
         .setIcon('reset')
         .setTooltip(t('common.reset'))
         .onClick(async () => {
-          this.context.plugin.settings.foregroundColor = undefined;
-          await this.saveSettings();
+          await this.updateThemeSetting(() => {
+            this.context.plugin.settings.foregroundColor = undefined;
+          });
+          foregroundColorPicker?.setValue('#FFFFFF');
           new Notice(t('notices.settings.foregroundColorReset'));
         }));
 
@@ -343,19 +364,24 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     const bgImageSetting = new Setting(container)
       .setName(t('settingsDetails.terminal.backgroundImage'))
       .setDesc(t('settingsDetails.terminal.backgroundImageDesc'));
+
+    let backgroundImageInput: TextComponent | null = null;
     
     bgImageSetting.addText(text => {
+      backgroundImageInput = text;
       const inputEl = text
         .setPlaceholder(t('settingsDetails.terminal.backgroundImagePlaceholder'))
         .setValue(this.context.plugin.settings.backgroundImage || '')
         .onChange(async (value) => {
-          // 只保存，不刷新
-          this.context.plugin.settings.backgroundImage = value || undefined;
-          await this.saveSettings();
+          this.context.plugin.settings.backgroundImage = value.trim() || undefined;
         });
       
       // 失去焦点时使用局部更新
-      text.inputEl.addEventListener('blur', () => {
+      text.inputEl.addEventListener('blur', async () => {
+        await this.updateThemeSetting(() => {
+          this.context.plugin.settings.backgroundImage = text.inputEl.value.trim() || undefined;
+        });
+
         const hasImage = !!this.context.plugin.settings.backgroundImage;
         this.toggleConditionalSection(
           container,
@@ -373,8 +399,10 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       .setIcon('reset')
       .setTooltip(t('common.reset'))
       .onClick(async () => {
-        this.context.plugin.settings.backgroundImage = undefined;
-        await this.saveSettings();
+        await this.updateThemeSetting(() => {
+          this.context.plugin.settings.backgroundImage = undefined;
+        });
+        backgroundImageInput?.setValue('');
         
         // 使用局部更新移除背景图片选项
         this.toggleConditionalSection(
@@ -412,8 +440,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         .setValue(this.context.plugin.settings.backgroundImageOpacity ?? 0.5)
         .setDynamicTooltip()
         .onChange(async (value) => {
-          this.context.plugin.settings.backgroundImageOpacity = value;
-          await this.saveSettings();
+          await this.updateThemeSetting(() => {
+            this.context.plugin.settings.backgroundImageOpacity = value;
+          });
         }));
 
     // 背景图片大小
@@ -426,8 +455,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         .addOption('auto', t('backgroundSizeOptions.auto'))
         .setValue(this.context.plugin.settings.backgroundImageSize || 'cover')
         .onChange(async (value: 'cover' | 'contain' | 'auto') => {
-          this.context.plugin.settings.backgroundImageSize = value;
-          await this.saveSettings();
+          await this.updateThemeSetting(() => {
+            this.context.plugin.settings.backgroundImageSize = value;
+          });
         }));
 
     // 背景图片位置
@@ -446,8 +476,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         .addOption('bottom right', t('backgroundPositionOptions.bottomRight'))
         .setValue(this.context.plugin.settings.backgroundImagePosition || 'center')
         .onChange(async (value) => {
-          this.context.plugin.settings.backgroundImagePosition = value;
-          await this.saveSettings();
+          await this.updateThemeSetting(() => {
+            this.context.plugin.settings.backgroundImagePosition = value;
+          });
         }));
 
     // 毛玻璃效果
@@ -457,8 +488,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       .addToggle(toggle => toggle
         .setValue(this.context.plugin.settings.enableBlur ?? false)
         .onChange(async (value) => {
-          this.context.plugin.settings.enableBlur = value;
-          await this.saveSettings();
+          await this.updateThemeSetting(() => {
+            this.context.plugin.settings.enableBlur = value;
+          });
           
           // 使用局部更新替代全量刷新
           this.toggleConditionalSection(
@@ -488,8 +520,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         .setValue(this.context.plugin.settings.textOpacity ?? 1.0)
         .setDynamicTooltip()
         .onChange(async (value) => {
-          this.context.plugin.settings.textOpacity = value;
-          await this.saveSettings();
+          await this.updateThemeSetting(() => {
+            this.context.plugin.settings.textOpacity = value;
+          });
         }));
   }
 
@@ -506,8 +539,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         .setValue(this.context.plugin.settings.blurAmount ?? 10)
         .setDynamicTooltip()
         .onChange(async (value) => {
-          this.context.plugin.settings.blurAmount = value;
-          await this.saveSettings();
+          await this.updateThemeSetting(() => {
+            this.context.plugin.settings.blurAmount = value;
+          });
         }));
   }
 
@@ -582,8 +616,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         .addOption('webgl', t('rendererOptions.webgl'))
         .setValue(this.context.plugin.settings.preferredRenderer)
         .onChange(async (value: 'canvas' | 'webgl') => {
-          this.context.plugin.settings.preferredRenderer = value;
-          await this.saveSettings();
+          await this.updateThemeSetting(() => {
+            this.context.plugin.settings.preferredRenderer = value;
+          });
           this.updateBackgroundImageSettingsVisibility();
           new Notice(t('notices.settings.rendererUpdated'));
         }));
@@ -607,6 +642,22 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       this.context.plugin.settings.preferredRenderer === 'canvas',
       (el) => this.renderBackgroundImageSettings(el)
     );
+  }
+
+  private requestThemeRefresh(): void {
+    const leaves = this.context.app.workspace.getLeavesOfType('terminal-view');
+    leaves.forEach(leaf => {
+      const view = leaf.view as any;
+      if (typeof view?.refreshAppearance === 'function') {
+        view.refreshAppearance();
+      }
+    });
+  }
+
+  private async updateThemeSetting(update: () => void): Promise<void> {
+    update();
+    await this.saveSettings();
+    this.requestThemeRefresh();
   }
 
   /**
@@ -792,6 +843,95 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           this.context.plugin.settings.enableDebugLog = value;
           await this.saveSettings();
           new Notice(value ? '调试日志已启用，请打开控制台查看' : '调试日志已禁用');
+        }));
+  }
+
+  /**
+   * 渲染服务器连接设置
+   */
+  private renderServerConnectionSettings(containerEl: HTMLElement): void {
+    const connectionCard = containerEl.createDiv({ cls: 'settings-card' });
+
+    new Setting(connectionCard)
+      .setName(t('settingsDetails.advanced.serverConnection'))
+      .setDesc(t('settingsDetails.advanced.serverConnectionDesc'))
+      .setHeading();
+
+    // 使用条件区域渲染设置内容，便于重置后刷新
+    this.toggleConditionalSection(
+      connectionCard,
+      'server-connection-settings',
+      true,
+      (el) => this.renderServerConnectionContent(el)
+    );
+  }
+
+  /**
+   * 渲染服务器连接设置内容
+   */
+  private renderServerConnectionContent(containerEl: HTMLElement): void {
+    const settings = this.context.plugin.settings;
+
+    // 离线模式
+    new Setting(containerEl)
+      .setName(t('settingsDetails.advanced.offlineMode'))
+      .setDesc(t('settingsDetails.advanced.offlineModeDesc'))
+      .addToggle(toggle => toggle
+        .setValue(settings.serverConnection.offlineMode)
+        .onChange(async (value) => {
+          settings.serverConnection.offlineMode = value;
+          await this.saveSettings();
+
+          try {
+            const serverManager = await this.context.plugin.getServerManager();
+            serverManager.updateOfflineMode(value);
+          } catch {
+            // ServerManager 可能尚未初始化
+          }
+        }));
+
+    // 下载加速源
+    new Setting(containerEl)
+      .setName(t('settingsDetails.advanced.downloadAccelerator'))
+      .setDesc(t('settingsDetails.advanced.downloadAcceleratorDesc'))
+      .addText(text => text
+        .setPlaceholder('https://ghfast.top/')
+        .setValue(settings.serverConnection.downloadAcceleratorUrl || '')
+        .onChange(async (value) => {
+          settings.serverConnection.downloadAcceleratorUrl = value.trim();
+          await this.saveSettings();
+
+          try {
+            const serverManager = await this.context.plugin.getServerManager();
+            serverManager.updateDownloadAcceleratorUrl(settings.serverConnection.downloadAcceleratorUrl);
+          } catch {
+            // ServerManager 可能尚未初始化
+          }
+        }));
+
+    // 重置按钮
+    new Setting(containerEl)
+      .setName(t('settingsDetails.advanced.resetToDefaults'))
+      .setDesc(t('settingsDetails.advanced.resetToDefaultsDesc'))
+      .addButton(button => button
+        .setButtonText(t('common.reset'))
+        .onClick(async () => {
+          this.context.plugin.settings.serverConnection = { ...DEFAULT_SERVER_CONNECTION_SETTINGS };
+          await this.saveSettings();
+
+          try {
+            const serverManager = await this.context.plugin.getServerManager();
+            serverManager.updateOfflineMode(this.context.plugin.settings.serverConnection.offlineMode);
+            serverManager.updateDownloadAcceleratorUrl(this.context.plugin.settings.serverConnection.downloadAcceleratorUrl);
+          } catch {
+            // ServerManager 可能尚未初始化
+          }
+
+          const parentCard = containerEl.parentElement;
+          if (parentCard) {
+            this.toggleConditionalSection(parentCard, 'server-connection-settings', false, () => {});
+            this.toggleConditionalSection(parentCard, 'server-connection-settings', true, (el) => this.renderServerConnectionContent(el));
+          }
         }));
   }
 }

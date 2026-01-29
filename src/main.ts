@@ -38,10 +38,15 @@ export default class TerminalPlugin extends Plugin {
       
       const pluginDir = this.getPluginDir();
       const version = this.manifest.version;
+      const downloadAcceleratorUrl = this.settings.serverConnection?.downloadAcceleratorUrl ?? '';
+      const offlineMode = this.settings.serverConnection?.offlineMode ?? false;
       
       this._serverManager = new ServerManager(
         pluginDir,
-        version
+        version,
+        downloadAcceleratorUrl,
+        this.settings.enableDebugLog,
+        offlineMode
       );
       
       debugLog('[TerminalPlugin] ServerManager initialized');
@@ -166,7 +171,12 @@ export default class TerminalPlugin extends Plugin {
       visibility: {
         ...DEFAULT_SETTINGS.visibility,
         ...loaded?.visibility,
-      }
+      },
+      // 确保 serverConnection 配置存在
+      serverConnection: {
+        ...DEFAULT_SETTINGS.serverConnection,
+        ...loaded?.serverConnection,
+      },
     };
   }
 
@@ -180,6 +190,13 @@ export default class TerminalPlugin extends Plugin {
     const { setDebugMode } = await import('./utils/logger');
     setDebugMode(this.settings.enableDebugLog);
     
+    // 更新 ServerManager 配置
+    if (this._serverManager) {
+      this._serverManager.updateDebugMode(this.settings.enableDebugLog);
+      this._serverManager.updateOfflineMode(this.settings.serverConnection.offlineMode);
+      this._serverManager.updateDownloadAcceleratorUrl(this.settings.serverConnection.downloadAcceleratorUrl);
+    }
+
     // 更新终端服务设置
     if (this._terminalService) {
       this._terminalService.updateSettings(this.settings);
@@ -249,10 +266,10 @@ export default class TerminalPlugin extends Plugin {
   /**
    * 激活终端视图
    */
-  async activateTerminalView(): Promise<void> {
+  async activateTerminalView(targetLeaf?: WorkspaceLeaf): Promise<void> {
     const { workspace } = this.app;
     
-    const leaf = this.getLeafForNewTerminal();
+    const leaf = targetLeaf ?? this.getLeafForNewTerminal();
 
     // 如果启用锁定新实例，设置标签页为锁定状态
     if (this.settings.lockNewInstance) {
@@ -551,7 +568,8 @@ export default class TerminalPlugin extends Plugin {
       terminalAction.className = 'empty-state-action terminal-plugin-terminal-action';
       terminalAction.textContent = t('commands.openTerminal') + ' (Ctrl+O)';
       terminalAction.addEventListener('click', async () => {
-        await this.activateTerminalView();
+        const leaf = this.findLeafByEmptyView(emptyView);
+        await this.activateTerminalView(leaf ?? undefined);
       });
 
       // 添加到操作列表
@@ -646,6 +664,17 @@ export default class TerminalPlugin extends Plugin {
     }
   }
 
+  private findLeafByEmptyView(emptyView: Element): WorkspaceLeaf | null {
+    const leaves = this.app.workspace.getLeavesOfType('empty');
+    for (const leaf of leaves) {
+      const view = leaf.view as any;
+      if (view?.contentEl === emptyView) {
+        return leaf;
+      }
+    }
+    return null;
+  }
+
   /**
    * 获取插件目录的绝对路径
    * 
@@ -670,17 +699,22 @@ export default class TerminalPlugin extends Plugin {
  */
 class TerminalViewPlaceholder extends TerminalView {
   private plugin: TerminalPlugin;
-  private realView: TerminalView | null = null;
+  private initialized = false;
+  private initializing = false;
 
   constructor(leaf: WorkspaceLeaf, plugin: TerminalPlugin) {
-    // 创建一个临时的 TerminalService（不会被使用）
-    super(leaf, null as any);
+    // 延迟注入 TerminalService，避免启动时加载 xterm.js
+    super(leaf, null);
     this.plugin = plugin;
   }
 
   async onOpen() {
+    if (this.initialized || this.initializing) return;
+    this.initializing = true;
+
     // 显示加载提示
-    this.contentEl.createEl('div', { 
+    this.contentEl.empty();
+    this.contentEl.createEl('div', {
       text: t('terminal.loading'),
       cls: 'terminal-loading'
     });
@@ -688,22 +722,13 @@ class TerminalViewPlaceholder extends TerminalView {
     try {
       // 获取真实的 TerminalService
       const terminalService = await this.plugin.getTerminalService();
-      
-      // 创建真实的终端视图
-      this.realView = new TerminalView(this.leaf, terminalService);
-      
-      // 清空占位内容
+
+      this.setTerminalService(terminalService);
+
+      // 清空占位内容并初始化终端视图
       this.contentEl.empty();
-      
-      // 调用真实视图的 onOpen
-      await this.realView.onOpen();
-      
-      // 将真实视图的内容移动到当前容器
-      if (this.realView.containerEl) {
-        while (this.realView.contentEl.firstChild) {
-          this.contentEl.appendChild(this.realView.contentEl.firstChild);
-        }
-      }
+      await super.onOpen();
+      this.initialized = true;
     } catch (error) {
       errorLog('[TerminalViewPlaceholder] Failed to initialize:', error);
       this.contentEl.empty();
@@ -711,19 +736,12 @@ class TerminalViewPlaceholder extends TerminalView {
         text: t('terminal.initFailed', { message: error instanceof Error ? error.message : String(error) }),
         cls: 'terminal-error'
       });
+    } finally {
+      this.initializing = false;
     }
   }
 
   async onClose() {
-    if (this.realView) {
-      await this.realView.onClose();
-    }
-  }
-
-  getDisplayText(): string {
-    if (this.realView) {
-      return this.realView.getDisplayText();
-    }
-    return t('terminal.defaultTitle');
+    await super.onClose();
   }
 }

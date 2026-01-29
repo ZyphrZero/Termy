@@ -96,8 +96,8 @@ impl PtySession {
             }
         }
         
-        // 标记这是 Obsidian Terminal
-        cmd.env("TERM_PROGRAM", "obsidian-terminal");
+        // 标记这是 Obsidian Termy
+        cmd.env("TERM_PROGRAM", "obsidian-termy");
         
         // 启动 shell 进程
         let child = pair.slave.spawn_command(cmd)?;

@@ -73,14 +73,14 @@ jobs:
         shell: bash
         run: |
           mkdir -p binaries
-          BINARY_NAME="terminal-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}"
-          cp "rust-servers/target/${{ matrix.target }}/release/terminal-server${{ matrix.ext }}" "binaries/${BINARY_NAME}"
+          BINARY_NAME="termy-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}"
+          cp "rust-servers/target/${{ matrix.target }}/release/termy-server${{ matrix.ext }}" "binaries/${BINARY_NAME}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: terminal-server-${{ matrix.platform }}-${{ matrix.arch }}
-          path: binaries/terminal-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
+          name: termy-server-${{ matrix.platform }}-${{ matrix.arch }}
+          path: binaries/termy-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
 
   test:
     name: Test ${{ matrix.platform }}-${{ matrix.arch }}
@@ -108,13 +108,13 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: terminal-server-${{ matrix.platform }}-${{ matrix.arch }}
+          name: termy-server-${{ matrix.platform }}-${{ matrix.arch }}
           path: binaries
 
       - name: Test binary
         shell: bash
         run: |
-          BINARY="binaries/terminal-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}"
+          BINARY="binaries/termy-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}"
           chmod +x "${BINARY}" 2>/dev/null || true
           
           "${BINARY}" --port 0 > output.txt 2>&1 &

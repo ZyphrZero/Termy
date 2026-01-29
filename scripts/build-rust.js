@@ -1,7 +1,7 @@
 /**
- * Terminal Server Build Script
- * Auto-detect current platform and build the terminal server binary
- * Binary naming: terminal-server-{platform}-{arch}
+ * Termy Server Build Script
+ * Auto-detect current platform and build the termy server binary
+ * Binary naming: termy-server-{platform}-{arch}
  */
 
 const { execSync } = require('child_process');
@@ -38,11 +38,11 @@ const PLATFORMS = {
   },
 };
 
-// Terminal server configuration
+// Termy server configuration
 const SERVER_CONFIG = {
-  name: 'terminal-server',
-  displayName: 'Terminal Server',
-  binaryPrefix: 'terminal-server'
+  name: 'termy-server',
+  displayName: 'Termy Server',
+  binaryPrefix: 'termy-server'
 };
 
 // Reference binary size (for hints only)
@@ -114,7 +114,7 @@ function showHelp() {
   console.log('  -h, --help           Show this help message');
   console.log('');
   console.log('Output:');
-  console.log('  Binary: binaries/terminal-server-{platform}-{arch}[.exe]');
+  console.log('  Binary: binaries/termy-server-{platform}-{arch}[.exe]');
   console.log('');
   console.log('Examples:');
   console.log('  node build-rust.js              # Build for current platform');

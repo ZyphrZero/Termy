@@ -64,8 +64,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p binaries
-          BINARY_NAME="terminal-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}"
-          cp "rust-servers/target/${{ matrix.target }}/release/terminal-server${{ matrix.ext }}" "binaries/${BINARY_NAME}"
+          BINARY_NAME="termy-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}"
+          cp "rust-servers/target/${{ matrix.target }}/release/termy-server${{ matrix.ext }}" "binaries/${BINARY_NAME}"
           
           cd binaries
           if command -v sha256sum &> /dev/null; then
@@ -79,8 +79,8 @@ jobs:
         with:
           name: server-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
-            binaries/terminal-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
-            binaries/terminal-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}.sha256
+            binaries/termy-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
+            binaries/termy-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}.sha256
 
   release:
     name: Release
@@ -108,8 +108,8 @@ jobs:
 
       - name: Set permissions
         run: |
-          chmod +x binaries/terminal-server-darwin-* || true
-          chmod +x binaries/terminal-server-linux-* || true
+          chmod +x binaries/termy-server-darwin-* || true
+          chmod +x binaries/termy-server-linux-* || true
 
       - name: Install and build
         run: |
@@ -122,15 +122,15 @@ jobs:
           # main.js, manifest.json, styles.css 已在根目录
           
           # 设置二进制文件执行权限
-          chmod +x binaries/terminal-server-darwin-* || true
-          chmod +x binaries/terminal-server-linux-* || true
+          chmod +x binaries/termy-server-darwin-* || true
+          chmod +x binaries/termy-server-linux-* || true
           
           # 创建完整包（所有平台，供手动安装）
           mkdir -p obsidian-termy/binaries
           cp main.js manifest.json styles.css obsidian-termy/
-          cp binaries/terminal-server-* obsidian-termy/binaries/
-          chmod +x obsidian-termy/binaries/terminal-server-darwin-* || true
-          chmod +x obsidian-termy/binaries/terminal-server-linux-* || true
+          cp binaries/termy-server-* obsidian-termy/binaries/
+          chmod +x obsidian-termy/binaries/termy-server-darwin-* || true
+          chmod +x obsidian-termy/binaries/termy-server-linux-* || true
           zip -r obsidian-termy.zip obsidian-termy
 
       - name: Release
@@ -141,16 +141,16 @@ jobs:
             manifest.json
             styles.css
             obsidian-termy.zip
-            binaries/terminal-server-win32-x64.exe
-            binaries/terminal-server-win32-x64.exe.sha256
-            binaries/terminal-server-darwin-arm64
-            binaries/terminal-server-darwin-arm64.sha256
-            binaries/terminal-server-darwin-x64
-            binaries/terminal-server-darwin-x64.sha256
-            binaries/terminal-server-linux-x64
-            binaries/terminal-server-linux-x64.sha256
-            binaries/terminal-server-linux-arm64
-            binaries/terminal-server-linux-arm64.sha256
+            binaries/termy-server-win32-x64.exe
+            binaries/termy-server-win32-x64.exe.sha256
+            binaries/termy-server-darwin-arm64
+            binaries/termy-server-darwin-arm64.sha256
+            binaries/termy-server-darwin-x64
+            binaries/termy-server-darwin-x64.sha256
+            binaries/termy-server-linux-x64
+            binaries/termy-server-linux-x64.sha256
+            binaries/termy-server-linux-arm64
+            binaries/termy-server-linux-arm64.sha256
           body: |
             ## Installation
             
@@ -167,11 +167,11 @@ jobs:
             ### Option 3: Platform-Specific Installation
             1. Download the three core files: `main.js`, `manifest.json`, `styles.css`
             2. Download the binary for your platform:
-               - Windows: `terminal-server-win32-x64.exe`
-               - macOS (Apple Silicon): `terminal-server-darwin-arm64`
-               - macOS (Intel): `terminal-server-darwin-x64`
-               - Linux (x64): `terminal-server-linux-x64`
-               - Linux (ARM64): `terminal-server-linux-arm64`
+               - Windows: `termy-server-win32-x64.exe`
+               - macOS (Apple Silicon): `termy-server-darwin-arm64`
+               - macOS (Intel): `termy-server-darwin-x64`
+               - Linux (x64): `termy-server-linux-x64`
+               - Linux (ARM64): `termy-server-linux-arm64`
             3. Create directory: `.obsidian/plugins/obsidian-termy/binaries/`
             4. Place core files in `obsidian-termy/` and binary in `binaries/`
             5. Restart Obsidian and enable the plugin
@@ -182,10 +182,10 @@ jobs:
             
             ```bash
             # Linux/macOS
-            sha256sum -c terminal-server-{platform}-{arch}.sha256
+            sha256sum -c termy-server-{platform}-{arch}.sha256
             
             # Windows (PowerShell)
-            Get-FileHash terminal-server-win32-x64.exe -Algorithm SHA256
+            Get-FileHash termy-server-win32-x64.exe -Algorithm SHA256
             ```
           draft: false
           prerelease: false

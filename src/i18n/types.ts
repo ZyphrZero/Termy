@@ -43,6 +43,12 @@ export interface TranslationKeys {
     initFailed: string;
     notInitialized: string;
     renameTerminal: string;
+    search: {
+      placeholder: string;
+      previous: string;
+      next: string;
+      close: string;
+    };
     contextMenu: {
       copy: string;
       copyAsPlainText: string;
@@ -217,8 +223,13 @@ export interface TranslationKeys {
       debugMode: string;
       debugModeDesc: string;
       serverConnection: string;
+      serverConnectionDesc: string;
       offlineMode: string;
       offlineModeDesc: string;
+      downloadAccelerator: string;
+      downloadAcceleratorDesc: string;
+      resetToDefaults: string;
+      resetToDefaultsDesc: string;
       customServerPort: string;
       customServerPortDesc: string;
       customServerPortPlaceholder: string;

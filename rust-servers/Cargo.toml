@@ -1,12 +1,12 @@
 # Rust 终端服务器
 [package]
-name = "terminal-server"
+name = "termy-server"
 version = "1.0.0"
 edition = "2021"
 description = "Terminal server for Obsidian-Termy plugin"
 
 [[bin]]
-name = "terminal-server"
+name = "termy-server"
 path = "src/main.rs"
 
 [dependencies]

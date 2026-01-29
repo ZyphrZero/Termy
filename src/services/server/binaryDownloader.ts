@@ -63,7 +63,7 @@ export class BinaryDownloader {
   private installedVersionCache: string | null | undefined = undefined;
   
   /** 版本缓存文件名 */
-  private readonly versionCacheFileName = '.terminal-server.version.json';
+  private readonly versionCacheFileName = '.termy-server.version.json';
 
   constructor(pluginDir: string, version: string, downloadAcceleratorUrl: string = '') {
     this.pluginDir = pluginDir;
@@ -181,7 +181,7 @@ export class BinaryDownloader {
     const platform = process.platform;
     const arch = process.arch;
     const ext = platform === 'win32' ? '.exe' : '';
-    const filename = `terminal-server-${platform}-${arch}${ext}`;
+    const filename = `termy-server-${platform}-${arch}${ext}`;
     
     return path.join(this.pluginDir, 'binaries', filename);
   }
@@ -314,7 +314,7 @@ export class BinaryDownloader {
     const platform = process.platform;
     const arch = process.arch;
     const ext = platform === 'win32' ? '.exe' : '';
-    const filename = `terminal-server-${platform}-${arch}${ext}`;
+    const filename = `termy-server-${platform}-${arch}${ext}`;
 
     // 直接构造 GitHub Release 下载 URL
     // 格式: https://github.com/{owner}/{repo}/releases/download/{tag}/{filename}
@@ -516,7 +516,7 @@ export class BinaryDownloader {
         if (this.isFileBusyError(error)) {
           throw new Error(
             t('notices.binaryInUse') ||
-            '二进制文件被占用，请关闭 Obsidian 或结束 terminal-server 进程后重试'
+            '二进制文件被占用，请关闭 Obsidian 或结束 termy-server 进程后重试'
           );
         }
         throw error;

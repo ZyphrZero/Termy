@@ -66,8 +66,15 @@
   left: 0;
   width: 100%;
   height: 100%;
+  background-image: var(--terminal-bg-overlay, none), var(--terminal-bg-image, none);
+  background-size: var(--terminal-bg-size, cover);
+  background-position: var(--terminal-bg-position, center);
+  background-repeat: no-repeat;
   pointer-events: none;
   z-index: 0; /* 背景层的透明度通过 opacity 控制，不影响其他层 */
+  transform: scale(var(--terminal-bg-scale, 1));
+  transform-origin: center;
+  filter: blur(var(--terminal-bg-blur, 0px));
 }
 /* 终端实例容器 - 文字层保持完全不透明 */
 .terminal-instance {
@@ -145,8 +152,18 @@
   top: 0;
   bottom: 0;
 }
+/* 覆盖 xterm 默认的 overflow-y: scroll，避免无内容时仍显示滚动条 */
+.terminal-container .xterm-viewport,
+.terminal-container .xterm .xterm-viewport {
+  overflow-y: auto !important;
+}
 /* 有背景图片时，视口背景透明 */
 .terminal-container.has-background-image .xterm-viewport {
+  background-color: transparent !important;
+}
+/* 有背景图片时，滚动元素背景透明（兼容 xterm 内部结构） */
+.terminal-container.has-background-image .xterm .xterm-viewport,
+.terminal-container.has-background-image .xterm .xterm-scrollable-element {
   background-color: transparent !important;
 }
 /* ==================== 光标样式 ==================== */
@@ -253,6 +270,10 @@
 .terminal-container.has-background-image canvas {
   background-color: transparent !important;
 }
+/* 兼容 xterm 内部屏幕画布背景 */
+.terminal-container.has-background-image .xterm .xterm-screen canvas {
+  background-color: transparent !important;
+}
 /* ==================== 滚动条样式 ==================== */
 .xterm-viewport::-webkit-scrollbar {
   width: 10px;
@@ -270,6 +291,19 @@
 }
 .xterm-viewport::-webkit-scrollbar-corner {
   background: var(--background-secondary);
+}
+/* xterm 内部自定义滚动条：默认隐藏，仅在需要时显示 */
+.terminal-container .xterm .xterm-scrollable-element > .scrollbar {
+  opacity: 0;
+  pointer-events: none;
+}
+.terminal-container .xterm .xterm-scrollable-element > .scrollbar.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.terminal-container .xterm .xterm-scrollable-element > .scrollbar.invisible {
+  opacity: 0;
+  pointer-events: none;
 }
 /* ==================== 链接样式 ==================== */
 .xterm-link {
@@ -303,35 +337,20 @@
   font-size: 13px;
 }
 /* ==================== 主题兼容性 ==================== */
+/* 确保在明暗主题切换时样式正确更新 */
+/* 当启用 "使用 Obsidian 主题" 选项时，终端会自动适配主题颜色 */
+/* 当使用自定义颜色方案时，这些样式会被 JavaScript 动态覆盖 */
+.theme-dark .terminal-view,
 .theme-dark .terminal-view-container,
 .theme-dark .terminal-container {
-  background-color: #1e1e1e;
+  background-color: var(--background-primary);
+  color: var(--text-normal);
 }
-/* 有背景图片时，主题背景色不生效 */
-.theme-dark .terminal-view-container.has-background-image,
-.theme-dark .terminal-container.has-background-image {
-  background-color: transparent !important;
-}
-.theme-dark .xterm-text-layer {
-  color: #d4d4d4;
-}
-.theme-dark .xterm-cursor {
-  background-color: #aeafad !important;
-}
+.theme-light .terminal-view,
 .theme-light .terminal-view-container,
 .theme-light .terminal-container {
-  background-color: #ffffff;
-}
-/* 有背景图片时，主题背景色不生效 */
-.theme-light .terminal-view-container.has-background-image,
-.theme-light .terminal-container.has-background-image {
-  background-color: transparent !important;
-}
-.theme-light .xterm-text-layer {
-  color: #000000;
-}
-.theme-light .xterm-cursor {
-  background-color: #000000 !important;
+  background-color: var(--background-primary);
+  color: var(--text-normal);
 }
 /* ==================== 焦点样式 ==================== */
 .xterm:focus {
@@ -367,101 +386,6 @@
 .xterm-selection-layer,
 .xterm-link-layer {
   contain: strict;
-}
-
-
-/* ==================== 终端右键菜单样式 ==================== */
-.terminal-context-menu {
-  font-family: var(--font-interface);
-  animation: terminal-menu-fade-in 0.1s ease-out;
-}
-
-@keyframes terminal-menu-fade-in {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.terminal-context-menu-item {
-  transition: background-color 0.1s ease;
-  user-select: none;
-}
-
-.terminal-context-menu-item svg {
-  flex-shrink: 0;
-}
-
-
-/* ==================== 终端搜索栏样式 ==================== */
-.terminal-search-container {
-  display: flex;
-  padding: 8px 12px;
-  background: var(--background-secondary);
-  border-bottom: 1px solid var(--background-modifier-border);
-  gap: 8px;
-  align-items: center;
-}
-
-.terminal-search-input {
-  flex: 1;
-  padding: 4px 8px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 4px;
-  background: var(--background-primary);
-  color: var(--text-normal);
-  font-size: 13px;
-  outline: none;
-}
-
-.terminal-search-input:focus {
-  border-color: var(--interactive-accent);
-  box-shadow: 0 0 0 2px var(--interactive-accent-hover);
-}
-
-.terminal-search-btn {
-  padding: 4px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: background-color 0.1s ease, color 0.1s ease;
-}
-
-.terminal-search-btn:hover {
-  background: var(--background-modifier-hover);
-  color: var(--text-normal);
-}
-
-/* ==================== 子菜单样式 ==================== */
-.terminal-context-submenu-container {
-  position: relative;
-}
-
-.terminal-context-submenu {
-  position: absolute;
-  left: 100%;
-  top: 0;
-  background: var(--background-primary);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
-  padding: 4px 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  min-width: 150px;
-  display: none;
-  z-index: 10001;
-}
-
-.terminal-context-submenu-container:hover .terminal-context-submenu {
-  display: block;
 }
 
 

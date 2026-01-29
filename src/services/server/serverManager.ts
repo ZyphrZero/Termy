@@ -370,7 +370,7 @@ export class ServerManager {
     const platform = process.platform;
     const arch = process.arch;
     const ext = platform === 'win32' ? '.exe' : '';
-    const filename = `terminal-server-${platform}-${arch}${ext}`;
+    const filename = `termy-server-${platform}-${arch}${ext}`;
     
     return path.join(this.pluginDir, 'binaries', filename);
   }
@@ -937,5 +937,10 @@ export class ServerManager {
   updateOfflineMode(offlineMode: boolean): void {
     this.offlineMode = offlineMode;
     debugLog('[ServerManager] 更新离线模式:', this.offlineMode);
+  }
+
+  updateDownloadAcceleratorUrl(downloadAcceleratorUrl: string): void {
+    this.binaryDownloader = new BinaryDownloader(this.pluginDir, this.version, downloadAcceleratorUrl);
+    debugLog('[ServerManager] 更新下载加速源:', downloadAcceleratorUrl || '(empty)');
   }
 }

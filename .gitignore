@@ -8,6 +8,7 @@ target/
 binaries/
 
 # Build output
+main.css
 main.js
 *.js.map
 

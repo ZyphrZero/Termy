@@ -11,10 +11,10 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-// Terminal server configuration
+// Termy server configuration
 const SERVER_CONFIG = {
-  name: 'terminal-server',
-  displayName: 'Terminal Server'
+  name: 'termy-server',
+  displayName: 'Termy Server'
 };
 
 // Parse command line arguments

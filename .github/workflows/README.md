@@ -10,7 +10,7 @@
 - 手动触发
 
 **功能:**
-- 构建 5 个平台的 `terminal-server` 二进制
+- 构建 5 个平台的 `termy-server` 二进制
 - 测试二进制启动和端口输出
 
 **平台:**
@@ -37,11 +37,11 @@ obsidian-termy.zip
     ├── manifest.json
     ├── styles.css
     └── binaries/
-        ├── terminal-server-win32-x64.exe
-        ├── terminal-server-darwin-arm64
-        ├── terminal-server-darwin-x64
-        ├── terminal-server-linux-x64
-        └── terminal-server-linux-arm64
+        ├── termy-server-win32-x64.exe
+        ├── termy-server-darwin-arm64
+        ├── termy-server-darwin-x64
+        ├── termy-server-linux-x64
+        └── termy-server-linux-arm64
 ```
 
 ## 使用

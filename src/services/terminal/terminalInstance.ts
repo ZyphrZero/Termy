@@ -1513,4 +1513,12 @@ export class TerminalInstance {
     this.xterm.options.allowTransparency = !!this.options.backgroundImage;
     this.xterm.refresh(0, this.xterm.rows - 1);
   }
+
+  updateOptions(options: Partial<TerminalOptions>): void {
+    this.options = { ...this.options, ...options };
+    if (!this.isInitialized) {
+      return;
+    }
+    this.updateTheme();
+  }
 }

@@ -98,9 +98,28 @@ export interface TerminalSettings {
   // 功能可见性设置
   visibility: VisibilityConfig;
 
+  // 服务器连接设置
+  serverConnection: ServerConnectionSettings;
+
   // 调试设置
   enableDebugLog: boolean;
 }
+
+/**
+ * 服务器连接设置
+ */
+export interface ServerConnectionSettings {
+  downloadAcceleratorUrl: string;
+  offlineMode: boolean;
+}
+
+/**
+ * 默认服务器连接设置
+ */
+export const DEFAULT_SERVER_CONNECTION_SETTINGS: ServerConnectionSettings = {
+  downloadAcceleratorUrl: '',
+  offlineMode: false,
+};
 
 /**
  * 默认平台 Shell 配置
@@ -212,6 +231,7 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
     showInNewTab: true,
     showInStatusBar: false,
   },
+  serverConnection: { ...DEFAULT_SERVER_CONNECTION_SETTINGS },
   enableDebugLog: false,
 };
 
