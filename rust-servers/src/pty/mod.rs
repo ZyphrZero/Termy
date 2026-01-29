@@ -12,6 +12,7 @@ use crate::server::WsSender;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as TokioMutex;
+use tokio::time::{self, Duration, Instant};
 use tokio_tungstenite::tungstenite::Message;
 use futures_util::SinkExt;
 use uuid::Uuid;
@@ -162,6 +163,9 @@ impl PtyHandler {
         _writer: Arc<Mutex<PtyWriter>>,
         _shell_type: Option<String>,
     ) -> Result<tokio::task::JoinHandle<()>, RouterError> {
+        const OUTPUT_BATCH_INTERVAL_MS: u64 = 4;
+        const READ_BUFFER_SIZE: usize = 8192;
+
         let ws_sender = {
             let ws_sender_guard = self.ws_sender.lock().await;
             ws_sender_guard.clone()
@@ -171,66 +175,132 @@ impl PtyHandler {
         
         // 启动读取任务
         let task = tokio::spawn(async move {
-            loop {
-                // 在阻塞任务中读取 PTY 输出
-                let reader_clone = Arc::clone(&reader);
-                let result = tokio::task::spawn_blocking(move || -> Result<(Vec<u8>, usize), String> {
-                    let mut reader = reader_clone.lock().unwrap();
-                    let mut local_buf = vec![0u8; 8192];
+            enum ReadEvent {
+                Data(Vec<u8>),
+                Eof,
+                Error(String),
+            }
+
+            let (read_tx, mut read_rx) = tokio::sync::mpsc::channel::<ReadEvent>(32);
+            let reader_for_thread = Arc::clone(&reader);
+
+            tokio::task::spawn_blocking(move || {
+                loop {
+                    let mut reader = match reader_for_thread.lock() {
+                        Ok(guard) => guard,
+                        Err(_) => break,
+                    };
+                    let mut local_buf = vec![0u8; READ_BUFFER_SIZE];
                     match reader.read(&mut local_buf) {
-                        Ok(n) => Ok((local_buf, n)),
-                        Err(e) => Err(e.to_string()),
-                    }
-                }).await;
-                
-                match result {
-                    Ok(Ok((data, n))) if n > 0 => {
-                        log_debug!("读取 PTY 输出: session_id={}, {} 字节", session_id, n);
-                        
-                        // 构建带 session_id 前缀的二进制帧
-                        // 格式: [session_id_length: u8][session_id: bytes][data: bytes]
-                        let session_id_bytes = session_id.as_bytes();
-                        let session_id_len = session_id_bytes.len() as u8;
-                        
-                        let mut frame = Vec::with_capacity(1 + session_id_bytes.len() + n);
-                        frame.push(session_id_len);
-                        frame.extend_from_slice(session_id_bytes);
-                        frame.extend_from_slice(&data[..n]);
-                        
-                        let mut sender = ws_sender.lock().await;
-                        if let Err(e) = sender.send(Message::Binary(frame.into())).await {
-                            log_error!("发送 PTY 输出失败: session_id={}, {}", session_id, e);
+                        Ok(0) => {
+                            let _ = read_tx.blocking_send(ReadEvent::Eof);
                             break;
                         }
-                        drop(sender);
-                    }
-                    Ok(Ok(_)) => {
-                        // EOF - 进程退出
-                        log_info!("PTY 输出结束: session_id={}", session_id);
-                        
-                        // 发送 exit 事件
-                        let exit_response = ServerResponse::new(
-                            ModuleType::Pty,
-                            "exit",
-                            serde_json::json!({
-                                "session_id": session_id,
-                                "code": 0
-                            }),
-                        );
-                        let mut sender = ws_sender.lock().await;
-                        if let Err(e) = sender.send(Message::Text(exit_response.to_json().into())).await {
-                            log_error!("发送 exit 事件失败: session_id={}, {}", session_id, e);
+                        Ok(n) => {
+                            local_buf.truncate(n);
+                            if read_tx.blocking_send(ReadEvent::Data(local_buf)).is_err() {
+                                break;
+                            }
                         }
+                        Err(e) => {
+                            let _ = read_tx.blocking_send(ReadEvent::Error(e.to_string()));
+                            break;
+                        }
+                    }
+                }
+            });
+
+            let mut batch_buffer: Vec<u8> = Vec::new();
+
+            loop {
+                let first_event = match read_rx.recv().await {
+                    Some(event) => event,
+                    None => break,
+                };
+
+                let mut pending_exit = false;
+                let mut pending_error: Option<String> = None;
+
+                match first_event {
+                    ReadEvent::Data(data) => batch_buffer.extend_from_slice(&data),
+                    ReadEvent::Eof => pending_exit = true,
+                    ReadEvent::Error(e) => pending_error = Some(e),
+                }
+
+                if pending_error.is_none() && !pending_exit {
+                    let deadline = Instant::now() + Duration::from_millis(OUTPUT_BATCH_INTERVAL_MS);
+                    loop {
+                        match time::timeout_at(deadline, read_rx.recv()).await {
+                            Ok(Some(ReadEvent::Data(data))) => {
+                                batch_buffer.extend_from_slice(&data);
+                            }
+                            Ok(Some(ReadEvent::Eof)) => {
+                                pending_exit = true;
+                                break;
+                            }
+                            Ok(Some(ReadEvent::Error(e))) => {
+                                pending_error = Some(e);
+                                break;
+                            }
+                            Ok(None) => {
+                                break;
+                            }
+                            Err(_) => {
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if !batch_buffer.is_empty() {
+                    log_debug!(
+                        "读取 PTY 输出(批处理): session_id={}, {} 字节",
+                        session_id,
+                        batch_buffer.len()
+                    );
+
+                    // 构建带 session_id 前缀的二进制帧
+                    // 格式: [session_id_length: u8][session_id: bytes][data: bytes]
+                    let session_id_bytes = session_id.as_bytes();
+                    let session_id_len = session_id_bytes.len() as u8;
+
+                    let mut frame = Vec::with_capacity(1 + session_id_bytes.len() + batch_buffer.len());
+                    frame.push(session_id_len);
+                    frame.extend_from_slice(session_id_bytes);
+                    frame.extend_from_slice(&batch_buffer);
+
+                    let mut sender = ws_sender.lock().await;
+                    if let Err(e) = sender.send(Message::Binary(frame.into())).await {
+                        log_error!("发送 PTY 输出失败: session_id={}, {}", session_id, e);
                         break;
                     }
-                    Ok(Err(e)) => {
-                        log_error!("PTY 输出读取错误: session_id={}, {}", session_id, e);
-                        break;
+                }
+
+                batch_buffer.clear();
+
+                if let Some(e) = pending_error {
+                    log_error!("PTY 输出读取错误: session_id={}, {}", session_id, e);
+                    break;
+                }
+
+                if pending_exit {
+                    // EOF - 进程退出
+                    log_info!("PTY 输出结束: session_id={}", session_id);
+
+                    // 发送 exit 事件
+                    let exit_response = ServerResponse::new(
+                        ModuleType::Pty,
+                        "exit",
+                        serde_json::json!({
+                            "session_id": session_id,
+                            "code": 0
+                        }),
+                    );
+                    let mut sender = ws_sender.lock().await;
+                    if let Err(e) = sender.send(Message::Text(exit_response.to_json().into())).await {
+                        log_error!("发送 exit 事件失败: session_id={}, {}", session_id, e);
                     }
-                    Err(e) => {
-                        log_error!("PTY 读取任务错误: session_id={}, {}", session_id, e);
-                        break;
-                    }
+                    break;
                 }
             }
         });

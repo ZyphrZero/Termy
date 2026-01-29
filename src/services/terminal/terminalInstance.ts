@@ -152,6 +152,11 @@ export class TerminalInstance {
   private readonly minFontSize = 8;
   private readonly maxFontSize = 32;
 
+  // 输入批处理
+  private pendingInput: string[] = [];
+  private inputFlushTimer: number | null = null;
+  private readonly inputBatchIntervalMs = 4;
+
   // 右键菜单回调（用于拆分终端、新建终端等需要外部处理的操作）
   private contextMenuCallbacks: {
     onNewTerminal?: () => void;
@@ -366,13 +371,12 @@ export class TerminalInstance {
   private setupXtermHandlers(): void {
     // 处理用户输入
     this.xterm.onData((data) => {
-      if (this.ptyClient && this.sessionId) {
-        this.ptyClient.write(this.sessionId, data);
-      }
+      this.queueInput(data);
     });
     
     this.xterm.onBinary((data) => {
       if (this.ptyClient && this.sessionId) {
+        this.flushPendingInput();
         const binaryData = Uint8Array.from(atob(data), c => c.charCodeAt(0));
         this.ptyClient.writeBinary(this.sessionId, binaryData);
       }
@@ -427,6 +431,32 @@ export class TerminalInstance {
     });
   }
 
+  private queueInput(data: string): void {
+    if (this.isDestroyed) return;
+    this.pendingInput.push(data);
+
+    if (this.inputFlushTimer === null) {
+      this.inputFlushTimer = window.setTimeout(() => {
+        this.flushPendingInput();
+      }, this.inputBatchIntervalMs);
+    }
+  }
+
+  private flushPendingInput(): void {
+    if (this.pendingInput.length === 0) {
+      this.inputFlushTimer = null;
+      return;
+    }
+
+    const merged = this.pendingInput.join('');
+    this.pendingInput = [];
+    this.inputFlushTimer = null;
+
+    if (this.ptyClient && this.sessionId) {
+      this.ptyClient.write(this.sessionId, merged);
+    }
+  }
+
   /**
    * 发送调整大小消息
    */
@@ -460,6 +490,12 @@ export class TerminalInstance {
   async destroy(): Promise<void> {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
+
+    if (this.inputFlushTimer !== null) {
+      window.clearTimeout(this.inputFlushTimer);
+      this.inputFlushTimer = null;
+    }
+    this.pendingInput = [];
 
     // 取消事件订阅
     this.outputUnsubscribe?.();
