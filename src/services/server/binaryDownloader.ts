@@ -71,6 +71,10 @@ export class BinaryDownloader {
     this.downloadAcceleratorUrl = downloadAcceleratorUrl;
   }
 
+  getDownloadAcceleratorUrl(): string {
+    return this.downloadAcceleratorUrl;
+  }
+
   /**
    * 检查二进制文件是否存在且版本匹配
    * @param skipVersionCheck 是否跳过版本检查（调试模式使用）

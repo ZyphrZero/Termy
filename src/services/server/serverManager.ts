@@ -930,16 +930,26 @@ export class ServerManager {
   }
   
   updateDebugMode(debugMode: boolean): void {
+    if (this.debugMode === debugMode) {
+      return;
+    }
     this.debugMode = debugMode;
     debugLog('[ServerManager] 更新调试模式:', this.debugMode);
   }
   
   updateOfflineMode(offlineMode: boolean): void {
+    if (this.offlineMode === offlineMode) {
+      return;
+    }
     this.offlineMode = offlineMode;
     debugLog('[ServerManager] 更新离线模式:', this.offlineMode);
   }
 
   updateDownloadAcceleratorUrl(downloadAcceleratorUrl: string): void {
+    const nextUrl = downloadAcceleratorUrl || '';
+    if (this.binaryDownloader?.getDownloadAcceleratorUrl?.() === nextUrl) {
+      return;
+    }
     this.binaryDownloader = new BinaryDownloader(this.pluginDir, this.version, downloadAcceleratorUrl);
     debugLog('[ServerManager] 更新下载加速源:', downloadAcceleratorUrl || '(empty)');
   }

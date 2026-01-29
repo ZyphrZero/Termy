@@ -44,6 +44,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   private themePreviewEl: HTMLElement | null = null;
   private themePreviewBackgroundEl: HTMLElement | null = null;
   private themePreviewContentEl: HTMLElement | null = null;
+  private rendererStatusEl: HTMLElement | null = null;
 
   /**
    * 渲染终端设置
@@ -264,6 +265,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       .setHeading();
 
     this.renderThemePreview(themeCard);
+    this.renderRendererStatus(themeCard);
 
     // 使用 Obsidian 主题
     const useObsidianThemeSetting = new Setting(themeCard)
@@ -276,24 +278,10 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
             this.context.plugin.settings.useObsidianTheme = value;
           });
           
-          // 使用局部更新替代全量刷新
-          this.toggleConditionalSection(
-            themeCard,
-            'custom-color-settings',
-            !value,
-            (el) => this.renderCustomColorSettingsContent(el),
-            useObsidianThemeSetting.settingEl
-          );
+          this.updateCustomColorSettingsVisibility(themeCard, useObsidianThemeSetting.settingEl);
         }));
 
-    // 自定义颜色设置（仅在不使用 Obsidian 主题时显示）- 初始渲染
-    this.toggleConditionalSection(
-      themeCard,
-      'custom-color-settings',
-      !this.context.plugin.settings.useObsidianTheme,
-      (el) => this.renderCustomColorSettingsContent(el),
-      useObsidianThemeSetting.settingEl
-    );
+    this.updateCustomColorSettingsVisibility(themeCard, useObsidianThemeSetting.settingEl);
   }
 
   /**
@@ -354,13 +342,8 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           new Notice(t('notices.settings.foregroundColorReset'));
         }));
 
-    // 背景图片设置（仅 Canvas 渲染器支持）
-    this.toggleConditionalSection(
-      container,
-      'background-image-settings',
-      this.context.plugin.settings.preferredRenderer === 'canvas',
-      (el) => this.renderBackgroundImageSettings(el)
-    );
+    // 背景图片设置（WebGL 模式将自动降级为 Canvas）
+    this.renderBackgroundImageSettings(container);
   }
 
   /**
@@ -370,6 +353,21 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     const bgImageSetting = new Setting(container)
       .setName(t('settingsDetails.terminal.backgroundImage'))
       .setDesc(t('settingsDetails.terminal.backgroundImageDesc'));
+    bgImageSetting.settingEl.addClass('terminal-background-image-setting');
+
+    this.toggleConditionalSection(
+      container,
+      'background-image-webgl-hint',
+      this.context.plugin.settings.preferredRenderer === 'webgl',
+      (el) => {
+        el.addClass('terminal-background-image-webgl-hint');
+        el.createDiv({
+          cls: 'setting-item-description',
+          text: t('settingsDetails.terminal.backgroundImageWebglHint'),
+        });
+      },
+      bgImageSetting.settingEl
+    );
 
     let backgroundImageInput: TextComponent | null = null;
 
@@ -643,12 +641,42 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       return;
     }
 
+    const bgImageSettingEl = customColorContainer.querySelector<HTMLElement>(
+      '.terminal-background-image-setting'
+    );
+    if (!bgImageSettingEl) {
+      return;
+    }
+
     this.toggleConditionalSection(
       customColorContainer,
-      'background-image-settings',
-      this.context.plugin.settings.preferredRenderer === 'canvas',
-      (el) => this.renderBackgroundImageSettings(el)
+      'background-image-webgl-hint',
+      this.context.plugin.settings.preferredRenderer === 'webgl',
+      (el) => {
+        el.addClass('terminal-background-image-webgl-hint');
+        el.createDiv({
+          cls: 'setting-item-description',
+          text: t('settingsDetails.terminal.backgroundImageWebglHint'),
+        });
+      },
+      bgImageSettingEl
     );
+  }
+
+  private updateCustomColorSettingsVisibility(themeCard: HTMLElement, insertAfter: HTMLElement): void {
+    const shouldShow = !this.context.plugin.settings.useObsidianTheme;
+    this.toggleConditionalSection(
+      themeCard,
+      'custom-color-settings',
+      shouldShow,
+      (el) => this.renderCustomColorSettingsContent(el),
+      insertAfter
+    );
+
+    if (!shouldShow) {
+      themeCard.querySelectorAll('.conditional-section-custom-color-settings')
+        .forEach((el) => el.remove());
+    }
   }
 
   private requestThemeRefresh(): void {
@@ -661,10 +689,21 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     });
   }
 
+  private applyScrollbackToOpenTerminals(scrollback: number): void {
+    const leaves = this.context.app.workspace.getLeavesOfType('terminal-view');
+    leaves.forEach(leaf => {
+      const view = leaf.view as any;
+      if (typeof view?.getTerminalInstance === 'function') {
+        view.getTerminalInstance()?.updateOptions({ scrollback });
+      }
+    });
+  }
+
   private async updateThemeSetting(update: () => void): Promise<void> {
     update();
     await this.saveSettings();
     this.updateThemePreview();
+    this.updateRendererStatus();
     this.requestThemeRefresh();
   }
 
@@ -688,6 +727,52 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     this.updateThemePreview();
   }
 
+  private renderRendererStatus(container: HTMLElement): void {
+    const setting = new Setting(container)
+      .setName(t('settingsDetails.terminal.rendererStatus'))
+      .setDesc(t('settingsDetails.terminal.rendererStatusDesc'));
+
+    this.rendererStatusEl = setting.controlEl.createDiv({ cls: 'terminal-renderer-status-value' });
+    this.updateRendererStatus();
+  }
+
+  private updateRendererStatus(): void {
+    if (!this.rendererStatusEl) return;
+
+    const settings = this.context.plugin.settings;
+    const preferred = settings.preferredRenderer;
+    const hasBackgroundImage = !!settings.backgroundImage;
+    const shouldFallback = !settings.useObsidianTheme && hasBackgroundImage;
+    const predicted = preferred === 'webgl' && shouldFallback ? 'canvas' : preferred;
+
+    let actualRenderer: 'canvas' | 'webgl' | null = null;
+    const leaves = this.context.app.workspace.getLeavesOfType('terminal-view');
+    for (const leaf of leaves) {
+      const view = leaf.view as any;
+      const instance = typeof view?.getTerminalInstance === 'function'
+        ? view.getTerminalInstance()
+        : null;
+      if (instance?.isAlive?.()) {
+        actualRenderer = instance.getCurrentRenderer();
+        break;
+      }
+    }
+
+    const renderer = actualRenderer ?? predicted;
+    const rendererLabel = renderer === 'webgl'
+      ? t('rendererOptions.webgl')
+      : t('rendererOptions.canvas');
+    const sourceLabel = actualRenderer
+      ? t('settingsDetails.terminal.rendererStatusLive')
+      : t('settingsDetails.terminal.rendererStatusPredicted');
+    const fallbackLabel = preferred === 'webgl' && renderer === 'canvas' && shouldFallback
+      ? t('settingsDetails.terminal.rendererStatusFallback')
+      : '';
+
+    const suffix = fallbackLabel ? `${sourceLabel} · ${fallbackLabel}` : sourceLabel;
+    this.rendererStatusEl.setText(`${rendererLabel}（${suffix}）`);
+  }
+
   private updateThemePreview(): void {
     if (!this.themePreviewEl) return;
     const settings = this.context.plugin.settings;
@@ -701,7 +786,6 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       : (settings.foregroundColor || '#FFFFFF');
 
     const showBackgroundImage = !useObsidianTheme
-      && settings.preferredRenderer === 'canvas'
       && !!settings.backgroundImage;
 
     this.themePreviewEl.style.setProperty('--terminal-preview-bg', backgroundColor);
@@ -765,6 +849,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           if (!isNaN(numValue)) {
             this.context.plugin.settings.scrollback = numValue;
             await this.saveSettings();
+            this.applyScrollbackToOpenTerminals(numValue);
           }
         });
       
@@ -777,43 +862,15 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           this.context.plugin.settings.scrollback = 1000;
           await this.saveSettings();
           text.setValue('1000');
+          this.applyScrollbackToOpenTerminals(1000);
+          return;
         }
+        this.applyScrollbackToOpenTerminals(numValue);
       });
       
       return inputEl;
     });
 
-    // 终端面板默认高度
-    new Setting(behaviorCard)
-      .setName(t('settingsDetails.terminal.defaultHeight'))
-      .setDesc(t('settingsDetails.terminal.defaultHeightDesc'))
-      .addText(text => {
-      const inputEl = text
-        .setPlaceholder('300')
-        .setValue(String(this.context.plugin.settings.defaultHeight))
-        .onChange(async (value) => {
-          // 只在输入时保存，不验证
-          const numValue = parseInt(value);
-          if (!isNaN(numValue)) {
-            this.context.plugin.settings.defaultHeight = numValue;
-            await this.saveSettings();
-          }
-        });
-      
-      // 失去焦点时验证
-      text.inputEl.addEventListener('blur', async () => {
-        const value = text.inputEl.value;
-        const numValue = parseInt(value);
-        if (isNaN(numValue) || numValue < 100 || numValue > 1000) {
-          new Notice('⚠️ ' + t('notices.settings.heightRangeError'));
-          this.context.plugin.settings.defaultHeight = 300;
-          await this.saveSettings();
-          text.setValue('300');
-        }
-      });
-      
-      return inputEl;
-    });
   }
 
   /**

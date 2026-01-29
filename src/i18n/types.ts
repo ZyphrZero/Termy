@@ -180,6 +180,11 @@ export interface TranslationKeys {
       lockNewInstanceDesc: string;
       themeSettings: string;
       themePreview: string;
+      rendererStatus: string;
+      rendererStatusDesc: string;
+      rendererStatusLive: string;
+      rendererStatusPredicted: string;
+      rendererStatusFallback: string;
       useObsidianTheme: string;
       useObsidianThemeDesc: string;
       backgroundColor: string;
@@ -188,6 +193,7 @@ export interface TranslationKeys {
       foregroundColorDesc: string;
       backgroundImage: string;
       backgroundImageDesc: string;
+      backgroundImageWebglHint: string;
       backgroundImagePlaceholder: string;
       backgroundImageOpacity: string;
       backgroundImageOpacityDesc: string;
@@ -216,8 +222,6 @@ export interface TranslationKeys {
       preferredRendererDesc: string;
       scrollback: string;
       scrollbackDesc: string;
-      defaultHeight: string;
-      defaultHeightDesc: string;
     };
     advanced: {
       performanceAndDebug: string;

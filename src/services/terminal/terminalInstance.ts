@@ -512,17 +512,30 @@ export class TerminalInstance {
     this.setupKeyboardShortcuts(container);
 
     const preferredRenderer = this.options.preferredRenderer || 'canvas';
+    const effectiveRenderer = this.resolveRenderer(preferredRenderer);
     
     // 异步加载渲染器
     requestAnimationFrame(async () => {
       try {
-        await this.loadRenderer(preferredRenderer);
+        await this.loadRenderer(effectiveRenderer);
         this.fit();
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         this.xterm.write(`\r\n\x1b[1;31m[渲染器错误] ${errorMsg}\x1b[0m\r\n`);
       }
     });
+  }
+
+  private resolveRenderer(renderer: 'canvas' | 'webgl'): 'canvas' | 'webgl' {
+    if (
+      renderer === 'webgl'
+      && !this.options.useObsidianTheme
+      && this.options.backgroundImage
+    ) {
+      debugLog('[Terminal] Background image enabled, fallback to canvas renderer');
+      return 'canvas';
+    }
+    return renderer;
   }
 
   /**
@@ -1515,9 +1528,13 @@ export class TerminalInstance {
   }
 
   updateOptions(options: Partial<TerminalOptions>): void {
+    const previousScrollback = this.options.scrollback;
     this.options = { ...this.options, ...options };
     if (!this.isInitialized) {
       return;
+    }
+    if (options.scrollback !== undefined && options.scrollback !== previousScrollback) {
+      this.xterm.options.scrollback = options.scrollback;
     }
     this.updateTheme();
   }

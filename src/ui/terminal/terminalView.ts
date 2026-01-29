@@ -289,7 +289,10 @@ export class TerminalView extends ItemView {
 
     const options = (this.terminalInstance as any).options;
     
-    if (options?.useObsidianTheme || options?.preferredRenderer === 'webgl' || !options?.backgroundImage) {
+    if (options?.useObsidianTheme || !options?.backgroundImage) {
+      return;
+    }
+    if (this.terminalInstance.getCurrentRenderer() === 'webgl') {
       return;
     }
 
@@ -329,7 +332,10 @@ export class TerminalView extends ItemView {
 
     const options = (this.terminalInstance as any).options;
     
-    if (options?.useObsidianTheme || options?.preferredRenderer === 'webgl' || !options?.backgroundImage) {
+    if (options?.useObsidianTheme || !options?.backgroundImage) {
+      return;
+    }
+    if (this.terminalInstance.getCurrentRenderer() === 'webgl') {
       return;
     }
 

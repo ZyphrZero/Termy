@@ -92,8 +92,6 @@ export interface TerminalSettings {
   // 滚动缓冲区大小（行数）
   scrollback: number;
 
-  // 终端面板默认高度（像素）
-  defaultHeight: number;
 
   // 功能可见性设置
   visibility: VisibilityConfig;
@@ -217,7 +215,6 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   useObsidianTheme: true,
   preferredRenderer: 'canvas',
   scrollback: 1000,
-  defaultHeight: 300,
   backgroundImageOpacity: 0.5,
   backgroundImageSize: 'cover',
   backgroundImagePosition: 'center',

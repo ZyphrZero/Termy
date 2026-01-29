@@ -618,3 +618,7 @@
   opacity: var(--terminal-preview-text-opacity, 1);
   white-space: pre-wrap;
 }
+.terminal-renderer-status-value {
+  font-size: 12px;
+  color: var(--text-muted);
+}
