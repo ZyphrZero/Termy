@@ -1,6 +1,6 @@
 {
   "name": "obsidian-termy",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A full-featured terminal plugin for Obsidian with xterm.js and Rust PTY backend.",
   "main": "main.js",
   "packageManager": "pnpm@10.0.0",
