@@ -30,13 +30,15 @@ fn detect_windows_shell() -> String {
         return shell;
     }
 
-    // 2. 优先使用 PowerShell Core (pwsh)
-    if let Ok(path) = which("pwsh") {
+    // 2. 优先使用 Windows PowerShell 5.x（更广泛的兼容性）
+    //    PowerShell 5.x 是 Windows 内置的，几乎所有 Windows 系统都有
+    if let Ok(path) = which("powershell") {
         return path.to_string_lossy().into_owned();
     }
 
-    // 3. 回退到 Windows PowerShell
-    if let Ok(path) = which("powershell") {
+    // 3. 如果 PowerShell 5.x 不可用，尝试 PowerShell Core (pwsh)
+    //    PowerShell 7+ 需要单独安装，不是所有系统都有
+    if let Ok(path) = which("pwsh") {
         return path.to_string_lossy().into_owned();
     }
 
@@ -81,11 +83,12 @@ pub fn get_shell_by_type(shell_type: Option<&str>) -> CommandBuilder {
         Some("powershell") => {
             #[cfg(windows)]
             {
-                // 使用智能检测找到最佳 PowerShell
-                let ps_path = detect_windows_shell();
-                if ps_path.contains("pwsh") || ps_path.contains("powershell") {
-                    CommandBuilder::new(ps_path)
+                // 明确使用 Windows PowerShell 5.x，不使用 pwsh
+                if let Ok(path) = which("powershell") {
+                    eprintln!("[INFO] [Shell] 使用 PowerShell 5.x: {}", path.display());
+                    CommandBuilder::new(path.to_string_lossy().into_owned())
                 } else {
+                    eprintln!("[WARN] [Shell] PowerShell 未在 PATH 中找到，使用默认路径");
                     CommandBuilder::new("powershell.exe")
                 }
             }
@@ -93,6 +96,30 @@ pub fn get_shell_by_type(shell_type: Option<&str>) -> CommandBuilder {
             {
                 // 非 Windows 平台，使用默认 shell
                 get_default_shell()
+            }
+        }
+        Some("pwsh") => {
+            #[cfg(windows)]
+            {
+                // 明确使用 PowerShell Core (pwsh)
+                if let Ok(path) = which("pwsh") {
+                    eprintln!("[INFO] [Shell] 使用 PowerShell 7: {}", path.display());
+                    CommandBuilder::new(path.to_string_lossy().into_owned())
+                } else {
+                    eprintln!("[WARN] [Shell] PowerShell 7 未安装，降级到 PowerShell 5.x");
+                    // 回退到 Windows PowerShell
+                    if let Ok(path) = which("powershell") {
+                        eprintln!("[INFO] [Shell] 使用 PowerShell 5.x: {}", path.display());
+                        CommandBuilder::new(path.to_string_lossy().into_owned())
+                    } else {
+                        eprintln!("[WARN] [Shell] PowerShell 未在 PATH 中找到，使用默认路径");
+                        CommandBuilder::new("powershell.exe")
+                    }
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                CommandBuilder::new("pwsh")
             }
         }
         Some("wsl") => CommandBuilder::new("wsl.exe"),

@@ -353,6 +353,7 @@ export interface TranslationKeys {
   shellOptions: {
     cmd: string;
     powershell: string;
+    pwsh: string;
     wsl: string;
     gitbash: string;
     bash: string;

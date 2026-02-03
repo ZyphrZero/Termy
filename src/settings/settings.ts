@@ -6,7 +6,7 @@
 import type { VisibilityConfig } from '@/services/visibility';
 
 /** Windows 平台支持的 Shell 类型 */
-export type WindowsShellType = 'cmd' | 'powershell' | 'wsl' | 'gitbash' | 'custom';
+export type WindowsShellType = 'cmd' | 'powershell' | 'pwsh' | 'wsl' | 'gitbash' | 'custom';
 
 /** Unix 平台（macOS/Linux）支持的 Shell 类型 */
 export type UnixShellType = 'bash' | 'zsh' | 'custom';

@@ -102,6 +102,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         if (process.platform === 'win32') {
           dropdown.addOption('cmd', t('shellOptions.cmd'));
           dropdown.addOption('powershell', t('shellOptions.powershell'));
+          dropdown.addOption('pwsh', t('shellOptions.pwsh'));
           dropdown.addOption('gitbash', t('shellOptions.gitbash'));
           dropdown.addOption('wsl', t('shellOptions.wsl'));
         } else if (process.platform === 'darwin' || process.platform === 'linux') {

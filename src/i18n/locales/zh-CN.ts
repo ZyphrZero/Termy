@@ -326,6 +326,7 @@ export const zhCN: TranslationKeys = {
   shellOptions: {
     cmd: 'Command Prompt',
     powershell: 'PowerShell',
+    pwsh: 'PowerShell 7',
     wsl: 'WSL',
     gitbash: 'Git Bash',
     bash: 'Bash',
