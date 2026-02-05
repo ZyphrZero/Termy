@@ -6,7 +6,7 @@
 /**
  * 支持的语言区域
  */
-export type SupportedLocale = 'en' | 'zh-CN';
+export type SupportedLocale = 'en' | 'zh-CN' | 'ja' | 'ko' | 'ru';
 
 /**
  * 翻译键接口
@@ -128,6 +128,8 @@ export interface TranslationKeys {
       foregroundColorReset: string;
       backgroundImageCleared: string;
       rendererUpdated: string;
+      debugLogEnabled: string;
+      debugLogDisabled: string;
       scrollbackRangeError: string;
       heightRangeError: string;
     };

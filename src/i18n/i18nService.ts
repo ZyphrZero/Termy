@@ -5,13 +5,19 @@
 
 import { en } from './locales/en';
 import { zhCN } from './locales/zh-CN';
+import { ja } from './locales/ja';
+import { ko } from './locales/ko';
+import { ru } from './locales/ru';
 import type { TranslationKeys, SupportedLocale } from './types';
 
 class I18nService {
   private currentLocale: SupportedLocale = 'en';
   private resources: Record<SupportedLocale, TranslationKeys> = {
     'en': en,
-    'zh-CN': zhCN
+    'zh-CN': zhCN,
+    'ja': ja,
+    'ko': ko,
+    'ru': ru
   };
 
   /**
@@ -31,7 +37,22 @@ class I18nService {
     if (lang && (lang === 'zh' || lang.startsWith('zh-'))) {
       return 'zh-CN';
     }
+    if (lang && this.isSupportedLocale(lang)) {
+      return lang;
+    }
+
+    if (lang && lang.includes('-')) {
+      const baseLang = lang.split('-')[0];
+      if (this.isSupportedLocale(baseLang)) {
+        return baseLang;
+      }
+    }
+
     return 'en';
+  }
+
+  private isSupportedLocale(locale: string): locale is SupportedLocale {
+    return Object.prototype.hasOwnProperty.call(this.resources, locale);
   }
 
   /**

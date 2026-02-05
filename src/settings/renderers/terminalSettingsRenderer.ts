@@ -1263,19 +1263,21 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     const debugCard = containerEl.createDiv({ cls: 'settings-card' });
 
     new Setting(debugCard)
-      .setName('🐛 调试设置')
+      .setName(t('settingsDetails.advanced.performanceAndDebug'))
       .setHeading();
 
     // 启用调试日志
     new Setting(debugCard)
-      .setName('启用调试日志')
-      .setDesc('在控制台输出详细的调试信息，用于排查问题')
+      .setName(t('settingsDetails.advanced.debugMode'))
+      .setDesc(t('settingsDetails.advanced.debugModeDesc'))
       .addToggle(toggle => toggle
         .setValue(this.context.plugin.settings.enableDebugLog)
         .onChange((value) => {
           this.context.plugin.settings.enableDebugLog = value;
           void this.saveSettings().then(() => {
-            new Notice(value ? '调试日志已启用，请打开控制台查看' : '调试日志已禁用');
+            new Notice(value
+              ? t('notices.settings.debugLogEnabled')
+              : t('notices.settings.debugLogDisabled'));
           });
         }));
   }
