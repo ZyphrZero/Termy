@@ -5,6 +5,23 @@ All notable changes to Termy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-02-05
+
+### Added
+- **Emoji script icons**: Allow preset script icons to be emoji, rendered consistently across the picker, list, and status bar menu
+
+### Changed
+- **UI text casing**: Convert English UI strings to sentence case for settings, menus, and commands
+- **Branding**: Replace “Obsidian Termy” with “Termy” in UI strings and theme preview text
+- **Style variables**: Apply theme preview and terminal appearance via element CSS variables instead of injected style tags
+- **Dialog behavior**: Replace native confirm with an Obsidian modal for preset script deletion
+
+### Fixed
+- **Deprecated API usage**: Switch active view lookup to `getActiveViewOfType` to avoid `activeLeaf` deprecation
+- **Promise handling**: Mark background promises as handled/voided to satisfy lint rules
+- **Type assertions**: Remove redundant assertions in preset script actions and PTY shell events
+- **Logger output**: Use `console.debug` for debug logs to meet console restrictions
+
 ## [1.2.1] - 2026-02-05
 
 ### Fixed
@@ -85,6 +102,7 @@ If you're upgrading from version 1.1.1 or earlier:
 
 ---
 
+[1.2.2]: https://github.com/ZyphrZero/Termy/releases/tag/1.2.2
 [1.2.1]: https://github.com/ZyphrZero/Termy/releases/tag/1.2.1
 [1.2.0]: https://github.com/ZyphrZero/Termy/releases/tag/1.2.0
 [1.1.1]: https://github.com/ZyphrZero/Termy/releases/tag/1.1.1
