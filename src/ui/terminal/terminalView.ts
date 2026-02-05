@@ -4,7 +4,7 @@ import type { TerminalService } from '../../services/terminal/terminalService';
 import type { TerminalInstance } from '../../services/terminal/terminalInstance';
 import type { TerminalSettings } from '../../settings/settings';
 import { errorLog } from '../../utils/logger';
-import { clamp, createStyleId, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
+import { clamp, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
 import { t } from '../../i18n';
 import { RenameTerminalModal } from './renameTerminalModal';
 
@@ -23,13 +23,10 @@ export class TerminalView extends ItemView {
   private initPromise: Promise<TerminalInstance> | null = null;
   private initResolve: ((terminal: TerminalInstance) => void) | null = null;
   private initReject: ((error: Error) => void) | null = null;
-  private appearanceStyleEl: HTMLStyleElement | null = null;
-  private appearanceStyleId: string | null = null;
 
   constructor(leaf: WorkspaceLeaf, terminalService: TerminalService | null) {
     super(leaf);
     this.terminalService = terminalService;
-    this.appearanceStyleId = createStyleId('termy-terminal');
     this.initPromise = new Promise<TerminalInstance>((resolve, reject) => {
       this.initResolve = resolve;
       this.initReject = reject;
@@ -74,7 +71,7 @@ export class TerminalView extends ItemView {
     });
   }
 
-  async onOpen(): Promise<void> {
+  onOpen(): Promise<void> {
     // 使用 contentEl 而不是 containerEl.children[1]
     const container = this.contentEl;
     container.empty();
@@ -91,6 +88,7 @@ export class TerminalView extends ItemView {
         void this.initializeTerminal();
       }
     }, 0);
+    return Promise.resolve();
   }
 
   /**
@@ -414,49 +412,26 @@ export class TerminalView extends ItemView {
     textOpacity: string;
   }): void {
     if (!this.terminalContainer) return;
-
-    const styleId = this.ensureAppearanceStyleId();
-    this.terminalContainer.setAttr('data-termy-style-id', styleId);
-
-    const styleEl = this.ensureAppearanceStyleEl();
-    styleEl.textContent = [
-      `.terminal-container[data-termy-style-id="${styleId}"]{`,
-      `--terminal-bg-image:${vars.backgroundImage};`,
-      `--terminal-bg-overlay-opacity:${vars.overlayOpacity};`,
-      `--terminal-bg-size:${vars.backgroundSize};`,
-      `--terminal-bg-position:${vars.backgroundPosition};`,
-      `--terminal-bg-blur:${vars.blur};`,
-      `--terminal-bg-scale:${vars.scale};`,
-      `--terminal-text-opacity:${vars.textOpacity};`,
-      '}',
-    ].join('');
-  }
-
-  private ensureAppearanceStyleId(): string {
-    if (!this.appearanceStyleId) {
-      this.appearanceStyleId = createStyleId('termy-terminal');
-    }
-    return this.appearanceStyleId;
-  }
-
-  private ensureAppearanceStyleEl(): HTMLStyleElement {
-    if (!this.appearanceStyleEl) {
-      this.appearanceStyleEl = document.createElement('style');
-      this.appearanceStyleEl.setAttribute('data-termy-style-scope', 'terminal-view');
-      document.head.appendChild(this.appearanceStyleEl);
-    }
-    return this.appearanceStyleEl;
+    const style = this.terminalContainer.style;
+    style.setProperty('--terminal-bg-image', vars.backgroundImage);
+    style.setProperty('--terminal-bg-overlay-opacity', String(vars.overlayOpacity));
+    style.setProperty('--terminal-bg-size', vars.backgroundSize);
+    style.setProperty('--terminal-bg-position', vars.backgroundPosition);
+    style.setProperty('--terminal-bg-blur', vars.blur);
+    style.setProperty('--terminal-bg-scale', vars.scale);
+    style.setProperty('--terminal-text-opacity', vars.textOpacity);
   }
 
   private disposeAppearanceStyle(): void {
-    if (this.terminalContainer) {
-      this.terminalContainer.removeAttribute('data-termy-style-id');
-    }
-    if (this.appearanceStyleEl) {
-      this.appearanceStyleEl.remove();
-      this.appearanceStyleEl = null;
-    }
-    this.appearanceStyleId = null;
+    if (!this.terminalContainer) return;
+    const style = this.terminalContainer.style;
+    style.removeProperty('--terminal-bg-image');
+    style.removeProperty('--terminal-bg-overlay-opacity');
+    style.removeProperty('--terminal-bg-size');
+    style.removeProperty('--terminal-bg-position');
+    style.removeProperty('--terminal-bg-blur');
+    style.removeProperty('--terminal-bg-scale');
+    style.removeProperty('--terminal-text-opacity');
   }
 
   /**

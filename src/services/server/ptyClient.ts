@@ -356,7 +356,7 @@ export class PtyClient extends ModuleClient {
         if (sessionId && msg.event) {
           const type = msg.event as ShellEventType;
           const source = (msg.source as ShellEventSource) || 'osc133';
-          const exitCode = typeof msg.exit_code === 'number' ? msg.exit_code as number : null;
+          const exitCode = typeof msg.exit_code === 'number' ? msg.exit_code : null;
           this.emitSessionShellEvent(sessionId, { type, source, exitCode });
         }
         break;

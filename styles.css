@@ -388,6 +388,30 @@
   color: var(--preset-script-icon-color, currentColor);
 }
 
+.preset-script-emoji-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.preset-script-icon-preview.preset-script-emoji-icon {
+  font-size: 20px;
+}
+
+.preset-script-icon-option.preset-script-emoji-icon {
+  font-size: 18px;
+}
+
+.preset-script-icon.preset-script-emoji-icon {
+  font-size: 18px;
+}
+
+.preset-scripts-menu-icon.preset-script-emoji-icon {
+  font-size: 16px;
+}
+
 .preset-script-icon-preview.preset-script-custom-icon svg {
   width: 20px;
   height: 20px;

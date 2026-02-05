@@ -3,8 +3,8 @@
  * 负责渲染终端相关的所有设置
  */
 
-import type { ColorComponent, TextComponent } from 'obsidian';
-import { Setting, Notice, Platform, ToggleComponent, setIcon } from 'obsidian';
+import type { App, ColorComponent, TextComponent } from 'obsidian';
+import { Modal, Setting, Notice, Platform, ToggleComponent, setIcon } from 'obsidian';
 import type { RendererContext } from '../types';
 import type { PresetScript, ShellType } from '../settings';
 import { 
@@ -18,7 +18,7 @@ import { BaseSettingsRenderer } from './baseRenderer';
 import { t } from '../../i18n';
 import { PresetScriptModal } from '../../ui/terminal/presetScriptModal';
 import { PRESET_SCRIPT_ICON_OPTIONS, renderPresetScriptIcon } from '../../ui/terminal/presetScriptIcons';
-import { clamp, createStyleId, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
+import { clamp, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
 
 const NEW_INSTANCE_BEHAVIORS = [
   'replaceTab',
@@ -62,19 +62,75 @@ const asTerminalViewLike = (value: unknown): TerminalViewLike | null => {
   return null;
 };
 
+class ConfirmModal extends Modal {
+  private message: string;
+  private onConfirm: () => void;
+  private onCancel: () => void;
+
+  constructor(app: App, message: string, onConfirm: () => void, onCancel: () => void) {
+    super(app);
+    this.message = message;
+    this.onConfirm = onConfirm;
+    this.onCancel = onCancel;
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+
+    const titleEl = contentEl.createDiv({ cls: 'modal-title' });
+    titleEl.createDiv({ cls: 'modal-title-text', text: t('common.confirm') });
+
+    contentEl.createEl('p', { text: this.message });
+
+    const buttonContainer = contentEl.createDiv({ cls: 'modal-button-container' });
+    const cancelBtn = buttonContainer.createEl('button', {
+      cls: 'mod-cancel',
+      text: t('common.cancel')
+    });
+    cancelBtn.addEventListener('click', () => {
+      this.onCancel();
+      this.close();
+    });
+
+    const confirmBtn = buttonContainer.createEl('button', {
+      cls: 'mod-cta',
+      text: t('common.confirm')
+    });
+    confirmBtn.addEventListener('click', () => {
+      this.onConfirm();
+      this.close();
+    });
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
+const confirmAction = (app: App, message: string): Promise<boolean> =>
+  new Promise((resolve) => {
+    const modal = new ConfirmModal(
+      app,
+      message,
+      () => resolve(true),
+      () => resolve(false)
+    );
+    modal.open();
+  });
+
 /**
  * 验证 Shell 路径是否有效（仅桌面端可用）
  * @param path Shell 可执行文件路径
  * @returns 路径是否存在且有效
  */
-function validateShellPath(path: string): boolean {
+async function validateShellPath(path: string): Promise<boolean> {
   if (!path || path.trim() === '') return false;
   // 移动端不支持文件系统检查
   if (Platform.isMobile) return true;
   try {
     // 动态导入 fs 模块，避免移动端加载失败
-     
-    const { existsSync } = require('fs');
+    const { existsSync } = await import('fs');
     return existsSync(path);
   } catch {
     return false;
@@ -89,8 +145,6 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   private themePreviewEl: HTMLElement | null = null;
   private themePreviewContentEl: HTMLElement | null = null;
   private rendererStatusEl: HTMLElement | null = null;
-  private themePreviewStyleEl: HTMLStyleElement | null = null;
-  private themePreviewStyleId: string | null = null;
 
   /**
    * 渲染终端设置
@@ -226,12 +280,12 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
             void this.saveSettings();
             
             // 验证路径
-            this.validateCustomShellPath(container, value);
+            void this.validateCustomShellPath(container, value);
           });
         
         // 初始验证
         setTimeout(() => {
-          this.validateCustomShellPath(container, currentCustomPath);
+          void this.validateCustomShellPath(container, currentCustomPath);
         }, 0);
         
         return text;
@@ -415,7 +469,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
 
       const actionsEl = row.createDiv({ cls: 'preset-script-actions' });
 
-      const moveUpBtn = actionsEl.createEl('button', { cls: 'clickable-icon' }) as HTMLButtonElement;
+      const moveUpBtn = actionsEl.createEl('button', { cls: 'clickable-icon' });
       setIcon(moveUpBtn, 'arrow-up');
       moveUpBtn.setAttribute('aria-label', t('settingsDetails.terminal.presetScriptsMoveUp'));
       moveUpBtn.disabled = index === 0;
@@ -424,7 +478,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         void this.movePresetScript(listEl, index, index - 1);
       });
 
-      const moveDownBtn = actionsEl.createEl('button', { cls: 'clickable-icon' }) as HTMLButtonElement;
+      const moveDownBtn = actionsEl.createEl('button', { cls: 'clickable-icon' });
       setIcon(moveDownBtn, 'arrow-down');
       moveDownBtn.setAttribute('aria-label', t('settingsDetails.terminal.presetScriptsMoveDown'));
       moveDownBtn.disabled = index === scripts.length - 1;
@@ -444,14 +498,14 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       setIcon(deleteBtn, 'trash');
       deleteBtn.setAttribute('aria-label', t('common.delete'));
       deleteBtn.addEventListener('click', () => {
-        const confirmed = window.confirm(t('settingsDetails.terminal.presetScriptsDeleteConfirm', {
-          name: script.name?.trim() || t('settingsDetails.terminal.presetScriptsUnnamed')
-        }));
-        if (!confirmed) return;
+        const scriptName = script.name?.trim() || t('settingsDetails.terminal.presetScriptsUnnamed');
+        void this.confirmPresetScriptDelete(scriptName).then((confirmed) => {
+          if (!confirmed) return;
 
-        this.context.plugin.settings.presetScripts = scripts.filter(item => item.id !== script.id);
-        void this.saveSettings().then(() => {
-          this.renderPresetScriptsList(listEl);
+          this.context.plugin.settings.presetScripts = scripts.filter(item => item.id !== script.id);
+          void this.saveSettings().then(() => {
+            this.renderPresetScriptsList(listEl);
+          });
         });
       });
     });
@@ -938,10 +992,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     this.themePreviewEl = previewSection.createDiv({ cls: 'terminal-theme-preview' });
     this.themePreviewEl.createDiv({ cls: 'terminal-theme-preview-bg' });
     this.themePreviewContentEl = this.themePreviewEl.createDiv({ cls: 'terminal-theme-preview-content' });
-    this.themePreviewEl.setAttr('data-termy-style-id', this.ensureThemePreviewStyleId());
 
-    this.themePreviewContentEl.createDiv({ text: '$ echo "Obsidian Termy"' });
-    this.themePreviewContentEl.createDiv({ text: 'Obsidian Termy' });
+    this.themePreviewContentEl.createDiv({ text: '$ echo "Termy"' });
+    this.themePreviewContentEl.createDiv({ text: 'Termy' });
     this.themePreviewContentEl.createDiv({ text: '$ ls' });
     this.themePreviewContentEl.createDiv({ text: 'README.md  scripts  src  package.json' });
     this.themePreviewContentEl.createDiv({ text: '$' });
@@ -1046,40 +1099,16 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     textOpacity: string;
   }): void {
     if (!this.themePreviewEl) return;
-
-    const styleId = this.ensureThemePreviewStyleId();
-    this.themePreviewEl.setAttr('data-termy-style-id', styleId);
-
-    const styleEl = this.ensureThemePreviewStyleEl();
-    styleEl.textContent = [
-      `.terminal-theme-preview[data-termy-style-id="${styleId}"]{`,
-      `--terminal-preview-bg:${vars.backgroundColor};`,
-      `--terminal-preview-fg:${vars.foregroundColor};`,
-      `--terminal-preview-bg-image:${vars.backgroundImage};`,
-      `--terminal-preview-bg-overlay-opacity:${vars.overlayOpacity};`,
-      `--terminal-preview-bg-size:${vars.backgroundSize};`,
-      `--terminal-preview-bg-position:${vars.backgroundPosition};`,
-      `--terminal-preview-bg-blur:${vars.blur};`,
-      `--terminal-preview-bg-scale:${vars.scale};`,
-      `--terminal-preview-text-opacity:${vars.textOpacity};`,
-      '}',
-    ].join('');
-  }
-
-  private ensureThemePreviewStyleId(): string {
-    if (!this.themePreviewStyleId) {
-      this.themePreviewStyleId = createStyleId('termy-preview');
-    }
-    return this.themePreviewStyleId;
-  }
-
-  private ensureThemePreviewStyleEl(): HTMLStyleElement {
-    if (!this.themePreviewStyleEl) {
-      this.themePreviewStyleEl = document.createElement('style');
-      this.themePreviewStyleEl.setAttribute('data-termy-style-scope', 'terminal-preview');
-      document.head.appendChild(this.themePreviewStyleEl);
-    }
-    return this.themePreviewStyleEl;
+    const style = this.themePreviewEl.style;
+    style.setProperty('--terminal-preview-bg', vars.backgroundColor);
+    style.setProperty('--terminal-preview-fg', vars.foregroundColor);
+    style.setProperty('--terminal-preview-bg-image', vars.backgroundImage);
+    style.setProperty('--terminal-preview-bg-overlay-opacity', String(vars.overlayOpacity));
+    style.setProperty('--terminal-preview-bg-size', vars.backgroundSize);
+    style.setProperty('--terminal-preview-bg-position', vars.backgroundPosition);
+    style.setProperty('--terminal-preview-bg-blur', vars.blur);
+    style.setProperty('--terminal-preview-bg-scale', vars.scale);
+    style.setProperty('--terminal-preview-text-opacity', vars.textOpacity);
   }
 
   /**
@@ -1135,7 +1164,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
    * @param containerEl 容器元素
    * @param path Shell 路径
    */
-  private validateCustomShellPath(containerEl: HTMLElement, path: string): void {
+  private async validateCustomShellPath(containerEl: HTMLElement, path: string): Promise<void> {
     // 移除之前的验证消息
     const existingValidation = containerEl.querySelector('.shell-path-validation');
     if (existingValidation) {
@@ -1153,8 +1182,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     });
     
     // 验证路径
-    const isValid = validateShellPath(path);
-    
+    const isValid = await validateShellPath(path);
+    if (!validationEl.isConnected) return;
+
     if (isValid) {
       validationEl.setText(t('settingsDetails.terminal.pathValid'));
       validationEl.addClass('is-valid');
@@ -1162,6 +1192,13 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       validationEl.setText(t('settingsDetails.terminal.pathInvalid'));
       validationEl.addClass('is-invalid');
     }
+  }
+
+  private confirmPresetScriptDelete(scriptName: string): Promise<boolean> {
+    return confirmAction(
+      this.context.app,
+      t('settingsDetails.terminal.presetScriptsDeleteConfirm', { name: scriptName })
+    );
   }
 
   /**

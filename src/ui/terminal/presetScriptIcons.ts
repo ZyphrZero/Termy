@@ -4,7 +4,6 @@
 
 import { setIcon } from 'obsidian';
 import type { SimpleIcon } from 'simple-icons';
-import { escapeCssString } from '../../utils/styleUtils';
 import {
   siOpenai,
   siGoogle,
@@ -941,27 +940,10 @@ export const PRESET_SCRIPT_ICON_OPTIONS = [
   ...DEFAULT_ICON_OPTIONS,
 ];
 
-let presetIconStyleReady = false;
+const emojiRegex = /\p{Extended_Pictographic}/u;
 
-function ensurePresetIconStyles(): void {
-  if (presetIconStyleReady) return;
-  const styleEl = document.createElement('style');
-  styleEl.setAttribute('data-termy-style-scope', 'preset-script-icons');
-  styleEl.textContent = buildPresetIconStyleRules();
-  document.head.appendChild(styleEl);
-  presetIconStyleReady = true;
-}
-
-function buildPresetIconStyleRules(): string {
-  const rules: string[] = [];
-  for (const [key, icon] of Object.entries(SIMPLE_ICON_MAP)) {
-    if (!icon.hex) continue;
-    const safeKey = escapeCssString(key);
-    rules.push(
-      `.preset-script-custom-icon[data-icon="${safeKey}"]{--preset-script-icon-color:#${icon.hex};}`
-    );
-  }
-  return rules.join('');
+function isEmojiIcon(iconName: string): boolean {
+  return emojiRegex.test(iconName);
 }
 
 export function isCustomPresetScriptIcon(iconName: string): boolean {
@@ -970,14 +952,29 @@ export function isCustomPresetScriptIcon(iconName: string): boolean {
 }
 
 export function renderPresetScriptIcon(el: HTMLElement, iconName: string): void {
-  const raw = (iconName || 'terminal').trim();
+  const rawInput = (iconName ?? '').trim();
+  const raw = rawInput || 'terminal';
   const lookup = raw.toLowerCase();
   el.empty();
-  ensurePresetIconStyles();
+
+  el.removeClass('preset-script-custom-icon');
+  el.removeClass('preset-script-emoji-icon');
+  el.removeAttribute('data-icon');
+  el.style.removeProperty('--preset-script-icon-color');
+
+  if (rawInput && isEmojiIcon(rawInput)) {
+    el.addClass('preset-script-emoji-icon');
+    el.textContent = rawInput;
+    return;
+  }
+
   if (isCustomPresetScriptIcon(raw)) {
     const icon = SIMPLE_ICON_MAP[lookup];
     el.addClass('preset-script-custom-icon');
     el.setAttr('data-icon', lookup);
+    if (icon.hex) {
+      el.style.setProperty('--preset-script-icon-color', `#${icon.hex}`);
+    }
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24');
@@ -990,8 +987,6 @@ export function renderPresetScriptIcon(el: HTMLElement, iconName: string): void 
 
     el.appendChild(svg);
   } else {
-    el.removeClass('preset-script-custom-icon');
-    el.removeAttribute('data-icon');
     setIcon(el, raw);
   }
 }

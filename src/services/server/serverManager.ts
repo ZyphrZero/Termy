@@ -641,9 +641,13 @@ export class ServerManager {
     }
     
     if (event.data instanceof Blob) {
-      event.data.arrayBuffer().then(buffer => {
-        this._ptyClient?.handleBinaryMessage(buffer);
-      });
+      void event.data.arrayBuffer()
+        .then(buffer => {
+          this._ptyClient?.handleBinaryMessage(buffer);
+        })
+        .catch((error) => {
+          errorLog('[ServerManager] 解析二进制消息失败:', error);
+        });
       return;
     }
     
@@ -702,7 +706,7 @@ export class ServerManager {
     
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.attemptReconnect();
+      void this.attemptReconnect();
     }, delay);
   }
 

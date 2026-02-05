@@ -19,11 +19,11 @@ export const zhCN: TranslationKeys = {
   },
 
   plugin: {
-    name: 'Obsidian Termy',
-    loadingMessage: '正在加载 Obsidian Termy 插件',
-    loadedMessage: 'Obsidian Termy 插件已加载',
-    unloadingMessage: '正在卸载 Obsidian Termy 插件',
-    unloadedMessage: 'Obsidian Termy 插件已卸载',
+    name: 'Termy',
+    loadingMessage: '正在加载 Termy 插件',
+    loadedMessage: 'Termy 插件已加载',
+    unloadingMessage: '正在卸载 Termy 插件',
+    unloadedMessage: 'Termy 插件已卸载',
   },
 
   terminal: {
@@ -130,7 +130,7 @@ export const zhCN: TranslationKeys = {
       advanced: '高级选项',
     },
     header: {
-      title: 'Obsidian Termy',
+      title: 'Termy',
       feedbackText: '感谢使用！欢迎反馈：',
       feedbackLink: 'GitHub',
       reload: '重载插件',
@@ -375,4 +375,5 @@ export const zhCN: TranslationKeys = {
     webgl: 'WebGL',
   },
 };
+
 

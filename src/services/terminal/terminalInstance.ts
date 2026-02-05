@@ -11,13 +11,10 @@ import { t } from '@/i18n';
 import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
 import type { ShellEvent, ShellEventSource } from '@/services/server/types';
+import { shell } from 'electron';
 
 // xterm.js CSS（静态导入，esbuild 会处理）
 import '@xterm/xterm/css/xterm.css';
-
-// electron 是外部模块，使用 require 导入
- 
-const { shell } = require('electron');
 
 // xterm.js 模块类型声明（动态导入）
 type Terminal = import('@xterm/xterm').Terminal;

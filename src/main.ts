@@ -570,11 +570,11 @@ export default class TerminalPlugin extends Plugin {
    * 获取当前活动的终端视图
    */
   private getActiveTerminalView(): TerminalView | null {
-    const activeLeaf = this.app.workspace.activeLeaf;
+    const activeView = this.app.workspace.getActiveViewOfType(TerminalView);
     
     // 优先返回当前活动的终端视图
-    if (this.isTerminalView(activeLeaf?.view)) {
-      return activeLeaf.view;
+    if (activeView) {
+      return activeView;
     }
     
     // 否则返回第一个终端视图

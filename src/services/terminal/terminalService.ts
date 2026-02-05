@@ -28,7 +28,9 @@ const preloadTerminalInstance = async () => {
   return terminalInstanceModule;
 };
 // 立即开始预加载
-preloadTerminalInstance();
+void preloadTerminalInstance().catch((error) => {
+  errorLog('[TerminalService] 预加载 TerminalInstance 失败:', error);
+});
 
 /**
  * TerminalService

@@ -23,7 +23,7 @@ export function isDebugMode(): boolean {
  */
 export function debugLog(...args: unknown[]): void {
   if (debugMode) {
-    console.log(...args);
+    console.debug(...args);
   }
 }
 
