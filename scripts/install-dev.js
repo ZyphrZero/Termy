@@ -314,6 +314,7 @@ async function main() {
   const requiredFiles = [
     'main.js',
     'manifest.json',
+    'CHANGELOG.md',
     `binaries/${binaryName}`
   ];
 
@@ -346,7 +347,7 @@ async function main() {
 
   log('Installing...', 'cyan');
 
-  const coreFiles = ['main.js', 'manifest.json', 'styles.css'];
+  const coreFiles = ['main.js', 'manifest.json', 'styles.css', 'CHANGELOG.md'];
   for (const file of coreFiles) {
     const src = path.join(ROOT_DIR, file);
     const dest = path.join(targetDir, file);
@@ -363,19 +364,6 @@ async function main() {
   const destBinary = path.join(binariesDir, binaryName);
   await copyFileWithRetry(srcBinary, destBinary);
   log(`  binaries/${binaryName}`, 'green');
-
-  const staleMcpBinary = path.join(
-    binariesDir,
-    process.platform === 'win32'
-      ? 'termy-context-mcp-server-win32-x64.exe'
-      : process.platform === 'darwin'
-        ? `termy-context-mcp-server-darwin-${process.arch === 'arm64' ? 'arm64' : 'x64'}`
-        : `termy-context-mcp-server-linux-${process.arch === 'arm64' ? 'arm64' : 'x64'}`
-  );
-  if (fs.existsSync(staleMcpBinary)) {
-    fs.rmSync(staleMcpBinary, { force: true });
-    log(`  removed stale ${path.basename(staleMcpBinary)}`, 'yellow');
-  }
   log('');
 
   // 6. Restart Obsidian

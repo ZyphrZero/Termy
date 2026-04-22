@@ -426,7 +426,6 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
             id: this.createPresetScriptId(),
             name: '',
             icon: '',
-            command: '',
             actions: [
               {
                 id: this.createPresetActionId(),
@@ -640,14 +639,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     const actions = Array.isArray(script.actions) ? script.actions : [];
     const enabledActions = actions.filter((action) => action.enabled !== false);
     if (actions.length === 0) {
-      const trimmed = (script.command || '').trim();
-      if (!trimmed) {
-        return t('settingsDetails.terminal.presetScriptsEmptyCommand');
-      }
-      const normalizedFallback = trimmed.replace(/\r?\n/g, ' \\n ');
-      return normalizedFallback.length > 160
-        ? `${normalizedFallback.slice(0, 157)}...`
-        : normalizedFallback;
+      return t('settingsDetails.terminal.presetScriptsEmptyCommand');
     }
 
     if (enabledActions.length === 0) {

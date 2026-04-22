@@ -7,10 +7,10 @@ import { pathToFileURL } from 'url';
 import type { App, Editor, EventRef, TFile } from 'obsidian';
 import { normalizePath } from 'obsidian';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
+import { buildClaudeCodeTerminalEnv } from '../context/agentContext';
 import { debugLog, errorLog } from '@/utils/logger';
 
 const CLAUDE_IDE_DIR = path.join(homedir(), '.claude', 'ide');
-const CLAUDE_CODE_ENV_VAR = 'CLAUDE_CODE_SSE_PORT';
 const SUPPORTED_MCP_PROTOCOL_VERSIONS = [
   '2025-11-25',
   '2025-06-18',
@@ -252,13 +252,7 @@ export class ClaudeCodeIdeBridge {
   }
 
   getTerminalEnv(): Record<string, string> {
-    if (!this.port) {
-      return {};
-    }
-
-    return {
-      [CLAUDE_CODE_ENV_VAR]: String(this.port),
-    };
+    return buildClaudeCodeTerminalEnv(this.port);
   }
 
   private startTracking(): void {

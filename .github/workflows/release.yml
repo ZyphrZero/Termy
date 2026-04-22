@@ -116,6 +116,13 @@ jobs:
           pnpm i
           pnpm build
 
+      - name: Generate release notes
+        run: |
+          node scripts/release-notes.js \
+            --version "${{ github.ref_name }}" \
+            --repository "${{ github.repository }}" \
+            --output release-body.md
+
       - name: Prepare release assets
         run: |
           # BRAT 需要的三个核心文件（直接上传，不打包）
@@ -127,7 +134,7 @@ jobs:
           
           # 创建完整包（所有平台，供手动安装）
           mkdir -p termy/binaries
-          cp main.js manifest.json styles.css termy/
+          cp main.js manifest.json styles.css CHANGELOG.md termy/
           cp binaries/termy-server-* termy/binaries/
           chmod +x termy/binaries/termy-server-darwin-* || true
           chmod +x termy/binaries/termy-server-linux-* || true
@@ -151,43 +158,6 @@ jobs:
             binaries/termy-server-linux-x64.sha256
             binaries/termy-server-linux-arm64
             binaries/termy-server-linux-arm64.sha256
-          body: |
-            ## 🚀 Installation
-            
-            ### Community Plugin (Recommended - Coming Soon)
-            Once approved, install directly from Obsidian's Community Plugins browser.
-            
-            ### BRAT (Beta Testing)
-            1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat) plugin
-            2. Add this repository: `ZyphrZero/Termy`
-            3. BRAT will automatically download the correct binary for your platform
-            
-            ### Manual Installation
-            
-            **Option 1: Complete Package (All Platforms)**
-            1. Download `termy.zip` (includes all platform binaries)
-            2. Extract to `.obsidian/plugins/` directory
-            3. Restart Obsidian and enable the plugin
-            
-            **Option 2: Platform-Specific (Smaller Download)**
-            1. Download the three core files: `main.js`, `manifest.json`, `styles.css`
-            2. Download the binary for your platform:
-               - **Windows**: `termy-server-win32-x64.exe`
-               - **macOS (Apple Silicon)**: `termy-server-darwin-arm64`
-               - **macOS (Intel)**: `termy-server-darwin-x64`
-               - **Linux (x64)**: `termy-server-linux-x64`
-               - **Linux (ARM64)**: `termy-server-linux-arm64`
-            3. Create directory: `.obsidian/plugins/termy/binaries/`
-            4. Place core files in `termy/` and binary in `binaries/`
-            5. Restart Obsidian and enable the plugin
-
-            ## 📝 What's Changed
-            
-            See [CHANGELOG.md](https://github.com/ZyphrZero/Termy/blob/master/CHANGELOG.md) for details.
-
-            ## 💬 Support
-            
-            - [Report Issues](https://github.com/ZyphrZero/Termy/issues)
-            - [Discussions](https://github.com/ZyphrZero/Termy/discussions)
+          body_path: release-body.md
           draft: false
           prerelease: false

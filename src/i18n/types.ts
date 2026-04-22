@@ -76,6 +76,7 @@ export interface TranslationKeys {
   // Commands
   commands: {
     openTerminal: string;
+    showChangelog: string;
     terminalSearch: string;
     terminalClear: string;
     terminalCopy: string;
@@ -170,6 +171,7 @@ export interface TranslationKeys {
       title: string;
       feedbackText: string;
       feedbackLink: string;
+      changelog: string;
       reload: string;
     };
   };
@@ -313,6 +315,14 @@ export interface TranslationKeys {
 
   // Modals
   modals: {
+    changelog: {
+      title: string;
+      subtitle: string;
+      loading: string;
+      unavailable: string;
+      openRelease: string;
+      openFull: string;
+    };
     renameTerminal: {
       title: string;
       placeholder: string;

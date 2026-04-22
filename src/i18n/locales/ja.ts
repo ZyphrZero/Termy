@@ -64,6 +64,7 @@ export const ja: TranslationKeys = {
 
   commands: {
     openTerminal: 'Termyターミナルを開く',
+    showChangelog: 'Termy: 更新ログを表示',
     terminalSearch: 'ターミナル: 検索',
     terminalClear: 'ターミナル: 画面をクリア',
     terminalCopy: 'ターミナル: コピー',
@@ -154,6 +155,7 @@ export const ja: TranslationKeys = {
       title: 'Termy',
       feedbackText: 'ご利用ありがとうございます。フィードバックはこちら: ',
       feedbackLink: 'GitHub',
+      changelog: '更新ログ',
       reload: 'プラグインを再読み込み',
     },
   },
@@ -295,6 +297,14 @@ export const ja: TranslationKeys = {
   },
 
   modals: {
+    changelog: {
+      title: '新機能',
+      subtitle: 'Termy {{version}} の更新内容',
+      loading: '更新ログを読み込み中...',
+      unavailable: 'このバージョンの更新ログを読み込めませんでした。',
+      openRelease: 'リリースページを開く',
+      openFull: '完全な更新ログを開く',
+    },
     renameTerminal: {
       title: 'ターミナル名を変更',
       placeholder: '新しいターミナル名を入力',

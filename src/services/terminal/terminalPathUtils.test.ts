@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  collectTerminalReferenceCandidatePaths,
   fileUriToPlatformPath,
   getVaultRelativePathFromAbsolute,
   isAbsoluteTerminalPath,
@@ -64,6 +65,31 @@ test('joinTerminalPaths and getVaultRelativePathFromAbsolute share one canonical
   assert.equal(
     getVaultRelativePathFromAbsolute('/Users/test/vault/folder/../Note.md', '/Users/test/vault', 'linux'),
     'Note.md'
+  );
+});
+
+test('collectTerminalReferenceCandidatePaths builds stable absolute candidates from multiple roots', () => {
+  assert.deepEqual(
+    collectTerminalReferenceCandidatePaths(
+      'src/services/file.ts',
+      ['C:\\repo\\current', 'C:\\repo', 'C:\\repo'],
+      'win32'
+    ),
+    [
+      'C:\\repo\\current\\src\\services\\file.ts',
+      'C:\\repo\\src\\services\\file.ts',
+    ]
+  );
+  assert.deepEqual(
+    collectTerminalReferenceCandidatePaths(
+      './folder/../Note.md',
+      ['/Users/test/current', '/Users/test/vault'],
+      'darwin'
+    ),
+    [
+      '/Users/test/current/Note.md',
+      '/Users/test/vault/Note.md',
+    ]
   );
 });
 

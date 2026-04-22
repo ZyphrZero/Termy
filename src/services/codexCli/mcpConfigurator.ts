@@ -1,16 +1,11 @@
 import { spawn } from 'child_process';
+import {
+  buildCodexCliDesiredArgs,
+  CODEX_MCP_SERVER_NAME,
+  codexMcpConfigMatches,
+  type CodexMcpGetJson,
+} from '../context/agentContext';
 import { debugLog, debugWarn } from '@/utils/logger';
-
-const MCP_SERVER_NAME = 'termy-context';
-
-type CodexMcpGetJson = {
-  enabled?: boolean;
-  transport?: {
-    type?: string;
-    command?: string;
-    args?: string[];
-  };
-};
 
 type CommandResult = {
   code: number | null;
@@ -23,10 +18,10 @@ export async function ensureCodexCliMcpConfigured(
   binaryPath: string,
   snapshotFilePath: string,
 ): Promise<void> {
-  const desiredArgs = ['--mcp', '--snapshot-file', snapshotFilePath];
+  const desiredArgs = buildCodexCliDesiredArgs(snapshotFilePath);
 
   const currentConfig = await getCurrentMcpConfig();
-  if (currentConfig && mcpConfigMatches(currentConfig, binaryPath, desiredArgs)) {
+  if (currentConfig && codexMcpConfigMatches(currentConfig, binaryPath, desiredArgs)) {
     debugLog('[CodexCliMcpConfigurator] Codex MCP server already configured');
     return;
   }
@@ -34,7 +29,7 @@ export async function ensureCodexCliMcpConfigured(
   const addResult = await runCodexCommand([
     'mcp',
     'add',
-    MCP_SERVER_NAME,
+    CODEX_MCP_SERVER_NAME,
     '--',
     binaryPath,
     ...desiredArgs,
@@ -60,7 +55,7 @@ export async function removeCodexCliMcpConfigured(): Promise<void> {
     return;
   }
 
-  const removeResult = await runCodexCommand(['mcp', 'remove', MCP_SERVER_NAME]);
+  const removeResult = await runCodexCommand(['mcp', 'remove', CODEX_MCP_SERVER_NAME]);
 
   if (removeResult.error) {
     throw removeResult.error;
@@ -76,7 +71,7 @@ export async function removeCodexCliMcpConfigured(): Promise<void> {
 }
 
 async function getCurrentMcpConfig(): Promise<CodexMcpGetJson | null> {
-  const result = await runCodexCommand(['mcp', 'get', MCP_SERVER_NAME, '--json']);
+  const result = await runCodexCommand(['mcp', 'get', CODEX_MCP_SERVER_NAME, '--json']);
   if (result.error) {
     if (result.error.message.includes('ENOENT')) {
       debugWarn('[CodexCliMcpConfigurator] Codex CLI not found on PATH; skipping MCP auto-registration');
@@ -95,27 +90,6 @@ async function getCurrentMcpConfig(): Promise<CodexMcpGetJson | null> {
     debugWarn('[CodexCliMcpConfigurator] Failed to parse codex mcp get JSON:', error);
     return null;
   }
-}
-
-function mcpConfigMatches(
-  config: CodexMcpGetJson,
-  binaryPath: string,
-  desiredArgs: string[],
-): boolean {
-  return (
-    config.enabled === true &&
-    config.transport?.type === 'stdio' &&
-    config.transport.command === binaryPath &&
-    arrayEquals(config.transport.args ?? [], desiredArgs)
-  );
-}
-
-function arrayEquals(left: string[], right: string[]): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((value, index) => value === right[index]);
 }
 
 async function runCodexCommand(args: string[]): Promise<CommandResult> {

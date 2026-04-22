@@ -78,6 +78,14 @@ export class TerminalSettingTab extends PluginSettingTab {
       href: 'https://github.com/ZyphrZero/Termy'
     });
 
+    const changelogBtn = actionsGroup.createEl('button', { cls: 'settings-header-button' });
+    changelogBtn.setAttribute('type', 'button');
+    setIcon(changelogBtn, 'scroll-text');
+    changelogBtn.createSpan({ text: t('settings.header.changelog') });
+    changelogBtn.addEventListener('click', () => {
+      this.plugin.showChangelog();
+    });
+
     const reloadBtn = actionsGroup.createEl('button', { cls: 'clickable-icon' });
     setIcon(reloadBtn, 'refresh-cw');
     reloadBtn.setAttribute('aria-label', t('settings.header.reload'));

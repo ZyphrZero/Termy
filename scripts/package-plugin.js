@@ -45,17 +45,19 @@ const PACKAGE_DIR = path.join(ROOT_DIR, 'plugin-package');
 
 // 1. Check required files
 console.log('🔍 Checking required files...');
-const requiredFiles = [
+const coreFiles = [
   'main.js',
   'manifest.json',
   'styles.css'
 ];
+const documentationFiles = ['CHANGELOG.md'];
+const packageFiles = [...coreFiles, ...documentationFiles];
 
-for (const file of requiredFiles) {
+for (const file of packageFiles) {
   const filePath = path.join(ROOT_DIR, file);
   if (!fs.existsSync(filePath)) {
     console.error(`❌ Error: Missing required file ${file}`);
-    console.error('Please run pnpm build first');
+    console.error('Please run pnpm build first and ensure release documentation files are present');
     process.exit(1);
   }
 }
@@ -90,8 +92,8 @@ fs.mkdirSync(path.join(PACKAGE_DIR, 'binaries'), { recursive: true });
 
 console.log('📋 Copying files to package directory...');
 
-// 4. Copy core files
-for (const file of requiredFiles) {
+// 4. Copy package files
+for (const file of packageFiles) {
   const srcPath = path.join(ROOT_DIR, file);
   const destPath = path.join(PACKAGE_DIR, file);
   fs.copyFileSync(srcPath, destPath);
@@ -109,7 +111,7 @@ console.log('');
 console.log('📊 Package size statistics...');
 let totalSize = 0;
 
-for (const file of requiredFiles) {
+for (const file of packageFiles) {
   const filePath = path.join(PACKAGE_DIR, file);
   const stats = fs.statSync(filePath);
   totalSize += stats.size;

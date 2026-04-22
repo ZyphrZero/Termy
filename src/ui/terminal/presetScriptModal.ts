@@ -696,19 +696,8 @@ export class PresetScriptModal extends Modal {
     const actions = sourceActions
       .map((action) => this.normalizeAction(action))
       .filter((action) => action.value.length > 0);
-    const fallbackCommand = (script.command || '').trim();
-    if (actions.length === 0 && fallbackCommand) {
-      actions.push({
-        id: this.createActionId(),
-        type: 'terminal-command',
-        value: fallbackCommand,
-        enabled: true,
-        note: '',
-      });
-    }
     return {
       ...script,
-      command: fallbackCommand,
       actions,
     };
   }
@@ -742,13 +731,11 @@ export class PresetScriptModal extends Modal {
     const normalizedActions = this.draft.actions
       .map((action) => this.normalizeAction(action))
       .filter((action) => action.value.length > 0);
-    const fallbackCommand = normalizedActions.find((action) => action.type === 'terminal-command')?.value ?? '';
 
     const updated: PresetScript = {
       ...this.draft,
       name: (this.draft.name || '').trim(),
       icon: (this.draft.icon || '').trim(),
-      command: fallbackCommand,
       actions: normalizedActions,
       terminalTitle: (this.draft.terminalTitle || '').trim(),
     };

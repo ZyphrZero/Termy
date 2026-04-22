@@ -64,6 +64,7 @@ export const zhCN: TranslationKeys = {
 
   commands: {
     openTerminal: '打开Termy终端',
+    showChangelog: 'Termy：显示更新日志',
     terminalSearch: '终端：搜索',
     terminalClear: '终端：清屏',
     terminalCopy: '终端：复制',
@@ -154,6 +155,7 @@ export const zhCN: TranslationKeys = {
       title: 'Termy',
       feedbackText: '感谢使用！欢迎反馈：',
       feedbackLink: 'GitHub',
+      changelog: '更新日志',
       reload: '重载插件',
     },
   },
@@ -295,6 +297,14 @@ export const zhCN: TranslationKeys = {
   },
 
   modals: {
+    changelog: {
+      title: '新内容',
+      subtitle: 'Termy {{version}} 更新内容',
+      loading: '正在加载更新日志...',
+      unavailable: '暂时无法加载当前版本的更新日志。',
+      openRelease: '打开发布页',
+      openFull: '查看完整更新日志',
+    },
     renameTerminal: {
       title: '重命名终端',
       placeholder: '输入新的终端名称',

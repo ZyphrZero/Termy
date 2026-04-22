@@ -1,16 +1,21 @@
 import type { View, WorkspaceLeaf } from 'obsidian';
 import { addIcon, FileSystemAdapter, Notice, Plugin, normalizePath } from 'obsidian';
 import * as fs from 'fs';
-import type { PresetScript, PresetWorkflowAction, TerminalSettings } from './settings/settings';
+import {
+  DEFAULT_TERMINAL_SETTINGS,
+  type PresetScript,
+  type PresetWorkflowAction,
+  type TerminalSettings,
+} from './settings/settings';
 import { PresetScriptModal } from './ui/terminal/presetScriptModal';
 import { PRESET_SCRIPT_ICON_OPTIONS, renderPresetScriptIcon } from './ui/terminal/presetScriptIcons';
-import { DEFAULT_SETTINGS } from './settings/settings';
 import { TerminalSettingTab } from './settings/settingsTab';
 import type { TerminalService } from './services/terminal/terminalService';
 import type { ServerManager } from './services/server/serverManager';
 import type { ClaudeCodeIdeBridge } from './services/claudeCode/ideBridge';
 import type { CodexCliContextBridge } from './services/codexCli/contextBridge';
 import { TERMINAL_VIEW_TYPE, TerminalView } from './ui/terminal/terminalView';
+import { ChangelogModal } from './ui/changelog/changelogModal';
 import { i18n, t } from './i18n';
 import { debugLog, errorLog } from './utils/logger';
 import { createTermyLogoSvg, createTermyLogoSvgMarkup, TERMY_RIBBON_ICON_ID } from './ui/icons';
@@ -18,8 +23,21 @@ import { FeatureVisibilityManager } from './services/visibility';
 import { shell } from 'electron';
 import type { TerminalInstance } from './services/terminal/terminalInstance';
 import { ensureCodexCliMcpConfigured, removeCodexCliMcpConfigured } from './services/codexCli/mcpConfigurator';
+import { resolveChangelogSection } from './utils/changelog';
 
 // Import terminal styles
+
+const REPOSITORY_URL = 'https://github.com/ZyphrZero/Termy';
+
+type ChangelogDetails = {
+  requestedVersion: string;
+  version: string;
+  markdown: string;
+  releaseUrl: string | null;
+  fullChangelogUrl: string;
+  sourcePath: string;
+  exactMatch: boolean;
+};
 
 /**
  * Main class for the Obsidian Terminal plugin
@@ -34,6 +52,8 @@ export default class TerminalPlugin extends Plugin {
   private _claudeCodeIdeBridge: ClaudeCodeIdeBridge | null = null;
   private _codexCliContextBridge: CodexCliContextBridge | null = null;
   private _codexCliMcpConfigPromise: Promise<void> | null = null;
+  private _changelogContentCache: string | null = null;
+  private _changelogSectionCache: Map<string, ChangelogDetails> = new Map();
   
   // Status bar elements
   private _statusBarItem: HTMLElement | null = null;
@@ -84,16 +104,15 @@ export default class TerminalPlugin extends Plugin {
       const { TerminalService } = await import('./services/terminal/terminalService');
       
       const serverManager = await this.getServerManager();
-      this._terminalService = new TerminalService(
-        this.app,
-        this.settings,
-        serverManager,
-        () => ({
-          ...(this._claudeCodeIdeBridge?.getTerminalEnv() ?? {}),
-          ...(this._codexCliContextBridge?.getTerminalEnv() ?? {}),
-          ...this.getCodexCliBinaryEnv(),
-        })
-      );
+        this._terminalService = new TerminalService(
+          this.app,
+          this.settings,
+          serverManager,
+          () => ({
+            ...(this._claudeCodeIdeBridge?.getTerminalEnv() ?? {}),
+            ...(this._codexCliContextBridge?.getTerminalEnv() ?? {}),
+          })
+        );
       
       debugLog('[TerminalPlugin] TerminalService initialized');
     }
@@ -151,6 +170,9 @@ export default class TerminalPlugin extends Plugin {
       if (this.settings.visibility.showInNewTab) {
         this.registerNewTabTerminalAction();
       }
+      void this.maybeShowChangelogOnFirstOpen().catch((error) => {
+        errorLog('[TerminalPlugin] Failed to show changelog on first open:', error);
+      });
     });
 
     // Add the settings tab
@@ -237,15 +259,6 @@ export default class TerminalPlugin extends Plugin {
     await this._codexCliContextBridge.start();
   }
 
-  private getCodexCliBinaryEnv(): Record<string, string> {
-    const binaryPath = this.getCodexCliMcpServerPath();
-    return binaryPath
-      ? {
-          TERMY_CODEX_MCP_SERVER: binaryPath,
-        }
-      : {};
-  }
-
   private getCodexCliMcpServerPath(): string | null {
     return this.getCodexCliMcpServerInfo().existingPath;
   }
@@ -319,6 +332,79 @@ export default class TerminalPlugin extends Plugin {
     await removeCodexCliMcpConfigured();
   }
 
+  showChangelog(version = this.manifest.version): void {
+    new ChangelogModal(this.app, this, version).open();
+  }
+
+  async getChangelogDetails(version = this.manifest.version): Promise<ChangelogDetails> {
+    const normalizedVersion = version.trim();
+    if (!normalizedVersion) {
+      throw new Error('Plugin version is unavailable');
+    }
+
+    const cached = this._changelogSectionCache.get(normalizedVersion);
+    if (cached) {
+      return cached;
+    }
+
+    const changelogContent = await this.readChangelogContent();
+    const resolvedSection = resolveChangelogSection(changelogContent, normalizedVersion);
+    const details = {
+      requestedVersion: normalizedVersion,
+      version: resolvedSection.resolvedVersion,
+      markdown: resolvedSection.markdown,
+      releaseUrl: resolvedSection.resolvedVersion !== 'Unreleased'
+        ? `${REPOSITORY_URL}/releases/tag/${resolvedSection.resolvedVersion}`
+        : null,
+      fullChangelogUrl: `${REPOSITORY_URL}/blob/master/CHANGELOG.md`,
+      sourcePath: this.getChangelogSourcePath(),
+      exactMatch: resolvedSection.exactMatch,
+    };
+
+    if (!resolvedSection.exactMatch) {
+      debugLog(
+        `[TerminalPlugin] Falling back from changelog version ${normalizedVersion} to ${resolvedSection.resolvedVersion}`
+      );
+    }
+
+    this._changelogSectionCache.set(normalizedVersion, details);
+    return details;
+  }
+
+  private async maybeShowChangelogOnFirstOpen(): Promise<void> {
+    const currentVersion = this.manifest.version.trim();
+    if (!currentVersion || this.settings.lastSeenChangelogVersion === currentVersion) {
+      return;
+    }
+
+    await this.getChangelogDetails(currentVersion);
+    this.showChangelog(currentVersion);
+    this.settings.lastSeenChangelogVersion = currentVersion;
+    await this.saveData(this.settings);
+  }
+
+  private async readChangelogContent(): Promise<string> {
+    if (this._changelogContentCache) {
+      return this._changelogContentCache;
+    }
+
+    const changelogPath = this.getChangelogFilePath();
+    this._changelogContentCache = await fs.promises.readFile(changelogPath, 'utf8');
+    return this._changelogContentCache;
+  }
+
+  private getChangelogFilePath(): string {
+    return normalizePath(`${this.getPluginDir()}/CHANGELOG.md`);
+  }
+
+  private getChangelogSourcePath(): string {
+    if (this.manifest.dir) {
+      return normalizePath(`${this.manifest.dir}/CHANGELOG.md`);
+    }
+
+    return normalizePath(`${this.app.vault.configDir}/plugins/${this.manifest.id}/CHANGELOG.md`);
+  }
+
   /**
    * Load settings
    */
@@ -326,23 +412,22 @@ export default class TerminalPlugin extends Plugin {
     const loaded = await this.loadData();
     const normalizedPresetScripts = Array.isArray(loaded?.presetScripts)
       ? loaded.presetScripts.map((script: PresetScript) => this.normalizePresetScript(script))
-      : DEFAULT_SETTINGS.presetScripts;
-    const presetScripts = this.upgradeBuiltInPresetScripts(normalizedPresetScripts);
+      : DEFAULT_TERMINAL_SETTINGS.presetScripts;
     this.settings = {
-      ...DEFAULT_SETTINGS,
+      ...DEFAULT_TERMINAL_SETTINGS,
       ...loaded,
       // Ensure the visibility config exists
       visibility: {
-        ...DEFAULT_SETTINGS.visibility,
+        ...DEFAULT_TERMINAL_SETTINGS.visibility,
         ...loaded?.visibility,
       },
       // Ensure the serverConnection config exists
       serverConnection: {
-        ...DEFAULT_SETTINGS.serverConnection,
+        ...DEFAULT_TERMINAL_SETTINGS.serverConnection,
         ...loaded?.serverConnection,
       },
       // Ensure the presetScripts config exists
-      presetScripts,
+      presetScripts: normalizedPresetScripts,
     };
   }
 
@@ -497,6 +582,14 @@ export default class TerminalPlugin extends Plugin {
         }
         return true;
       }
+    });
+
+    this.addCommand({
+      id: 'show-changelog',
+      name: t('commands.showChangelog'),
+      callback: () => {
+        this.showChangelog();
+      },
     });
 
     // Clear screen
@@ -1122,79 +1215,24 @@ export default class TerminalPlugin extends Plugin {
   }
 
   private normalizePresetScript(script: PresetScript): PresetScript {
-    const fallbackCommand = (script.command || '').trim();
     const sourceActions = Array.isArray(script.actions) ? script.actions : [];
     const normalizedActions = sourceActions
       .map((action) => this.normalizeWorkflowAction(action))
       .filter((action) => action.value.length > 0);
 
-    if (normalizedActions.length > 0) {
-      return {
-        ...script,
-        actions: normalizedActions,
-        command: fallbackCommand,
-      };
-    }
-
-    if (!fallbackCommand) {
-      return {
-        ...script,
-        actions: [],
-        command: '',
-      };
-    }
-
     return {
-      ...script,
-      actions: [
-        {
-          id: this.createWorkflowActionId(),
-          type: 'terminal-command',
-          value: fallbackCommand,
-          enabled: true,
-          note: '',
-        },
-      ],
-      command: fallbackCommand,
+      id: (script.id || '').trim(),
+      sourceTemplateId: typeof script.sourceTemplateId === 'string' && script.sourceTemplateId.trim().length > 0
+        ? script.sourceTemplateId.trim()
+        : undefined,
+      name: (script.name || '').trim(),
+      icon: (script.icon || '').trim(),
+      actions: normalizedActions,
+      terminalTitle: (script.terminalTitle || '').trim(),
+      showInStatusBar: script.showInStatusBar !== false,
+      autoOpenTerminal: script.autoOpenTerminal !== false,
+      runInNewTerminal: script.runInNewTerminal === true,
     };
-  }
-
-  private upgradeBuiltInPresetScripts(scripts: PresetScript[]): PresetScript[] {
-    return scripts.map((script) => this.upgradeBuiltInPresetScript(script));
-  }
-
-  private upgradeBuiltInPresetScript(script: PresetScript): PresetScript {
-    if (script.id !== 'codex') {
-      return script;
-    }
-
-    const actions = Array.isArray(script.actions) ? script.actions : [];
-    if (!this.isLegacyCodexBuiltInPreset(actions)) {
-      return script;
-    }
-
-    const defaultCodexPreset = DEFAULT_SETTINGS.presetScripts.find((preset) => preset.id === 'codex');
-    if (!defaultCodexPreset) {
-      return script;
-    }
-
-    return {
-      ...script,
-      command: defaultCodexPreset.command,
-      actions: defaultCodexPreset.actions.map((action) => ({ ...action })),
-    };
-  }
-
-  private isLegacyCodexBuiltInPreset(actions: PresetWorkflowAction[]): boolean {
-    if (actions.length !== 1) {
-      return false;
-    }
-
-    const [action] = actions;
-    return action.type === 'terminal-command'
-      && action.value === 'codex'
-      && action.enabled === true
-      && action.note.length === 0;
   }
 
   private normalizeWorkflowAction(action: PresetWorkflowAction): PresetWorkflowAction {
@@ -1219,7 +1257,6 @@ export default class TerminalPlugin extends Plugin {
       id: newId,
       name: '',
       icon: '',
-      command: '',
       actions: [
         {
           id: this.createWorkflowActionId(),

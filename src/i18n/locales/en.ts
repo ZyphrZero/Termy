@@ -64,6 +64,7 @@ export const en: TranslationKeys = {
 
   commands: {
     openTerminal: 'Open Termy terminal',
+    showChangelog: 'Termy: show changelog',
     terminalSearch: 'Terminal: search',
     terminalClear: 'Terminal: clear screen',
     terminalCopy: 'Terminal: copy',
@@ -154,6 +155,7 @@ export const en: TranslationKeys = {
       title: 'Termy',
       feedbackText: 'Thanks for using! Feedback welcome: ',
       feedbackLink: 'GitHub',
+      changelog: 'Changelog',
       reload: 'Reload plugin',
     },
   },
@@ -295,6 +297,14 @@ export const en: TranslationKeys = {
   },
 
   modals: {
+    changelog: {
+      title: 'What\'s New',
+      subtitle: 'Updated in Termy {{version}}',
+      loading: 'Loading changelog...',
+      unavailable: 'Unable to load the changelog for this version right now.',
+      openRelease: 'Open release page',
+      openFull: 'Open full changelog',
+    },
     renameTerminal: {
       title: 'Rename terminal',
       placeholder: 'Enter new terminal name',

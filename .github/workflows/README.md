@@ -27,6 +27,7 @@
 - 构建所有平台二进制 + SHA256 校验和
 - 构建 TypeScript 插件
 - 打包为 `termy.zip`
+- 从 `CHANGELOG.md` 自动提取当前 tag 对应的发布说明
 - 创建 GitHub Release
 
 **产物结构:**
@@ -36,6 +37,7 @@ termy.zip
     ├── main.js
     ├── manifest.json
     ├── styles.css
+    ├── CHANGELOG.md
     └── binaries/
         ├── termy-server-win32-x64.exe
         ├── termy-server-darwin-arm64
@@ -43,6 +45,10 @@ termy.zip
         ├── termy-server-linux-x64
         └── termy-server-linux-arm64
 ```
+
+**发布说明来源:**
+- `release.yml` 会读取 `CHANGELOG.md` 中与 tag 同名的章节，例如 tag `1.3.0` 对应 `## [1.3.0]`
+- 如果找不到对应章节，Release 会失败，避免发布说明缺失或错配
 
 ## 使用
 

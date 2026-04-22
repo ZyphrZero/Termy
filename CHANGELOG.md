@@ -5,17 +5,24 @@ All notable changes to Termy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.3.0] - 2026-04-23
 
 ### Added
 - Added `Shift+Enter` terminal input handling to insert a literal newline for multi-line commands without falling back to xterm's default Enter path.
+- Added command palette actions to send the current editor selection, note content, or file path into the active terminal.
+- Added clickable file references in terminal output so agent responses can open matching files directly from Obsidian.
+- Added Claude Code context awareness so sessions launched from Termy can read the active Obsidian file and selection.
+- Added Codex CLI context integration with optional auto-registration for the bundled `termy-context` MCP server.
 
 ### Changed
 - Reworked preset scripts into preset workflows with configurable action lists, including terminal commands, Obsidian command search, and external link actions.
 - Standardized internal source comments to English across the TypeScript, CSS, and Rust codebases for easier maintenance.
+- Streamlined agent handoffs by routing send and paste flows through terminal-owned APIs and focusing the receiving terminal after handoff.
+- Expanded preset workflow controls with per-action enable toggles, notes, and built-in Claude Code and Codex CLI integration settings.
 
 ### Fixed
 - Merged community fix from [#3](https://github.com/ZyphrZero/Termy/pull/3) to bump the esbuild target to ES2021, preserving xterm's `requestMode()` handling and preventing TUI sessions such as Claude Code from freezing on DECRQM output, and added a bundle smoke check to catch regressions before packaging.
+- Improved terminal drag-and-drop handling so dropped text and file paths resolve more reliably for agent and workflow launches.
 
 ## [1.2.3] - 2026-02-26
 
@@ -128,7 +135,7 @@ If you're upgrading from version 1.1.1 or earlier:
 
 ---
 
-[Unreleased]: https://github.com/ZyphrZero/Termy/compare/1.2.3...HEAD
+[1.3.0]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.0
 [1.2.3]: https://github.com/ZyphrZero/Termy/releases/tag/1.2.3
 [1.2.2]: https://github.com/ZyphrZero/Termy/releases/tag/1.2.2
 [1.2.1]: https://github.com/ZyphrZero/Termy/releases/tag/1.2.1

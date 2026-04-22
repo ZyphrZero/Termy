@@ -168,6 +168,42 @@ export function joinTerminalPaths(
   return pathModule.normalize(pathModule.join(normalizedBasePath, normalizedRelativePath));
 }
 
+export function collectTerminalReferenceCandidatePaths(
+  relativePath: string,
+  basePaths: Array<string | null | undefined>,
+  platform: TerminalPlatform = process.platform
+): string[] {
+  const normalizedRelativePath = normalizeTerminalToken(relativePath);
+  if (!normalizedRelativePath) {
+    return [];
+  }
+
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+
+  for (const basePath of basePaths) {
+    const normalizedBasePath = normalizeTerminalToken(basePath ?? '');
+    if (!normalizedBasePath) {
+      continue;
+    }
+
+    const candidate = joinTerminalPaths(normalizedBasePath, normalizedRelativePath, platform);
+    if (!candidate) {
+      continue;
+    }
+
+    const key = isWindowsPlatform(platform) ? candidate.toLowerCase() : candidate;
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    candidates.push(candidate);
+  }
+
+  return candidates;
+}
+
 export function getVaultRelativePathFromAbsolute(
   absolutePath: string,
   vaultBasePath: string,

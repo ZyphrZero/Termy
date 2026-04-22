@@ -102,6 +102,9 @@ export interface TerminalSettings {
   // Preset scripts
   presetScripts: PresetScript[];
 
+  // Latest version whose changelog modal has already been shown
+  lastSeenChangelogVersion: string;
+
   // Debug settings
   enableDebugLog: boolean;
 }
@@ -131,10 +134,6 @@ export interface PresetScript {
   sourceTemplateId?: string;
   name: string;
   icon: string;
-  /**
-   * @deprecated Use actions instead. This field is kept only for legacy configuration migration.
-   */
-  command: string;
   actions: PresetWorkflowAction[];
   terminalTitle: string;
   showInStatusBar: boolean;
@@ -168,7 +167,6 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
     id: 'claude-code',
     name: 'Claude Code Open',
     icon: 'claude',
-    command: 'claude',
     actions: [
       {
         id: 'action-claude-code',
@@ -187,7 +185,6 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
     id: 'codex',
     name: 'Codex Open',
     icon: 'openai',
-    command: 'codex',
     actions: [
       {
         id: 'action-codex-install',
@@ -213,7 +210,6 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
     id: 'gemini-cli',
     name: 'Gemini Open',
     icon: 'google',
-    command: 'gemini',
     actions: [
       {
         id: 'action-gemini-cli',
@@ -341,10 +337,6 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   },
   serverConnection: { ...DEFAULT_SERVER_CONNECTION_SETTINGS },
   presetScripts: [...DEFAULT_PRESET_SCRIPTS],
+  lastSeenChangelogVersion: '',
   enableDebugLog: false,
 };
-
-/**
- * Default settings (alias for compatibility)
- */
-export const DEFAULT_SETTINGS = DEFAULT_TERMINAL_SETTINGS;

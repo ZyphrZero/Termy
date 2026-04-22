@@ -64,6 +64,7 @@ export const ko: TranslationKeys = {
 
   commands: {
     openTerminal: 'Termy 터미널 열기',
+    showChangelog: 'Termy: 변경 로그 보기',
     terminalSearch: '터미널: 검색',
     terminalClear: '터미널: 화면 지우기',
     terminalCopy: '터미널: 복사',
@@ -154,6 +155,7 @@ export const ko: TranslationKeys = {
       title: 'Termy',
       feedbackText: '사용해 주셔서 감사합니다! 피드백: ',
       feedbackLink: 'GitHub',
+      changelog: '변경 로그',
       reload: '플러그인 다시 로드',
     },
   },
@@ -295,6 +297,14 @@ export const ko: TranslationKeys = {
   },
 
   modals: {
+    changelog: {
+      title: '새로운 내용',
+      subtitle: 'Termy {{version}} 업데이트 내용',
+      loading: '변경 로그를 불러오는 중...',
+      unavailable: '이 버전의 변경 로그를 지금 불러올 수 없습니다.',
+      openRelease: '릴리스 페이지 열기',
+      openFull: '전체 변경 로그 열기',
+    },
     renameTerminal: {
       title: '터미널 이름 변경',
       placeholder: '새 터미널 이름 입력',

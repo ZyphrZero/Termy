@@ -4,6 +4,11 @@ import * as path from 'path';
 import { pathToFileURL } from 'url';
 import type { App, Editor, EventRef, MarkdownView, TFile, WorkspaceLeaf } from 'obsidian';
 import { normalizePath } from 'obsidian';
+import {
+  buildCodexCliTerminalEnv,
+  CODEX_IDE_CONTEXT_PATH_ENV,
+  CODEX_IDE_CONTEXT_PROMPT_PATH_ENV,
+} from '../context/agentContext';
 import { debugLog, errorLog } from '@/utils/logger';
 
 const CODEX_DIR = path.join(homedir(), '.codex');
@@ -11,8 +16,7 @@ const CONTEXT_FILE_NAME = 'ide-context.json';
 const CONTEXT_PROMPT_FILE_NAME = 'ide-context-prompt.md';
 const POLL_INTERVAL_MS = 250;
 
-export const CODEX_IDE_CONTEXT_PATH_ENV = 'CODEX_IDE_CONTEXT_PATH';
-export const CODEX_IDE_CONTEXT_PROMPT_PATH_ENV = 'CODEX_IDE_CONTEXT_PROMPT_PATH';
+export { CODEX_IDE_CONTEXT_PATH_ENV, CODEX_IDE_CONTEXT_PROMPT_PATH_ENV };
 
 type EditorContext = {
   editor: Editor | null;
@@ -111,10 +115,7 @@ export class CodexCliContextBridge {
   }
 
   getTerminalEnv(): Record<string, string> {
-    return {
-      [CODEX_IDE_CONTEXT_PATH_ENV]: this.contextFilePath,
-      [CODEX_IDE_CONTEXT_PROMPT_PATH_ENV]: this.contextPromptFilePath,
-    };
+    return buildCodexCliTerminalEnv(this.contextFilePath, this.contextPromptFilePath);
   }
 
   getContextFilePath(): string {

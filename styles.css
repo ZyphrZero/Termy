@@ -72,6 +72,37 @@
   text-decoration: underline;
 }
 
+.settings-header-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--interactive-accent) 8%, transparent),
+      color-mix(in srgb, var(--background-secondary) 92%, transparent)
+    );
+  color: var(--text-normal);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.1s ease, background-color 0.15s ease;
+}
+
+.settings-header-button:hover {
+  border-color: color-mix(in srgb, var(--interactive-accent) 42%, var(--background-modifier-border));
+  transform: translateY(-1px);
+}
+
+.settings-header-button svg {
+  width: 14px;
+  height: 14px;
+}
+
 .terminal-settings-content {
   flex: 1;
 }
@@ -246,6 +277,143 @@
   width: min(860px, calc(100vw - 48px));
   max-width: 860px;
   padding: 20px 24px;
+}
+
+/* ==================== Changelog Modal Styles ==================== */
+.termy-changelog-modal .modal {
+  width: min(900px, calc(100vw - 48px));
+  max-width: 900px;
+  max-height: min(80vh, 900px);
+  padding: 0;
+  overflow: hidden;
+}
+
+.termy-changelog-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: min(80vh, 900px);
+  background:
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--interactive-accent) 10%, transparent),
+      transparent 32%
+    ),
+    var(--background-primary);
+}
+
+.termy-changelog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--background-secondary) 82%, transparent),
+      color-mix(in srgb, var(--background-primary) 96%, transparent)
+    );
+}
+
+.termy-changelog-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.termy-changelog-subtitle {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.termy-changelog-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.termy-changelog-version-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 30%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
+  color: var(--interactive-accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.termy-changelog-action {
+  width: 30px;
+  height: 30px;
+}
+
+.termy-changelog-body {
+  overflow-y: auto;
+  padding: 22px 24px 26px;
+}
+
+.termy-changelog-loading,
+.termy-changelog-error {
+  padding: 22px 18px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--background-secondary) 88%, transparent);
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.termy-changelog-error {
+  color: var(--text-error);
+}
+
+.termy-changelog-markdown {
+  line-height: 1.7;
+}
+
+.termy-changelog-markdown > :first-child {
+  margin-top: 0;
+}
+
+.termy-changelog-markdown h3 {
+  margin-top: 24px;
+}
+
+.termy-changelog-markdown ul {
+  margin-block: 10px 18px;
+}
+
+.termy-changelog-markdown li {
+  margin-block: 6px;
+}
+
+@media (max-width: 768px) {
+  .termy-changelog-modal .modal {
+    width: min(900px, calc(100vw - 20px));
+  }
+
+  .termy-changelog-header {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 18px 18px 14px;
+  }
+
+  .termy-changelog-actions {
+    justify-content: space-between;
+  }
+
+  .termy-changelog-body {
+    padding: 18px 18px 22px;
+  }
 }
 
 .preset-script-modal-title-row {

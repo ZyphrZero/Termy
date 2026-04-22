@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import type { WorkspaceLeaf, Menu } from 'obsidian';
 import { FileSystemAdapter, ItemView, MarkdownView, Notice, TFile, setIcon } from 'obsidian';
 import { shell, webUtils } from 'electron';
@@ -8,6 +10,7 @@ import {
   collectPreferredDroppedTextPayload,
 } from '../../services/terminal/dropTextPayload';
 import {
+  collectTerminalReferenceCandidatePaths,
   fileUriToPlatformPath,
   getVaultRelativePathFromAbsolute,
   isAbsoluteTerminalPath,
@@ -776,7 +779,15 @@ export class TerminalView extends ItemView {
 
     const errorMessage = await shell.openPath(resolved.externalPath);
     if (errorMessage) {
-      errorLog('[TerminalView] Failed to open external path:', errorMessage);
+      if (fs.existsSync(resolved.externalPath)) {
+        const containingDir = path.dirname(resolved.externalPath);
+        const directoryError = await shell.openPath(containingDir);
+        if (!directoryError) {
+          return;
+        }
+      }
+
+      errorLog('[TerminalView] Failed to open external path:', resolved.externalPath, errorMessage);
       new Notice(t('notices.terminal.fileReferenceOpenFailed'));
     }
   }
@@ -796,6 +807,10 @@ export class TerminalView extends ItemView {
         };
       }
 
+      if (!fs.existsSync(normalizedReference)) {
+        return null;
+      }
+
       return { externalPath: normalizedReference };
     }
 
@@ -807,21 +822,21 @@ export class TerminalView extends ItemView {
       };
     }
 
-    const cwd = this.terminalInstance?.getCwd();
-    if (!cwd) {
-      return null;
+    for (const absolutePath of this.getTerminalReferenceAbsoluteCandidates(normalizedReference)) {
+      const fileFromCandidate = this.absolutePathToVaultFile(absolutePath);
+      if (fileFromCandidate) {
+        return {
+          file: fileFromCandidate,
+          externalPath: absolutePath,
+        };
+      }
+
+      if (fs.existsSync(absolutePath)) {
+        return { externalPath: absolutePath };
+      }
     }
 
-    const absolutePath = joinTerminalPaths(cwd, normalizedReference);
-    const fileFromCwd = this.absolutePathToVaultFile(absolutePath);
-    if (fileFromCwd) {
-      return {
-        file: fileFromCwd,
-        externalPath: absolutePath,
-      };
-    }
-
-    return { externalPath: absolutePath };
+    return null;
   }
 
   private resolveVaultReference(pathLike: string): TFile | null {
@@ -850,6 +865,18 @@ export class TerminalView extends ItemView {
 
     const file = this.app.vault.getAbstractFileByPath(relativePath);
     return file instanceof TFile ? file : null;
+  }
+
+  private getTerminalReferenceAbsoluteCandidates(relativePath: string): string[] {
+    const adapter = this.app.vault.adapter;
+    const vaultBasePath = adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
+    const currentCwd = this.terminalInstance?.getCwd() ?? null;
+    const initialCwd = this.terminalInstance?.getInitialCwd() ?? null;
+
+    return collectTerminalReferenceCandidatePaths(
+      relativePath,
+      [currentCwd, initialCwd, vaultBasePath],
+    );
   }
 
   private async openVaultFileReference(file: TFile, line: number | null, column: number | null): Promise<void> {

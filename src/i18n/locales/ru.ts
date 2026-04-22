@@ -64,6 +64,7 @@ export const ru: TranslationKeys = {
 
   commands: {
     openTerminal: 'Открыть терминал Termy',
+    showChangelog: 'Termy: показать список изменений',
     terminalSearch: 'Терминал: поиск',
     terminalClear: 'Терминал: очистить экран',
     terminalCopy: 'Терминал: копировать',
@@ -154,6 +155,7 @@ export const ru: TranslationKeys = {
       title: 'Termy',
       feedbackText: 'Спасибо за использование! Обратная связь: ',
       feedbackLink: 'GitHub',
+      changelog: 'Список изменений',
       reload: 'Перезагрузить плагин',
     },
   },
@@ -295,6 +297,14 @@ export const ru: TranslationKeys = {
   },
 
   modals: {
+    changelog: {
+      title: 'Что нового',
+      subtitle: 'Обновления в Termy {{version}}',
+      loading: 'Загрузка списка изменений...',
+      unavailable: 'Не удалось загрузить список изменений для этой версии.',
+      openRelease: 'Открыть страницу релиза',
+      openFull: 'Открыть полный changelog',
+    },
     renameTerminal: {
       title: 'Переименовать терминал',
       placeholder: 'Введите новое имя терминала',
