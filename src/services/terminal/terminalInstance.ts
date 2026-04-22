@@ -11,6 +11,7 @@ import { t } from '@/i18n';
 import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
 import type { ShellEvent, ShellEventSource } from '@/services/server/types';
+import { EnhancedKeyboardProtocol } from './enhancedKeyboardProtocol';
 import { shell } from 'electron';
 
 // xterm.js CSS (static import handled by esbuild)
@@ -413,65 +414,45 @@ export class TerminalInstance {
   }
 
   private setupXtermHandlers(): void {
-    // Handle user input
-    this.xterm.onData((data) => {
-      this.queueInput(data);
-    });
-    
-    this.xterm.onBinary((data) => {
-      if (this.ptyClient && this.sessionId) {
+    const keyboardProtocol = new EnhancedKeyboardProtocol({
+      queueInput: (data) => {
+        this.queueInput(data);
+      },
+      flushPendingInput: () => {
         this.flushPendingInput();
-        const binaryData = Uint8Array.from(atob(data), c => c.charCodeAt(0));
-        this.ptyClient.writeBinary(this.sessionId, binaryData);
-      }
-    });
-    
-    // Custom keyboard handler: smart Ctrl+C behavior
-    // - Copy selected text when there is a selection
-    // - Send an interrupt signal when there is no selection
-    this.xterm.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-      // Only handle keydown events
-      if (event.type !== 'keydown') {
-        return true;
-      }
-      
-      // Smart Ctrl+C handling
-      if (event.ctrlKey && event.key === 'c') {
-        const hasSelection = this.xterm.hasSelection();
-        debugLog('[Terminal] Ctrl+C pressed, hasSelection:', hasSelection);
-        
-        if (hasSelection) {
-          // Copy the selected text
-          event.preventDefault();
-          const selectedText = this.xterm.getSelection();
-          debugLog('[Terminal] Copying selected text, length:', selectedText.length);
-          navigator.clipboard.writeText(selectedText).then(() => {
-            this.xterm.clearSelection();
-          }).catch(error => {
-            errorLog('[Terminal] Copy failed:', error);
-          });
-          return false; // Prevent default behavior
+      },
+      writeBinary: (data) => {
+        if (this.ptyClient && this.sessionId) {
+          this.ptyClient.writeBinary(this.sessionId, data);
         }
-        // No selection: let xterm.js send the interrupt signal (\x03)
-        debugLog('[Terminal] Sending interrupt signal (Ctrl+C)');
-        return true;
-      }
-      
-      // Ctrl+V paste handling
-      if (event.ctrlKey && event.key === 'v') {
-        event.preventDefault();
-        navigator.clipboard.readText().then(text => {
-          if (text && this.ptyClient && this.sessionId) {
-            this.ptyClient.write(this.sessionId, text);
-          }
-        }).catch(error => {
-          errorLog('[Terminal] Paste failed:', error);
-        });
-        return false;
-      }
-      
-      // Handle all other keys normally
-      return true;
+      },
+      hasSelection: () => this.xterm.hasSelection(),
+      getSelection: () => this.xterm.getSelection(),
+      clearSelection: () => {
+        this.xterm.clearSelection();
+      },
+      readClipboardText: () => navigator.clipboard.readText(),
+      writeClipboardText: (text) => navigator.clipboard.writeText(text),
+      writeText: (text) => {
+        if (text && this.ptyClient && this.sessionId) {
+          this.ptyClient.write(this.sessionId, text);
+        }
+      },
+      onError: (message, error) => {
+        errorLog(`[Terminal] ${message}:`, error);
+      },
+    });
+
+    this.xterm.onData((data) => {
+      keyboardProtocol.handleData(data);
+    });
+
+    this.xterm.onBinary((data) => {
+      keyboardProtocol.handleBinary(data);
+    });
+
+    this.xterm.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+      return keyboardProtocol.handleKeyboardEvent(event);
     });
   }
 

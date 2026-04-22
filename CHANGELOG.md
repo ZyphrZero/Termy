@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added `Shift+Enter` terminal input handling to insert a literal newline for multi-line commands without falling back to xterm's default Enter path.
+
 ### Changed
 - Reworked preset scripts into preset workflows with configurable action lists, including terminal commands, Obsidian command search, and external link actions.
 - Standardized internal source comments to English across the TypeScript, CSS, and Rust codebases for easier maintenance.
