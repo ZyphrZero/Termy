@@ -85,6 +85,12 @@ export interface TranslationKeys {
     terminalSplitHorizontal: string;
     terminalSplitVertical: string;
     terminalClearBuffer: string;
+    terminalSendSelection: string;
+    terminalSendCurrentNote: string;
+    terminalSendCurrentPath: string;
+    terminalPromptPrevious: string;
+    terminalPromptNext: string;
+    terminalPromptLastFailed: string;
     presetScriptPrefix: string;
   };
 
@@ -123,6 +129,13 @@ export interface TranslationKeys {
       serverCrashed: string;
       sessionClosed: string;
       reconnecting: string;
+      selectionRequired: string;
+      noteRequired: string;
+      filePathRequired: string;
+      promptNavigationUnavailable: string;
+      failedCommandUnavailable: string;
+      fileReferenceUnavailable: string;
+      fileReferenceOpenFailed: string;
     };
     settings: {
       backgroundColorReset: string;

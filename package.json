@@ -12,7 +12,7 @@
     "build:rust:clean": "node scripts/build-rust.js --clean",
     "package": "node scripts/package-plugin.js",
     "package:zip": "node scripts/package-plugin.js --zip",
-    "test:terminal-keyboard": "tsc -p tsconfig.test.json --pretty false && node --experimental-strip-types --experimental-specifier-resolution=node --test src/services/terminal/enhancedKeyboardProtocol.test.ts",
+    "test:terminal-keyboard": "tsc -p tsconfig.test.json --pretty false && node --experimental-strip-types --experimental-specifier-resolution=node --test src/services/terminal/*.test.ts",
     "verify:bundle": "node scripts/verify-build.js",
     "release": "pnpm build && pnpm build:rust && pnpm package:zip",
     "install:dev": "pnpm build && pnpm build:rust && node scripts/install-dev.js"

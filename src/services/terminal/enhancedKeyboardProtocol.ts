@@ -31,6 +31,18 @@ export interface EnhancedKeyboardProtocolHandlers {
   onError?: (message: string, error: unknown) => void;
 }
 
+export function formatPastedTerminalText(text: string, bracketedPasteMode: boolean): string {
+  if (!text) {
+    return text;
+  }
+
+  if (!bracketedPasteMode) {
+    return text;
+  }
+
+  return `\x1b[200~${text}\x1b[201~`;
+}
+
 export function evaluateKeyboardDecision(
   event: KeyboardEventLike,
   context: KeyboardDecisionContext

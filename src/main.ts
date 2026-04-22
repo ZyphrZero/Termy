@@ -13,6 +13,7 @@ import { debugLog, errorLog } from './utils/logger';
 import { createTermyLogoSvg, createTermyLogoSvgMarkup, TERMY_RIBBON_ICON_ID } from './ui/icons';
 import { FeatureVisibilityManager } from './services/visibility';
 import { shell } from 'electron';
+import type { TerminalInstance } from './services/terminal/terminalInstance';
 
 // Import terminal styles
 
@@ -406,13 +407,9 @@ export default class TerminalPlugin extends Plugin {
         const terminal = terminalView?.getTerminalInstance();
         if (terminal) {
           if (!checking) {
-            void navigator.clipboard.readText()
-              .then((text) => {
-                terminal.write(text);
-              })
-              .catch((error) => {
-                errorLog('[TerminalPlugin] Paste failed:', error);
-              });
+            void terminal.pasteFromClipboard().catch((error) => {
+              errorLog('[TerminalPlugin] Paste failed:', error);
+            });
           }
           return true;
         }
@@ -538,6 +535,102 @@ export default class TerminalPlugin extends Plugin {
       }
     });
 
+    this.addCommand({
+      id: 'terminal-send-selection',
+      name: t('commands.terminalSendSelection'),
+      checkCallback: (checking: boolean) => {
+        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+          return false;
+        }
+
+        if (!checking) {
+          void this.sendEditorSelectionToTerminal();
+        }
+
+        return true;
+      }
+    });
+
+    this.addCommand({
+      id: 'terminal-send-current-note',
+      name: t('commands.terminalSendCurrentNote'),
+      checkCallback: (checking: boolean) => {
+        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+          return false;
+        }
+
+        if (!checking) {
+          void this.sendCurrentNoteToTerminal();
+        }
+
+        return true;
+      }
+    });
+
+    this.addCommand({
+      id: 'terminal-send-current-path',
+      name: t('commands.terminalSendCurrentPath'),
+      checkCallback: (checking: boolean) => {
+        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+          return false;
+        }
+
+        if (!checking) {
+          this.sendCurrentPathToTerminal();
+        }
+
+        return true;
+      }
+    });
+
+    this.addCommand({
+      id: 'terminal-prompt-previous',
+      name: t('commands.terminalPromptPrevious'),
+      checkCallback: (checking: boolean) => {
+        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+          return false;
+        }
+
+        if (!checking) {
+          this.navigateTerminalPrompt('previous');
+        }
+
+        return true;
+      }
+    });
+
+    this.addCommand({
+      id: 'terminal-prompt-next',
+      name: t('commands.terminalPromptNext'),
+      checkCallback: (checking: boolean) => {
+        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+          return false;
+        }
+
+        if (!checking) {
+          this.navigateTerminalPrompt('next');
+        }
+
+        return true;
+      }
+    });
+
+    this.addCommand({
+      id: 'terminal-prompt-last-failed',
+      name: t('commands.terminalPromptLastFailed'),
+      checkCallback: (checking: boolean) => {
+        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+          return false;
+        }
+
+        if (!checking) {
+          this.navigateToLastFailedTerminalCommand();
+        }
+
+        return true;
+      }
+    });
+
     // Register preset script commands
     this.registerPresetScriptCommands();
   }
@@ -589,6 +682,109 @@ export default class TerminalPlugin extends Plugin {
     const leaves = this.app.workspace.getLeavesOfType(TERMINAL_VIEW_TYPE);
     const view = leaves.map((item) => item.view).find((item) => this.isTerminalView(item));
     return view ?? null;
+  }
+
+  private getActiveTerminalInstance(): TerminalInstance | null {
+    return this.getActiveTerminalView()?.getTerminalInstance() ?? null;
+  }
+
+  private focusTerminalView(terminalView: TerminalView, terminal: TerminalInstance): void {
+    this.app.workspace.setActiveLeaf(terminalView.leaf, { focus: true });
+    terminal.focus();
+  }
+
+  private getActiveEditorContext(): { editor: { getSelection: () => string; getValue: () => string } | null; filePath: string | null } {
+    const activeEditor = (this.app.workspace as typeof this.app.workspace & {
+      activeEditor?: {
+        editor?: { getSelection: () => string; getValue: () => string };
+        file?: { path: string };
+      };
+    }).activeEditor;
+
+    return {
+      editor: activeEditor?.editor ?? null,
+      filePath: activeEditor?.file?.path ?? this.app.workspace.getActiveFile()?.path ?? null,
+    };
+  }
+
+  private async sendEditorSelectionToTerminal(): Promise<void> {
+    const terminalView = this.getActiveTerminalView();
+    const terminal = terminalView?.getTerminalInstance();
+    if (!terminalView || !terminal) {
+      new Notice(t('notices.presetScript.terminalUnavailable'));
+      return;
+    }
+
+    const { editor } = this.getActiveEditorContext();
+    const selection = editor?.getSelection()?.trim() ?? '';
+    if (!selection) {
+      new Notice(t('notices.terminal.selectionRequired'));
+      return;
+    }
+
+    terminal.pasteText(selection);
+    this.focusTerminalView(terminalView, terminal);
+  }
+
+  private async sendCurrentNoteToTerminal(): Promise<void> {
+    const terminalView = this.getActiveTerminalView();
+    const terminal = terminalView?.getTerminalInstance();
+    if (!terminalView || !terminal) {
+      new Notice(t('notices.presetScript.terminalUnavailable'));
+      return;
+    }
+
+    const { editor } = this.getActiveEditorContext();
+    const noteText = editor?.getValue() ?? '';
+    if (!noteText.trim()) {
+      new Notice(t('notices.terminal.noteRequired'));
+      return;
+    }
+
+    terminal.pasteText(noteText);
+    this.focusTerminalView(terminalView, terminal);
+  }
+
+  private sendCurrentPathToTerminal(): void {
+    const terminalView = this.getActiveTerminalView();
+    const terminal = terminalView?.getTerminalInstance();
+    if (!terminalView || !terminal) {
+      new Notice(t('notices.presetScript.terminalUnavailable'));
+      return;
+    }
+
+    const { filePath } = this.getActiveEditorContext();
+    if (!filePath) {
+      new Notice(t('notices.terminal.filePathRequired'));
+      return;
+    }
+
+    terminal.sendText(normalizePath(filePath));
+    this.focusTerminalView(terminalView, terminal);
+  }
+
+  private navigateTerminalPrompt(direction: 'previous' | 'next'): void {
+    const terminal = this.getActiveTerminalInstance();
+    if (!terminal) {
+      new Notice(t('notices.presetScript.terminalUnavailable'));
+      return;
+    }
+
+    if (!terminal.navigatePrompt(direction)) {
+      new Notice(t('notices.terminal.promptNavigationUnavailable'));
+    }
+  }
+
+  private navigateToLastFailedTerminalCommand(): void {
+    const terminal = this.getActiveTerminalInstance();
+    if (!terminal) {
+      new Notice(t('notices.presetScript.terminalUnavailable'));
+      return;
+    }
+
+    if (!terminal.navigateToLastFailedCommand()) {
+      new Notice(t('notices.terminal.failedCommandUnavailable'));
+    }
   }
 
   private isTerminalView(view: View | null | undefined): view is TerminalView {

@@ -5,6 +5,7 @@ import {
   decodeBinaryInput,
   EnhancedKeyboardProtocol,
   evaluateKeyboardDecision,
+  formatPastedTerminalText,
   type EnhancedKeyboardProtocolHandlers,
   type KeyboardEventLike,
 } from './enhancedKeyboardProtocol.ts';
@@ -153,4 +154,12 @@ test('handleData and handleBinary use the extracted input pipeline callbacks', (
 test('decodeBinaryInput falls back to base64 decoding that matches xterm binary payloads', () => {
   const decoded = decodeBinaryInput('SGVsbG8=');
   assert.equal(new TextDecoder().decode(decoded), 'Hello');
+});
+
+test('formatPastedTerminalText wraps content only when bracketed paste mode is enabled', () => {
+  assert.equal(formatPastedTerminalText('line 1\nline 2', false), 'line 1\nline 2');
+  assert.equal(
+    formatPastedTerminalText('line 1\nline 2', true),
+    '\x1b[200~line 1\nline 2\x1b[201~'
+  );
 });

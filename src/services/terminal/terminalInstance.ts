@@ -11,7 +11,7 @@ import { t } from '@/i18n';
 import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
 import type { ShellEvent, ShellEventSource } from '@/services/server/types';
-import { EnhancedKeyboardProtocol } from './enhancedKeyboardProtocol';
+import { EnhancedKeyboardProtocol, formatPastedTerminalText } from './enhancedKeyboardProtocol';
 import { shell } from 'electron';
 
 // xterm.js CSS (static import handled by esbuild)
@@ -23,6 +23,7 @@ type FitAddon = import('@xterm/addon-fit').FitAddon;
 type SearchAddon = import('@xterm/addon-search').SearchAddon;
 type CanvasAddon = import('@xterm/addon-canvas').CanvasAddon;
 type WebglAddon = import('@xterm/addon-webgl').WebglAddon;
+type IMarker = import('@xterm/xterm').IMarker;
 
 // xterm.js module cache
 let xtermModules: {
@@ -112,6 +113,11 @@ export type SearchStateCallback = (visible: boolean) => void;
 /** Font size change callback */
 export type FontSizeChangeCallback = (fontSize: number) => void;
 
+interface TerminalCommandMarker {
+  marker: IMarker;
+  exitCode: number | null;
+}
+
 export class TerminalInstance {
   readonly id: string;
   readonly shellType: string;
@@ -176,6 +182,8 @@ export class TerminalInstance {
     source: ShellEventSource;
   }> = [];
   private activeCommandStart: number | null = null;
+  private promptMarkers: IMarker[] = [];
+  private commandMarkers: TerminalCommandMarker[] = [];
 
   constructor(options: TerminalOptions = {}) {
     this.id = `terminal-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -434,8 +442,8 @@ export class TerminalInstance {
       readClipboardText: () => navigator.clipboard.readText(),
       writeClipboardText: (text) => navigator.clipboard.writeText(text),
       writeText: (text) => {
-        if (text && this.ptyClient && this.sessionId) {
-          this.ptyClient.write(this.sessionId, text);
+        if (text) {
+          this.pasteText(text);
         }
       },
       onError: (message, error) => {
@@ -521,6 +529,8 @@ export class TerminalInstance {
       this.inputFlushTimer = null;
     }
     this.pendingInput = [];
+    this.promptMarkers = [];
+    this.commandMarkers = [];
 
     // Unsubscribe from events
     this.outputUnsubscribe?.();
@@ -911,17 +921,6 @@ export class TerminalInstance {
     }
   }
 
-  private async pasteFromClipboard(): Promise<void> {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text && this.ptyClient && this.sessionId) {
-        this.ptyClient.write(this.sessionId, text);
-      }
-    } catch (error) {
-      errorLog('[Terminal] Paste failed:', error);
-    }
-  }
-
   /**
    * Create a menu item
    */
@@ -1187,6 +1186,10 @@ export class TerminalInstance {
   // ==================== Shell Integration ====================
 
   private handleShellEvent(event: ShellEvent): void {
+    if (event.type === 'prompt_start') {
+      this.promptMarkers.push(this.xterm.registerMarker(0));
+    }
+
     if (event.type === 'command_start') {
       this.activeCommandStart = Date.now();
     }
@@ -1201,6 +1204,10 @@ export class TerminalInstance {
         durationMs,
         exitCode: event.exitCode,
         source: event.source,
+      });
+      this.commandMarkers.push({
+        marker: this.xterm.registerMarker(0),
+        exitCode: event.exitCode,
       });
       this.activeCommandStart = null;
     }
@@ -1306,6 +1313,26 @@ export class TerminalInstance {
   write(data: string): void {
     if (this.ptyClient && this.sessionId) {
       this.ptyClient.write(this.sessionId, data);
+    }
+  }
+
+  sendText(data: string): void {
+    this.write(data);
+  }
+
+  pasteText(text: string): void {
+    const formatted = formatPastedTerminalText(text, this.xterm.modes.bracketedPasteMode);
+    this.write(formatted);
+  }
+
+  async pasteFromClipboard(): Promise<void> {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        this.pasteText(text);
+      }
+    } catch (error) {
+      errorLog('[Terminal] Paste failed:', error);
     }
   }
 
@@ -1434,6 +1461,57 @@ export class TerminalInstance {
    */
   getCwd(): string {
     return this.currentCwd || this.getInitialCwd();
+  }
+
+  navigatePrompt(direction: 'previous' | 'next'): boolean {
+    const targetLine = this.findPromptLine(direction);
+    if (targetLine === null) {
+      return false;
+    }
+
+    this.xterm.scrollToLine(targetLine);
+    this.focus();
+    return true;
+  }
+
+  navigateToLastFailedCommand(): boolean {
+    const marker = [...this.commandMarkers]
+      .reverse()
+      .find((entry) => !entry.marker.isDisposed && entry.marker.line >= 0 && (entry.exitCode ?? 0) !== 0);
+
+    if (!marker) {
+      return false;
+    }
+
+    this.xterm.scrollToLine(marker.marker.line);
+    this.focus();
+    return true;
+  }
+
+  private findPromptLine(direction: 'previous' | 'next'): number | null {
+    const currentViewportLine = this.xterm.buffer.active.viewportY;
+    const validPromptLines = this.promptMarkers
+      .filter((marker) => !marker.isDisposed && marker.line >= 0)
+      .map((marker) => marker.line)
+      .sort((left, right) => left - right);
+
+    if (direction === 'previous') {
+      for (let index = validPromptLines.length - 1; index >= 0; index -= 1) {
+        if (validPromptLines[index] < currentViewportLine) {
+          return validPromptLines[index];
+        }
+      }
+
+      return null;
+    }
+
+    for (const line of validPromptLines) {
+      if (line > currentViewportLine) {
+        return line;
+      }
+    }
+
+    return null;
   }
 
   onTitleChange(callback: (title: string) => void): void {

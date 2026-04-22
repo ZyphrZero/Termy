@@ -1,6 +1,6 @@
 import type { WorkspaceLeaf, Menu } from 'obsidian';
-import { FileSystemAdapter, ItemView, Notice, normalizePath, setIcon } from 'obsidian';
-import { webUtils } from 'electron';
+import { FileSystemAdapter, ItemView, MarkdownView, Notice, TFile, normalizePath, setIcon } from 'obsidian';
+import { shell, webUtils } from 'electron';
 import type { TerminalService } from '../../services/terminal/terminalService';
 import type { TerminalInstance } from '../../services/terminal/terminalInstance';
 import type { TerminalSettings } from '../../settings/settings';
@@ -8,6 +8,9 @@ import { debugLog, errorLog } from '../../utils/logger';
 import { clamp, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
 import { t } from '../../i18n';
 import { RenameTerminalModal } from './renameTerminalModal';
+import { parseTerminalOutputFileReferences, type TerminalOutputFileReference } from '../../services/terminal/terminalOutputLinks';
+
+type TerminalDisposable = import('@xterm/xterm').IDisposable;
 
 export const TERMINAL_VIEW_TYPE = 'terminal-view';
 
@@ -24,6 +27,7 @@ export class TerminalView extends ItemView {
   private searchContainer: HTMLElement | null = null;
   private searchInput: HTMLInputElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private fileReferenceLinkDisposable: TerminalDisposable | null = null;
   private initPromise: Promise<TerminalInstance> | null = null;
   private initResolve: ((terminal: TerminalInstance) => void) | null = null;
   private initReject: ((error: Error) => void) | null = null;
@@ -198,6 +202,8 @@ export class TerminalView extends ItemView {
   async onClose(): Promise<void> {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.fileReferenceLinkDisposable?.dispose();
+    this.fileReferenceLinkDisposable = null;
     this.dragEnterDepth = 0;
     this.dropHintEl = null;
 
@@ -233,6 +239,7 @@ export class TerminalView extends ItemView {
         this.updateLeafHeader(this.leaf);
         this.updateDropHintText();
       });
+      this.registerFileReferenceLinks();
 
       // Set the search state callback
       this.terminalInstance.onSearchStateChange((visible) => {
@@ -380,22 +387,41 @@ export class TerminalView extends ItemView {
   private async handleDrop(dataTransfer: DataTransfer | null): Promise<void> {
     const input = await this.buildDroppedInput(dataTransfer);
     if (!input) {
-      debugLog('[Terminal DnD] No usable file path in drop payload');
+      debugLog('[Terminal DnD] No usable file path or text in drop payload');
       errorLog('[Terminal DnD] No usable path details:', this.describeDropPayload(dataTransfer));
-      new Notice('Termy: 未获取到可用路径，请确认拖拽来源是否支持文件路径。');
+      new Notice('Termy: 未获取到可用文本或路径，请确认拖拽来源是否支持文本或文件。');
       return;
     }
-    debugLog('[Terminal DnD] Inject input:', input);
-    await this.writeInputToTerminal(input);
+
+    debugLog('[Terminal DnD] Inject input:', input.text);
+    await this.writeInputToTerminal(input.text, input.usePaste);
   }
 
-  private async buildDroppedInput(dataTransfer: DataTransfer | null): Promise<string> {
-    const paths = await this.extractDroppedPaths(dataTransfer);
-    if (paths.length === 0) return '';
-    return paths.map((path) => `"${path.replace(/"/g, '\\"')}"`).join(' ');
+  private async buildDroppedInput(dataTransfer: DataTransfer | null): Promise<{ text: string; usePaste: boolean } | null> {
+    if (!dataTransfer) return null;
+
+    const droppedItems = Array.from(dataTransfer.items);
+    const textPayload = await this.collectDroppedTextPayload(dataTransfer, droppedItems);
+    const paths = await this.extractDroppedPaths(dataTransfer, textPayload);
+    if (paths.length > 0) {
+      return {
+        text: paths.map((path) => `"${path.replace(/"/g, '\\"')}"`).join(' '),
+        usePaste: false,
+      };
+    }
+
+    const normalizedText = textPayload.trim();
+    if (!normalizedText) {
+      return null;
+    }
+
+    return {
+      text: normalizedText,
+      usePaste: true,
+    };
   }
 
-  private async extractDroppedPaths(dataTransfer: DataTransfer | null): Promise<string[]> {
+  private async extractDroppedPaths(dataTransfer: DataTransfer | null, textPayload = ''): Promise<string[]> {
     if (!dataTransfer) return [];
 
     const paths: string[] = [];
@@ -429,6 +455,15 @@ export class TerminalView extends ItemView {
       }
     }
 
+    for (const token of this.extractDropTokens(textPayload)) {
+      const resolvedPath = this.resolveDroppedTokenToPath(token);
+      if (resolvedPath) paths.push(resolvedPath);
+    }
+
+    return this.uniquePaths(paths);
+  }
+
+  private async collectDroppedTextPayload(dataTransfer: DataTransfer, droppedItems: DataTransferItem[]): Promise<string> {
     const textPayloadParts = [
       dataTransfer.getData('text/uri-list'),
       dataTransfer.getData('text/plain'),
@@ -441,17 +476,11 @@ export class TerminalView extends ItemView {
       }
       textPayloadParts.push(dataTransfer.getData(type));
     }
+
     const stringPayloads = await this.extractStringItemPayloads(droppedItems);
     textPayloadParts.push(...stringPayloads);
 
-    const textPayload = textPayloadParts.filter((value) => value.length > 0).join('\n');
-
-    for (const token of this.extractDropTokens(textPayload)) {
-      const resolvedPath = this.resolveDroppedTokenToPath(token);
-      if (resolvedPath) paths.push(resolvedPath);
-    }
-
-    return this.uniquePaths(paths);
+    return textPayloadParts.filter((value) => value.length > 0).join('\n');
   }
 
   private async extractStringItemPayloads(items: DataTransferItem[]): Promise<string[]> {
@@ -673,11 +702,178 @@ export class TerminalView extends ItemView {
     return normalized.startsWith('/');
   }
 
-  private async writeInputToTerminal(text: string): Promise<void> {
+  private async writeInputToTerminal(text: string, usePaste = false): Promise<void> {
     const terminal = this.terminalInstance ?? await this.waitForTerminalInstance().catch(() => null);
     if (!terminal) return;
-    terminal.write(text);
+    if (usePaste) {
+      terminal.pasteText(text);
+    } else {
+      terminal.sendText(text);
+    }
     terminal.focus();
+  }
+
+  private registerFileReferenceLinks(): void {
+    this.fileReferenceLinkDisposable?.dispose();
+    this.fileReferenceLinkDisposable = null;
+
+    if (!this.terminalInstance) {
+      return;
+    }
+
+    const xterm = this.terminalInstance.getXterm();
+    this.fileReferenceLinkDisposable = xterm.registerLinkProvider({
+      provideLinks: (bufferLineNumber, callback) => {
+        const line = xterm.buffer.active.getLine(bufferLineNumber - 1);
+        const text = line?.translateToString(true) ?? '';
+        const references = parseTerminalOutputFileReferences(text);
+
+        if (references.length === 0) {
+          callback(undefined);
+          return;
+        }
+
+        callback(references.map((reference) => ({
+          range: {
+            start: { x: reference.startIndex + 1, y: bufferLineNumber },
+            end: { x: reference.endIndex, y: bufferLineNumber },
+          },
+          text: reference.text,
+          activate: (_event: MouseEvent) => {
+            void this.openTerminalFileReference(reference);
+          },
+        })));
+      },
+    });
+  }
+
+  private async openTerminalFileReference(reference: TerminalOutputFileReference): Promise<void> {
+    const resolved = this.resolveTerminalFileReference(reference.path);
+    if (!resolved) {
+      new Notice(t('notices.terminal.fileReferenceUnavailable'));
+      return;
+    }
+
+    if (resolved.file) {
+      await this.openVaultFileReference(resolved.file, reference.line, reference.column);
+      return;
+    }
+
+    const errorMessage = await shell.openPath(resolved.externalPath);
+    if (errorMessage) {
+      errorLog('[TerminalView] Failed to open external path:', errorMessage);
+      new Notice(t('notices.terminal.fileReferenceOpenFailed'));
+    }
+  }
+
+  private resolveTerminalFileReference(pathLike: string): { file?: TFile; externalPath: string } | null {
+    const normalizedReference = this.normalizeAgentReferencePath(pathLike);
+    if (!normalizedReference) {
+      return null;
+    }
+
+    if (this.isAbsolutePath(normalizedReference)) {
+      const fileFromAbsolutePath = this.absolutePathToVaultFile(normalizedReference);
+      if (fileFromAbsolutePath) {
+        return {
+          file: fileFromAbsolutePath,
+          externalPath: normalizedReference,
+        };
+      }
+
+      return { externalPath: normalizedReference };
+    }
+
+    const vaultFile = this.resolveVaultReference(normalizedReference);
+    if (vaultFile) {
+      return {
+        file: vaultFile,
+        externalPath: vaultFile.path,
+      };
+    }
+
+    const cwd = this.terminalInstance?.getCwd();
+    if (!cwd) {
+      return null;
+    }
+
+    const absolutePath = this.joinPathSegments(cwd, normalizedReference);
+    const fileFromCwd = this.absolutePathToVaultFile(absolutePath);
+    if (fileFromCwd) {
+      return {
+        file: fileFromCwd,
+        externalPath: absolutePath,
+      };
+    }
+
+    return { externalPath: absolutePath };
+  }
+
+  private normalizeAgentReferencePath(pathLike: string): string {
+    const normalized = this.normalizeDroppedToken(pathLike)
+      .replace(/^[ab][\\/](?=.+\.[A-Za-z0-9]+$)/, '');
+
+    if (process.platform === 'win32') {
+      return normalized.replace(/\//g, '\\');
+    }
+
+    return normalized.replace(/\\/g, '/');
+  }
+
+  private resolveVaultReference(pathLike: string): TFile | null {
+    const normalizedPath = normalizePath(pathLike.replace(/\\/g, '/').replace(/^\/+/, ''));
+    if (!normalizedPath) {
+      return null;
+    }
+
+    const activePath = this.app.workspace.getActiveFile()?.path ?? '';
+    const file = this.app.metadataCache.getFirstLinkpathDest(normalizedPath, activePath)
+      ?? this.app.vault.getAbstractFileByPath(normalizedPath);
+
+    return file instanceof TFile ? file : null;
+  }
+
+  private absolutePathToVaultFile(absolutePath: string): TFile | null {
+    const adapter = this.app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) {
+      return null;
+    }
+
+    const normalizedBasePath = normalizePath(adapter.getBasePath());
+    const normalizedAbsolutePath = normalizePath(absolutePath.replace(/\\/g, '/'));
+    if (!normalizedAbsolutePath.startsWith(normalizedBasePath)) {
+      return null;
+    }
+
+    const relativePath = normalizedAbsolutePath
+      .slice(normalizedBasePath.length)
+      .replace(/^\/+/, '');
+
+    const file = this.app.vault.getAbstractFileByPath(relativePath);
+    return file instanceof TFile ? file : null;
+  }
+
+  private joinPathSegments(basePath: string, relativePath: string): string {
+    const joined = normalizePath(`${basePath.replace(/\\/g, '/')}/${relativePath.replace(/\\/g, '/')}`);
+    return process.platform === 'win32' ? joined.replace(/\//g, '\\') : joined;
+  }
+
+  private async openVaultFileReference(file: TFile, line: number | null, column: number | null): Promise<void> {
+    const leaf = this.app.workspace.getLeaf(false);
+    await leaf.openFile(file);
+    this.app.workspace.setActiveLeaf(leaf, { focus: true });
+
+    if (!(leaf.view instanceof MarkdownView) || line === null) {
+      return;
+    }
+
+    const targetLine = Math.max(0, line - 1);
+    const targetColumn = Math.max(0, (column ?? 1) - 1);
+    leaf.view.editor.setCursor(targetLine, targetColumn);
+    leaf.view.editor.scrollIntoView({
+      from: { line: targetLine, ch: targetColumn },
+      to: { line: targetLine, ch: targetColumn },
+    }, true);
   }
 
   private updateAppearanceStyles(): void {
