@@ -1,17 +1,17 @@
 /**
- * 统一服务器模块导出
+ * Unified server module exports
  */
 
-// 主管理器
+// Main manager
 export { ServerManager } from './serverManager';
 
-// 二进制下载器
+// Binary downloader
 export { BinaryDownloader } from './binaryDownloader';
 export type { DownloadProgress, DownloadProgressCallback } from './binaryDownloader';
 
-// 模块客户端
+// Module clients
 export { ModuleClient } from './moduleClient';
 export { PtyClient } from './ptyClient';
 
-// 类型
+// Types
 export * from './types';

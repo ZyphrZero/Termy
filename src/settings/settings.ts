@@ -1,21 +1,21 @@
 /**
- * 终端设置类型定义
- * 包含所有终端相关的配置选项
+ * Terminal settings type definitions
+ * Includes all terminal-related configuration options
  */
 
 import type { VisibilityConfig } from '@/services/visibility';
 
-/** Windows 平台支持的 Shell 类型 */
+/** Shell types supported on Windows */
 export type WindowsShellType = 'cmd' | 'powershell' | 'pwsh' | 'wsl' | 'gitbash' | 'custom';
 
-/** Unix 平台（macOS/Linux）支持的 Shell 类型 */
+/** Shell types supported on Unix platforms (macOS/Linux) */
 export type UnixShellType = 'bash' | 'zsh' | 'custom';
 
-/** 所有 Shell 类型的联合 */
+/** Union of all shell types */
 export type ShellType = WindowsShellType | UnixShellType;
 
 /**
- * 平台特定的 Shell 配置
+ * Platform-specific shell configuration
  */
 export interface PlatformShellConfig {
   windows: WindowsShellType;
@@ -24,7 +24,7 @@ export interface PlatformShellConfig {
 }
 
 /**
- * 平台特定的自定义 Shell 路径
+ * Platform-specific custom shell paths
  */
 export interface PlatformCustomShellPaths {
   windows: string;
@@ -33,86 +33,86 @@ export interface PlatformCustomShellPaths {
 }
 
 /**
- * 终端设置接口
+ * Terminal settings interface
  */
 export interface TerminalSettings {
-  // 各平台的默认 Shell 程序类型（独立存储）
+  // Default shell program type for each platform (stored separately)
   platformShells: PlatformShellConfig;
 
-  // 各平台的自定义 Shell 路径（独立存储）
+  // Custom shell path for each platform (stored separately)
   platformCustomShellPaths: PlatformCustomShellPaths;
 
-  // 默认启动参数
+  // Default launch arguments
   shellArgs: string[];
 
-  // 启动目录设置
-  autoEnterVaultDirectory: boolean; // 打开终端时自动进入项目目录
+  // Startup directory settings
+  autoEnterVaultDirectory: boolean; // Automatically enter the project directory when opening a terminal
 
-  // 新实例行为：替换标签页、新标签页、新窗口、水平/垂直分屏、左侧/右侧标签页或分屏
+  // New instance behavior: replace tab, new tab, new window, horizontal/vertical split, or left/right tab or split
   newInstanceBehavior: 'replaceTab' | 'newTab' | 'newLeftTab' | 'newLeftSplit' |
     'newRightTab' | 'newRightSplit' | 'newHorizontalSplit' | 'newVerticalSplit' | 'newWindow';
 
-  // 在现有终端附近创建新实例
+  // Create new instances near existing terminals
   createInstanceNearExistingOnes: boolean;
 
-  // 聚焦新实例：创建新终端时是否自动切换到该标签页
+  // Focus new instances: whether to automatically switch to the tab when creating a new terminal
   focusNewInstance: boolean;
 
-  // 锁定新实例：新建终端标签页是否默认锁定
+  // Lock new instances: whether newly created terminal tabs are locked by default
   lockNewInstance: boolean;
 
-  // 终端外观设置
+  // Terminal appearance settings
   fontSize: number;
   fontFamily: string;
   cursorStyle: 'block' | 'underline' | 'bar';
   cursorBlink: boolean;
 
-  // 主题设置
-  useObsidianTheme: boolean;      // 是否使用 Obsidian 主题颜色
-  backgroundColor?: string;        // 自定义背景色
-  foregroundColor?: string;        // 自定义前景色
+  // Theme settings
+  useObsidianTheme: boolean;      // Whether to use Obsidian theme colors
+  backgroundColor?: string;        // Custom background color
+  foregroundColor?: string;        // Custom foreground color
 
-  // 背景图片设置
-  backgroundImage?: string;        // 背景图片 URL
-  backgroundImageOpacity?: number; // 背景图片透明度 (0-1.0)
-  backgroundImageSize?: 'cover' | 'contain' | 'auto'; // 背景图片大小
-  backgroundImagePosition?: string; // 背景图片位置
+  // Background image settings
+  backgroundImage?: string;        // Background image URL
+  backgroundImageOpacity?: number; // Background image opacity (0-1.0)
+  backgroundImageSize?: 'cover' | 'contain' | 'auto'; // Background image size
+  backgroundImagePosition?: string; // Background image position
   
-  // 毛玻璃效果
-  enableBlur?: boolean;            // 是否启用毛玻璃效果
-  blurAmount?: number;             // 毛玻璃模糊程度 (0-20px)
+  // Frosted glass effect
+  enableBlur?: boolean;            // Whether to enable the frosted glass effect
+  blurAmount?: number;             // Frosted glass blur amount (0-20px)
 
-  // 文本透明度
-  textOpacity?: number;            // 文本透明度 (0-1.0)
+  // Text opacity
+  textOpacity?: number;            // Text opacity (0-1.0)
 
-  // 渲染器类型：Canvas（推荐）、WebGL（高性能）
-  // 注意：DOM 渲染器已过时，存在光标定位等问题，不再提供
+  // Renderer type: Canvas (recommended), WebGL (high performance)
+  // Note: The DOM renderer is deprecated and is no longer provided due to issues such as cursor positioning
   preferredRenderer: 'canvas' | 'webgl';
 
-  // 滚动缓冲区大小（行数）
+  // Scrollback buffer size (in lines)
   scrollback: number;
 
 
-  // 功能可见性设置
+  // Feature visibility settings
   visibility: VisibilityConfig;
 
-  // 服务器连接设置
+  // Server connection settings
   serverConnection: ServerConnectionSettings;
 
-  // 预设脚本
+  // Preset scripts
   presetScripts: PresetScript[];
 
-  // 调试设置
+  // Debug settings
   enableDebugLog: boolean;
 }
 
 /**
- * 工作流动作类型
+ * Workflow action type
  */
 export type PresetWorkflowActionType = 'terminal-command' | 'obsidian-command' | 'open-external';
 
 /**
- * 工作流动作定义
+ * Workflow action definition
  */
 export interface PresetWorkflowAction {
   id: string;
@@ -121,16 +121,16 @@ export interface PresetWorkflowAction {
 }
 
 /**
- * 预设工作流定义
+ * Preset workflow definition
  */
 export interface PresetScript {
   id: string;
-  /** 工作流市场模板来源 ID（仅市场导入项存在） */
+  /** Source ID of the workflow marketplace template (present only for marketplace imports) */
   sourceTemplateId?: string;
   name: string;
   icon: string;
   /**
-   * @deprecated 请使用 actions。该字段仅用于旧配置迁移。
+   * @deprecated Use actions instead. This field is kept only for legacy configuration migration.
    */
   command: string;
   actions: PresetWorkflowAction[];
@@ -141,7 +141,7 @@ export interface PresetScript {
 }
 
 /**
- * 服务器连接设置
+ * Server connection settings
  */
 export interface ServerConnectionSettings {
   downloadAcceleratorUrl: string;
@@ -149,7 +149,7 @@ export interface ServerConnectionSettings {
 }
 
 /**
- * 默认服务器连接设置
+ * Default server connection settings
  */
 export const DEFAULT_SERVER_CONNECTION_SETTINGS: ServerConnectionSettings = {
   downloadAcceleratorUrl: '',
@@ -157,7 +157,7 @@ export const DEFAULT_SERVER_CONNECTION_SETTINGS: ServerConnectionSettings = {
 };
 
 /**
- * 默认预设脚本
+ * Default preset scripts
  */
 export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
   {
@@ -214,7 +214,7 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
 ];
 
 /**
- * 默认平台 Shell 配置
+ * Default platform shell configuration
  */
 export const DEFAULT_PLATFORM_SHELLS: PlatformShellConfig = {
   windows: 'cmd',
@@ -223,7 +223,7 @@ export const DEFAULT_PLATFORM_SHELLS: PlatformShellConfig = {
 };
 
 /**
- * 默认平台自定义 Shell 路径
+ * Default platform custom shell paths
  */
 export const DEFAULT_PLATFORM_CUSTOM_SHELL_PATHS: PlatformCustomShellPaths = {
   windows: '',
@@ -232,7 +232,7 @@ export const DEFAULT_PLATFORM_CUSTOM_SHELL_PATHS: PlatformCustomShellPaths = {
 };
 
 /**
- * 获取当前平台的 Shell 类型
+ * Get the shell type for the current platform
  */
 export function getCurrentPlatformShell(settings: TerminalSettings): ShellType {
   const platform = process.platform;
@@ -246,7 +246,7 @@ export function getCurrentPlatformShell(settings: TerminalSettings): ShellType {
 }
 
 /**
- * 设置当前平台的 Shell 类型
+ * Set the shell type for the current platform
  */
 export function setCurrentPlatformShell(settings: TerminalSettings, shellType: ShellType): void {
   const platform = process.platform;
@@ -260,7 +260,7 @@ export function setCurrentPlatformShell(settings: TerminalSettings, shellType: S
 }
 
 /**
- * 获取当前平台的自定义 Shell 路径
+ * Get the custom shell path for the current platform
  */
 export function getCurrentPlatformCustomShellPath(settings: TerminalSettings): string {
   const platform = process.platform;
@@ -274,7 +274,7 @@ export function getCurrentPlatformCustomShellPath(settings: TerminalSettings): s
 }
 
 /**
- * 设置当前平台的自定义 Shell 路径
+ * Set the custom shell path for the current platform
  */
 export function setCurrentPlatformCustomShellPath(
   settings: TerminalSettings,
@@ -291,7 +291,7 @@ export function setCurrentPlatformCustomShellPath(
 }
 
 /**
- * 默认终端设置
+ * Default terminal settings
  */
 export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   platformShells: { ...DEFAULT_PLATFORM_SHELLS },
@@ -328,6 +328,6 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
 };
 
 /**
- * 默认设置（别名，用于兼容）
+ * Default settings (alias for compatibility)
  */
 export const DEFAULT_SETTINGS = DEFAULT_TERMINAL_SETTINGS;

@@ -1,5 +1,5 @@
 /**
- * 功能可见性管理模块导出
+ * Feature visibility management module exports
  */
 
 export { FeatureVisibilityManager } from './featureVisibilityManager';

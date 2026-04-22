@@ -14,29 +14,29 @@ import { createTermyLogoSvg, createTermyLogoSvgMarkup, TERMY_RIBBON_ICON_ID } fr
 import { FeatureVisibilityManager } from './services/visibility';
 import { shell } from 'electron';
 
-// 导入终端样式
+// Import terminal styles
 
 /**
- * Obsidian Terminal 插件主类
+ * Main class for the Obsidian Terminal plugin
  */
 export default class TerminalPlugin extends Plugin {
   settings: TerminalSettings;
   featureVisibilityManager: FeatureVisibilityManager;
   
-  // 延迟初始化的服务
+  // Lazily initialized services
   private _serverManager: ServerManager | null = null;
   private _terminalService: TerminalService | null = null;
   
-  // 状态栏元素
+  // Status bar elements
   private _statusBarItem: HTMLElement | null = null;
   private _presetScriptsMenuEl: HTMLElement | null = null;
   private _presetScriptsMenuCleanup: (() => void) | null = null;
 
-  // 已注册的预设脚本命令
+  // Registered preset script commands
   private registeredPresetScriptCommandIds: Set<string> = new Set();
 
   /**
-   * 获取服务器管理器（延迟初始化）
+   * Get the server manager (lazy initialization)
    */
   async getServerManager(): Promise<ServerManager> {
     if (!this._serverManager) {
@@ -63,7 +63,7 @@ export default class TerminalPlugin extends Plugin {
   }
 
   /**
-   * 获取终端服务（延迟初始化）
+   * Get the terminal service (lazy initialization)
    */
   async getTerminalService(): Promise<TerminalService> {
     if (!this._terminalService) {
@@ -84,41 +84,41 @@ export default class TerminalPlugin extends Plugin {
   }
 
   /**
-   * 插件加载时调用
+   * Called when the plugin loads
    */
   async onload() {
-    // 初始化 i18n 服务
+    // Initialize the i18n service
     i18n.initialize();
     
     debugLog(t('plugin.loadingMessage'));
 
-    // 加载设置
+    // Load settings
     await this.loadSettings();
 
-    // 设置调试模式
+    // Set debug mode
     const { setDebugMode } = await import('./utils/logger');
     setDebugMode(this.settings.enableDebugLog);
 
-    // 初始化功能可见性管理器
+    // Initialize the feature visibility manager
     this.featureVisibilityManager = new FeatureVisibilityManager(this);
     this.registerCustomIcons();
 
-    // 注册功能可见性配置
+    // Register feature visibility configuration
     this.registerFeatureVisibility();
 
-    // 注册终端视图
+    // Register the terminal view
     this.registerView(
       TERMINAL_VIEW_TYPE,
       (leaf: WorkspaceLeaf) => {
-        // 创建占位视图，实际初始化在用户打开时进行
+        // Create a placeholder view; the actual initialization happens when the user opens it
         return new TerminalViewPlaceholder(leaf, this);
       }
     );
 
-    // 注册所有命令
+    // Register all commands
     this.registerCommands();
 
-    // UI 初始化尽量延后到布局就绪
+    // Delay UI initialization until the layout is ready whenever possible
     this.app.workspace.onLayoutReady(() => {
       this.initStatusBar();
       if (this.settings.visibility.showInNewTab) {
@@ -126,14 +126,14 @@ export default class TerminalPlugin extends Plugin {
       }
     });
 
-    // 添加设置标签页
+    // Add the settings tab
     this.addSettingTab(new TerminalSettingTab(this.app, this));
 
     debugLog(t('plugin.loadedMessage'));
   }
 
   /**
-   * 插件卸载时调用
+   * Called when the plugin unloads
    */
   onunload(): void {
     void this.handleUnload();
@@ -142,12 +142,12 @@ export default class TerminalPlugin extends Plugin {
   private async handleUnload(): Promise<void> {
     debugLog(t('plugin.unloadingMessage'));
 
-    // 清理功能可见性管理器
+    // Clean up the feature visibility manager
     if (this.featureVisibilityManager) {
       this.featureVisibilityManager.cleanup();
     }
 
-    // 清理终端服务（会自动清理所有终端实例）
+    // Clean up the terminal service (this automatically cleans up all terminal instances)
     if (this._terminalService) {
       try {
         debugLog('[TerminalPlugin] Shutting down TerminalService...');
@@ -158,7 +158,7 @@ export default class TerminalPlugin extends Plugin {
       }
     }
 
-    // 停止服务器
+    // Stop the server
     if (this._serverManager) {
       try {
         debugLog('[TerminalPlugin] Shutting down ServerManager...');
@@ -173,7 +173,7 @@ export default class TerminalPlugin extends Plugin {
   }
 
   /**
-   * 加载设置
+   * Load settings
    */
   async loadSettings() {
     const loaded = await this.loadData();
@@ -183,51 +183,51 @@ export default class TerminalPlugin extends Plugin {
     this.settings = {
       ...DEFAULT_SETTINGS,
       ...loaded,
-      // 确保 visibility 配置存在
+      // Ensure the visibility config exists
       visibility: {
         ...DEFAULT_SETTINGS.visibility,
         ...loaded?.visibility,
       },
-      // 确保 serverConnection 配置存在
+      // Ensure the serverConnection config exists
       serverConnection: {
         ...DEFAULT_SETTINGS.serverConnection,
         ...loaded?.serverConnection,
       },
-      // 确保 presetScripts 配置存在
+      // Ensure the presetScripts config exists
       presetScripts,
     };
   }
 
   /**
-   * 保存设置
+   * Save settings
    */
   async saveSettings() {
     this.settings.presetScripts = (this.settings.presetScripts ?? [])
       .map((script) => this.normalizePresetScript(script));
     await this.saveData(this.settings);
     
-    // 更新调试模式
+    // Update debug mode
     const { setDebugMode } = await import('./utils/logger');
     setDebugMode(this.settings.enableDebugLog);
     
-    // 更新 ServerManager 配置
+    // Update the ServerManager configuration
     if (this._serverManager) {
       this._serverManager.updateDebugMode(this.settings.enableDebugLog);
       this._serverManager.updateOfflineMode(this.settings.serverConnection.offlineMode);
       this._serverManager.updateDownloadAcceleratorUrl(this.settings.serverConnection.downloadAcceleratorUrl);
     }
 
-    // 更新终端服务设置
+    // Update terminal service settings
     if (this._terminalService) {
       this._terminalService.updateSettings(this.settings);
     }
 
-    // 注册新增的预设脚本命令
+    // Register newly added preset script commands
     this.registerPresetScriptCommands();
   }
 
   /**
-   * 注册功能可见性配置
+   * Register feature visibility configuration
    */
   private registerFeatureVisibility(): void {
     this.featureVisibilityManager.registerFeature({
@@ -241,9 +241,9 @@ export default class TerminalPlugin extends Plugin {
         },
       },
       onVisibilityChange: () => {
-        // 当终端可见性设置变更时，更新新标签页中的终端按钮
+        // Update the terminal button in new tabs when terminal visibility settings change
         this.injectTerminalButtonToEmptyViews();
-        // 更新状态栏显示
+        // Update the status bar display
         this.updateStatusBar();
       },
     });
@@ -254,15 +254,15 @@ export default class TerminalPlugin extends Plugin {
   }
 
   /**
-   * 更新功能可见性
-   * 在设置变更后调用
+   * Update feature visibility
+   * Called after settings change
    */
   updateFeatureVisibility(): void {
     this.featureVisibilityManager.updateAllVisibility();
   }
 
   /**
-   * 初始化状态栏
+   * Initialize the status bar
    */
   private initStatusBar(): void {
     this._statusBarItem = this.addStatusBarItem();
@@ -270,7 +270,7 @@ export default class TerminalPlugin extends Plugin {
     this._statusBarItem.addClass('is-clickable');
     this._statusBarItem.setAttr('aria-label', t('ribbon.terminalTooltip'));
 
-    // 创建 SVG icon + 文字
+    // Create the SVG icon and label
     const iconEl = createTermyLogoSvg(18);
     iconEl.addClass('terminal-status-bar-icon');
     const labelEl = document.createElement('span');
@@ -278,25 +278,25 @@ export default class TerminalPlugin extends Plugin {
     labelEl.textContent = 'Termy';
     this._statusBarItem.append(iconEl, labelEl);
     
-    // 添加点击事件
+    // Add click handler
     this._statusBarItem.addEventListener('click', (event: MouseEvent) => {
       event.preventDefault();
       event.stopPropagation();
       this.togglePresetScriptsMenu(event);
     });
     
-    // 右键菜单：预设脚本
+    // Context menu: preset scripts
     this._statusBarItem.addEventListener('contextmenu', (event: MouseEvent) => {
       event.preventDefault();
       this.togglePresetScriptsMenu(event);
     });
     
-    // 根据设置决定是否显示
+    // Show or hide based on settings
     this.updateStatusBar();
   }
 
   /**
-   * 更新状态栏显示状态
+   * Update the status bar visibility
    */
   private updateStatusBar(): void {
     if (!this._statusBarItem) return;
@@ -308,14 +308,14 @@ export default class TerminalPlugin extends Plugin {
   }
 
   /**
-   * 激活终端视图
+   * Activate the terminal view
    */
   async activateTerminalView(targetLeaf?: WorkspaceLeaf): Promise<void> {
     const { workspace } = this.app;
     
     const leaf = targetLeaf ?? this.getLeafForNewTerminal();
 
-    // 如果启用锁定新实例，设置标签页为锁定状态
+    // If locking new instances is enabled, pin the tab
     if (this.settings.lockNewInstance) {
       leaf.setPinned(true);
     }
@@ -325,22 +325,22 @@ export default class TerminalPlugin extends Plugin {
       active: this.settings.focusNewInstance,
     });
 
-    // 如果启用聚焦新实例，切换到新标签页
+    // If focusing new instances is enabled, switch to the new tab
     if (this.settings.focusNewInstance) {
       workspace.setActiveLeaf(leaf, { focus: true });
     }
   }
 
   /**
-   * 注册所有命令
+   * Register all commands
    */
   private registerCommands(): void {
-    // 打开终端
+    // Open terminal
     this.addCommand({
       id: 'open-terminal',
       name: t('commands.openTerminal'),
       checkCallback: (checking: boolean) => {
-        // 检查可见性配置
+        // Check visibility settings
         if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
           return false;
         }
@@ -351,7 +351,7 @@ export default class TerminalPlugin extends Plugin {
       }
     });
 
-    // 清屏
+    // Clear screen
     this.addCommand({
       id: 'terminal-clear',
       name: t('commands.terminalClear'),
@@ -371,7 +371,7 @@ export default class TerminalPlugin extends Plugin {
       }
     });
 
-    // 复制
+    // Copy
     this.addCommand({
       id: 'terminal-copy',
       name: t('commands.terminalCopy'),
@@ -394,7 +394,7 @@ export default class TerminalPlugin extends Plugin {
       }
     });
 
-    // 粘贴
+    // Paste
     this.addCommand({
       id: 'terminal-paste',
       name: t('commands.terminalPaste'),
@@ -420,7 +420,7 @@ export default class TerminalPlugin extends Plugin {
       }
     });
 
-    // 增大字体
+    // Increase font size
     this.addCommand({
       id: 'terminal-font-increase',
       name: t('commands.terminalFontIncrease'),
@@ -440,7 +440,7 @@ export default class TerminalPlugin extends Plugin {
       }
     });
 
-    // 减小字体
+    // Decrease font size
     this.addCommand({
       id: 'terminal-font-decrease',
       name: t('commands.terminalFontDecrease'),
@@ -460,7 +460,7 @@ export default class TerminalPlugin extends Plugin {
       }
     });
 
-    // 重置字体
+    // Reset font size
     this.addCommand({
       id: 'terminal-font-reset',
       name: t('commands.terminalFontReset'),
@@ -480,7 +480,7 @@ export default class TerminalPlugin extends Plugin {
       }
     });
 
-    // 水平分屏
+    // Split horizontally
     this.addCommand({
       id: 'terminal-split-horizontal',
       name: t('commands.terminalSplitHorizontal'),
@@ -499,7 +499,7 @@ export default class TerminalPlugin extends Plugin {
       }
     });
 
-    // 垂直分屏
+    // Split vertically
     this.addCommand({
       id: 'terminal-split-vertical',
       name: t('commands.terminalSplitVertical'),
@@ -518,7 +518,7 @@ export default class TerminalPlugin extends Plugin {
       }
     });
 
-    // 清空缓冲区
+    // Clear buffer
     this.addCommand({
       id: 'terminal-clear-buffer',
       name: t('commands.terminalClearBuffer'),
@@ -538,7 +538,7 @@ export default class TerminalPlugin extends Plugin {
       }
     });
 
-    // 注册预设脚本命令
+    // Register preset script commands
     this.registerPresetScriptCommands();
   }
 
@@ -575,17 +575,17 @@ export default class TerminalPlugin extends Plugin {
   }
 
   /**
-   * 获取当前活动的终端视图
+   * Get the currently active terminal view
    */
   private getActiveTerminalView(): TerminalView | null {
     const activeView = this.app.workspace.getActiveViewOfType(TerminalView);
     
-    // 优先返回当前活动的终端视图
+    // Prefer the currently active terminal view
     if (activeView) {
       return activeView;
     }
     
-    // 否则返回第一个终端视图
+    // Otherwise return the first terminal view
     const leaves = this.app.workspace.getLeavesOfType(TERMINAL_VIEW_TYPE);
     const view = leaves.map((item) => item.view).find((item) => this.isTerminalView(item));
     return view ?? null;
@@ -596,8 +596,8 @@ export default class TerminalPlugin extends Plugin {
   }
 
   /**
-   * 注册新标签页中的"打开终端"选项
-   * 通过监听 layout-change 事件，在空标签页中注入自定义按钮
+   * Register the "Open terminal" action in new tabs
+   * Inject a custom button into empty tabs by listening to the layout-change event
    */
   private registerNewTabTerminalAction(): void {
     this.registerEvent(
@@ -606,44 +606,44 @@ export default class TerminalPlugin extends Plugin {
       })
     );
 
-    // 初始注入
+    // Initial injection
     this.injectTerminalButtonToEmptyViews();
   }
 
   /**
-   * 向所有空标签页注入"打开终端"按钮
-   * 根据 showInNewTab 设置决定是否注入或移除按钮
+   * Inject the "Open terminal" button into all empty tabs
+   * Inject or remove the button based on the showInNewTab setting
    */
   private injectTerminalButtonToEmptyViews(): void {
     const shouldShow = this.settings.visibility.enabled && 
                        this.settings.visibility.showInNewTab;
     
-    // 查找所有空视图
+    // Find all empty views
     const emptyViews = document.querySelectorAll('.workspace-leaf-content[data-type="empty"] .view-content');
     
     emptyViews.forEach((emptyView) => {
       const existingButton = emptyView.querySelector('.terminal-plugin-terminal-action');
       
       if (!shouldShow) {
-        // 如果不应该显示，移除已存在的按钮
+        // If it should not be shown, remove the existing button
         if (existingButton) {
           existingButton.remove();
         }
         return;
       }
       
-      // 检查是否已经注入过
+      // Check whether it has already been injected
       if (existingButton) {
         return;
       }
 
-      // 查找操作容器
+      // Find the actions container
       const actionsContainer = emptyView.querySelector('.empty-state-action-list');
       if (!actionsContainer) {
         return;
       }
 
-      // 创建"打开终端"按钮
+      // Create the "Open terminal" button
       const terminalAction = document.createElement('div');
       terminalAction.className = 'empty-state-action terminal-plugin-terminal-action';
       terminalAction.textContent = t('commands.openTerminal');
@@ -652,19 +652,19 @@ export default class TerminalPlugin extends Plugin {
         void this.activateTerminalView(leaf ?? undefined);
       });
 
-      // 添加到操作列表
+      // Add it to the actions list
       actionsContainer.appendChild(terminalAction);
     });
   }
 
   /**
-   * 获取用于新终端的 leaf
+   * Get the leaf to use for a new terminal
    */
   private getLeafForNewTerminal(): WorkspaceLeaf {
     const { workspace } = this.app;
     const { leftSplit, rightSplit } = workspace;
 
-    // 如果启用"在现有终端附近创建"
+    // If "create near existing terminals" is enabled
     if (this.settings.createInstanceNearExistingOnes) {
       const existingLeaves = workspace.getLeavesOfType(TERMINAL_VIEW_TYPE);
       const existingLeaf = existingLeaves[existingLeaves.length - 1];
@@ -672,74 +672,74 @@ export default class TerminalPlugin extends Plugin {
       if (existingLeaf) {
         const root = existingLeaf.getRoot();
 
-        // 如果在左侧栏，继续在左侧栏创建
+        // If it is in the left sidebar, keep creating in the left sidebar
         if (root === leftSplit) {
           const leftLeaf = workspace.getLeftLeaf(false);
           if (leftLeaf) return leftLeaf;
         }
 
-        // 如果在右侧栏，继续在右侧栏创建
+        // If it is in the right sidebar, keep creating in the right sidebar
         if (root === rightSplit) {
           const rightLeaf = workspace.getRightLeaf(false);
           if (rightLeaf) return rightLeaf;
         }
 
-        // 如果在主区域，设置为活动 leaf 并创建新标签页
+        // If it is in the main area, make it the active leaf and create a new tab
         workspace.setActiveLeaf(existingLeaf);
         return workspace.getLeaf('tab');
       }
     }
 
-    // 根据 newInstanceBehavior 创建新的 leaf
+    // Create a new leaf based on newInstanceBehavior
     const behavior = this.settings.newInstanceBehavior;
 
     switch (behavior) {
       case 'replaceTab':
-        // 替换当前标签页
+        // Replace the current tab
         return workspace.getLeaf();
 
       case 'newTab':
-        // 新标签页：在当前标签组中创建新标签页
+        // New tab: create a new tab in the current tab group
         return workspace.getLeaf('tab');
 
       case 'newLeftTab': {
-        // 左侧新标签页
+        // New tab on the left
         const leftLeaf = workspace.getLeftLeaf(false);
         return leftLeaf ?? workspace.getLeaf('split');
       }
 
       case 'newLeftSplit': {
-        // 左侧新分屏
+        // New split on the left
         const leftLeaf = workspace.getLeftLeaf(true);
         return leftLeaf ?? workspace.getLeaf('split');
       }
 
       case 'newRightTab': {
-        // 右侧新标签页
+        // New tab on the right
         const rightLeaf = workspace.getRightLeaf(false);
         return rightLeaf ?? workspace.getLeaf('split');
       }
 
       case 'newRightSplit': {
-        // 右侧新分屏
+        // New split on the right
         const rightLeaf = workspace.getRightLeaf(true);
         return rightLeaf ?? workspace.getLeaf('split');
       }
 
       case 'newHorizontalSplit':
-        // 水平分屏：在右侧创建分屏
+        // Horizontal split: create a split on the right
         return workspace.getLeaf('split', 'horizontal');
 
       case 'newVerticalSplit':
-        // 垂直分屏：在下方创建分屏
+        // Vertical split: create a split below
         return workspace.getLeaf('split', 'vertical');
 
       case 'newWindow':
-        // 新窗口：在新窗口中打开
+        // New window: open in a new window
         return workspace.getLeaf('window');
 
       default:
-        // 默认：水平分屏
+        // Default: horizontal split
         return workspace.getLeaf('split', 'vertical');
     }
   }
@@ -1113,9 +1113,9 @@ export default class TerminalPlugin extends Plugin {
   }
 
   /**
-   * 获取插件目录的绝对路径
+   * Get the absolute path to the plugin directory
    * 
-   * @returns 插件目录的绝对路径
+   * @returns The absolute path to the plugin directory
    */
   private getPluginDir(): string {
     const adapter = this.app.vault.adapter;
@@ -1141,8 +1141,8 @@ export default class TerminalPlugin extends Plugin {
 }
 
 /**
- * 终端视图占位符
- * 用于延迟加载终端视图，避免启动时加载 xterm.js
+ * Terminal view placeholder
+ * Used to lazy-load the terminal view and avoid loading xterm.js at startup
  */
 class TerminalViewPlaceholder extends TerminalView {
   private plugin: TerminalPlugin;
@@ -1150,7 +1150,7 @@ class TerminalViewPlaceholder extends TerminalView {
   private initializing = false;
 
   constructor(leaf: WorkspaceLeaf, plugin: TerminalPlugin) {
-    // 延迟注入 TerminalService，避免启动时加载 xterm.js
+    // Inject TerminalService lazily to avoid loading xterm.js at startup
     super(leaf, null);
     this.plugin = plugin;
   }
@@ -1159,7 +1159,7 @@ class TerminalViewPlaceholder extends TerminalView {
     if (this.initialized || this.initializing) return;
     this.initializing = true;
 
-    // 显示加载提示
+    // Show the loading message
     this.contentEl.empty();
     this.contentEl.createEl('div', {
       text: t('terminal.loading'),
@@ -1167,12 +1167,12 @@ class TerminalViewPlaceholder extends TerminalView {
     });
 
     try {
-      // 获取真实的 TerminalService
+      // Get the real TerminalService
       const terminalService = await this.plugin.getTerminalService();
 
       this.setTerminalService(terminalService);
 
-      // 清空占位内容并初始化终端视图
+      // Clear the placeholder content and initialize the terminal view
       this.contentEl.empty();
       await super.onOpen();
       this.initialized = true;

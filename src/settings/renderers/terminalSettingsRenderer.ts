@@ -1,6 +1,6 @@
 /**
- * 终端设置渲染器
- * 负责渲染终端相关的所有设置
+ * Terminal settings renderer
+ * Responsible for rendering all terminal-related settings
  */
 
 import type { App, ColorComponent, TextComponent } from 'obsidian';
@@ -120,16 +120,16 @@ const confirmAction = (app: App, message: string): Promise<boolean> =>
   });
 
 /**
- * 验证 Shell 路径是否有效（仅桌面端可用）
- * @param path Shell 可执行文件路径
- * @returns 路径是否存在且有效
+ * Validate whether the Shell path is valid (desktop only)
+ * @param path Path to the Shell executable
+ * @returns Whether the path exists and is valid
  */
 async function validateShellPath(path: string): Promise<boolean> {
   if (!path || path.trim() === '') return false;
-  // 移动端不支持文件系统检查
+  // Mobile does not support filesystem checks
   if (Platform.isMobile) return true;
   try {
-    // 动态导入 fs 模块，避免移动端加载失败
+    // Dynamically import the fs module to avoid mobile load failures
     const { existsSync } = await import('fs');
     return existsSync(path);
   } catch {
@@ -138,8 +138,8 @@ async function validateShellPath(path: string): Promise<boolean> {
 }
 
 /**
- * 终端设置渲染器
- * 处理 Shell 程序、实例行为、主题和外观设置的渲染
+ * Terminal settings renderer
+ * Handles rendering for Shell program, instance behavior, theme, and appearance settings
  */
 export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   private themePreviewEl: HTMLElement | null = null;
@@ -147,40 +147,40 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   private rendererStatusEl: HTMLElement | null = null;
 
   /**
-   * 渲染终端设置
-   * @param context 渲染器上下文
+   * Render terminal settings
+   * @param context Renderer context
    */
   render(context: RendererContext): void {
     this.context = context;
     const containerEl = context.containerEl;
 
-    // Shell 程序设置卡片
+    // Shell program settings card
     this.renderShellSettings(containerEl);
 
-    // 实例行为设置卡片
+    // Instance behavior settings card
     this.renderInstanceBehaviorSettings(containerEl);
 
-    // 预设脚本设置卡片
+    // Preset scripts settings card
     this.renderPresetScriptsSettings(containerEl);
 
-    // 主题设置卡片
+    // Theme settings card
     this.renderThemeSettings(containerEl);
 
-    // 外观设置卡片
+    // Appearance settings card
     this.renderAppearanceSettings(containerEl);
 
-    // 行为设置卡片
+    // Behavior settings card
     this.renderBehaviorSettings(containerEl);
 
-    // 服务器连接设置卡片
+    // Server connection settings card
     this.renderServerConnectionSettings(containerEl);
 
-    // 功能显示设置卡片
+    // Feature visibility settings card
     this.renderVisibilitySettings(containerEl);
   }
 
   /**
-   * 渲染 Shell 程序设置
+   * Render Shell program settings
    */
   private renderShellSettings(containerEl: HTMLElement): void {
     const shellCard = containerEl.createDiv({ cls: 'settings-card' });
@@ -189,14 +189,14 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       .setName(t('settingsDetails.terminal.shellSettings'))
       .setHeading();
 
-    // 默认 Shell 程序选择
+    // Default Shell program selection
     const currentShell = getCurrentPlatformShell(this.context.plugin.settings);
     
     const shellDropdownSetting = new Setting(shellCard)
       .setName(t('settingsDetails.terminal.defaultShell'))
       .setDesc(t('settingsDetails.terminal.defaultShellDesc'))
       .addDropdown(dropdown => {
-        // 根据平台显示不同的选项
+        // Show different options based on the platform
         if (process.platform === 'win32') {
           dropdown.addOption('cmd', t('shellOptions.cmd'));
           dropdown.addOption('powershell', t('shellOptions.powershell'));
@@ -214,7 +214,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           setCurrentPlatformShell(this.context.plugin.settings, value as ShellType);
           void this.saveSettings();
           
-          // 使用局部更新替代全量刷新
+          // Use a partial update instead of a full refresh
           this.toggleConditionalSection(
             shellCard,
             'custom-shell-path',
@@ -225,7 +225,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         });
       });
 
-    // 自定义程序路径（仅在选择 custom 时显示）- 初始渲染
+    // Custom program path (shown only when custom is selected) - initial render
     this.toggleConditionalSection(
       shellCard,
       'custom-shell-path',
@@ -234,7 +234,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       shellDropdownSetting.settingEl
     );
 
-    // 默认启动参数
+    // Default launch arguments
     new Setting(shellCard)
       .setName(t('settingsDetails.terminal.defaultArgs'))
       .setDesc(t('settingsDetails.terminal.defaultArgsDesc'))
@@ -242,14 +242,14 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         .setPlaceholder(t('settingsDetails.terminal.defaultArgsPlaceholder'))
         .setValue(this.context.plugin.settings.shellArgs.join(' '))
         .onChange((value) => {
-          // 将字符串分割为数组，过滤空字符串
+          // Split the string into an array and filter out empty entries
           this.context.plugin.settings.shellArgs = value
             .split(' ')
             .filter(arg => arg.trim().length > 0);
           void this.saveSettings();
         }));
 
-    // 自动进入项目目录
+    // Automatically enter the vault directory
     new Setting(shellCard)
       .setName(t('settingsDetails.terminal.autoEnterVault'))
       .setDesc(t('settingsDetails.terminal.autoEnterVaultDesc'))
@@ -262,8 +262,8 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * 渲染自定义 Shell 路径设置
-   * 提取为独立方法，用于 toggleConditionalSection 调用
+   * Render the custom Shell path setting
+   * Extracted into a separate method for toggleConditionalSection
    */
   private renderCustomShellPathSetting(container: HTMLElement): void {
     const currentCustomPath = getCurrentPlatformCustomShellPath(this.context.plugin.settings);
@@ -279,11 +279,11 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
             setCurrentPlatformCustomShellPath(this.context.plugin.settings, value);
             void this.saveSettings();
             
-            // 验证路径
+            // Validate the path
             void this.validateCustomShellPath(container, value);
           });
         
-        // 初始验证
+        // Initial validation
         setTimeout(() => {
           void this.validateCustomShellPath(container, currentCustomPath);
         }, 0);
@@ -293,7 +293,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * 渲染实例行为设置
+   * Render instance behavior settings
    */
   private renderInstanceBehaviorSettings(containerEl: HTMLElement): void {
     const instanceCard = containerEl.createDiv({ cls: 'settings-card' });
@@ -302,7 +302,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       .setName(t('settingsDetails.terminal.instanceBehavior'))
       .setHeading();
 
-    // 新实例行为
+    // New instance behavior
     new Setting(instanceCard)
       .setName(t('settingsDetails.terminal.newInstanceLayout'))
       .setDesc(t('settingsDetails.terminal.newInstanceLayoutDesc'))
@@ -325,7 +325,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         });
       });
 
-    // 在现有终端附近创建
+    // Create near an existing terminal
     new Setting(instanceCard)
       .setName(t('settingsDetails.terminal.createNearExisting'))
       .setDesc(t('settingsDetails.terminal.createNearExistingDesc'))
@@ -336,7 +336,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           void this.saveSettings();
         }));
 
-    // 聚焦新实例
+    // Focus the new instance
     new Setting(instanceCard)
       .setName(t('settingsDetails.terminal.focusNewInstance'))
       .setDesc(t('settingsDetails.terminal.focusNewInstanceDesc'))
@@ -347,7 +347,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           void this.saveSettings();
         }));
 
-    // 锁定新实例
+    // Lock the new instance
     new Setting(instanceCard)
       .setName(t('settingsDetails.terminal.lockNewInstance'))
       .setDesc(t('settingsDetails.terminal.lockNewInstanceDesc'))
@@ -360,7 +360,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * 渲染主题设置
+   * Render theme settings
    */
   private renderThemeSettings(containerEl: HTMLElement): void {
     const themeCard = containerEl.createDiv({ cls: 'settings-card' });
@@ -372,7 +372,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     this.renderThemePreview(themeCard);
     this.renderRendererStatus(themeCard);
 
-    // 使用 Obsidian 主题
+    // Use the Obsidian theme
     const useObsidianThemeSetting = new Setting(themeCard)
       .setName(t('settingsDetails.terminal.useObsidianTheme'))
       .setDesc(t('settingsDetails.terminal.useObsidianThemeDesc'))
@@ -390,7 +390,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * 渲染预设脚本设置
+   * Render preset scripts settings
    */
   private renderPresetScriptsSettings(containerEl: HTMLElement): void {
     const scriptCard = containerEl.createDiv({ cls: 'settings-card' });
@@ -601,14 +601,14 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * 渲染自定义颜色设置内容
-   * 提取为独立方法，用于 toggleConditionalSection 调用
+   * Render custom color settings content
+   * Extracted into a separate method for toggleConditionalSection
    */
   private renderCustomColorSettingsContent(container: HTMLElement): void {
     let backgroundColorPicker: ColorComponent | null = null;
     let foregroundColorPicker: ColorComponent | null = null;
 
-    // 背景色
+    // Background color
     new Setting(container)
       .setName(t('settingsDetails.terminal.backgroundColor'))
       .setDesc(t('settingsDetails.terminal.backgroundColorDesc'))
@@ -634,7 +634,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           });
         }));
 
-    // 前景色
+    // Foreground color
     new Setting(container)
       .setName(t('settingsDetails.terminal.foregroundColor'))
       .setDesc(t('settingsDetails.terminal.foregroundColorDesc'))
@@ -660,12 +660,12 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           });
         }));
 
-    // 背景图片设置（WebGL 模式将自动降级为 Canvas）
+    // Background image settings (WebGL mode will automatically fall back to Canvas)
     this.renderBackgroundImageSettings(container);
   }
 
   /**
-   * 渲染背景图片设置
+   * Render background image settings
    */
   private renderBackgroundImageSettings(container: HTMLElement): void {
     const bgImageSetting = new Setting(container)
@@ -699,7 +699,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           this.updateThemePreview();
         });
       
-      // 失去焦点时使用局部更新
+      // Use a partial update on blur
       text.inputEl.addEventListener('blur', () => {
         void this.updateThemeSetting(() => {
           this.context.plugin.settings.backgroundImage = text.inputEl.value.trim() || undefined;
@@ -727,7 +727,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         }).then(() => {
           backgroundImageInput?.setValue('');
           
-          // 使用局部更新移除背景图片选项
+          // Use a partial update to remove background image options
           this.toggleConditionalSection(
             container,
             'background-image-options',
@@ -740,7 +740,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         });
       }));
 
-    // 背景图片相关选项（仅在有背景图片时显示）- 初始渲染
+    // Background image-related options (shown only when a background image exists) - initial render
     this.toggleConditionalSection(
       container,
       'background-image-options',
@@ -751,11 +751,11 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * 渲染背景图片相关选项内容
-   * 提取为独立方法，用于 toggleConditionalSection 调用
+   * Render background image-related options content
+   * Extracted into a separate method for toggleConditionalSection
    */
   private renderBackgroundImageOptionsContent(container: HTMLElement): void {
-    // 背景图片透明度
+    // Background image opacity
     new Setting(container)
       .setName(t('settingsDetails.terminal.backgroundImageOpacity'))
       .setDesc(t('settingsDetails.terminal.backgroundImageOpacityDesc'))
@@ -769,7 +769,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           });
         }));
 
-    // 背景图片大小
+    // Background image size
     new Setting(container)
       .setName(t('settingsDetails.terminal.backgroundImageSize'))
       .setDesc(t('settingsDetails.terminal.backgroundImageSizeDesc'))
@@ -784,7 +784,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           });
         }));
 
-    // 背景图片位置
+    // Background image position
     new Setting(container)
       .setName(t('settingsDetails.terminal.backgroundImagePosition'))
       .setDesc(t('settingsDetails.terminal.backgroundImagePositionDesc'))
@@ -805,7 +805,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           });
         }));
 
-    // 毛玻璃效果
+    // Frosted glass effect
     const blurEffectSetting = new Setting(container)
       .setName(t('settingsDetails.terminal.blurEffect'))
       .setDesc(t('settingsDetails.terminal.blurEffectDesc'))
@@ -816,7 +816,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
             this.context.plugin.settings.enableBlur = value;
           });
           
-          // 使用局部更新替代全量刷新
+          // Use a partial update instead of a full refresh
           this.toggleConditionalSection(
             container,
             'blur-amount-slider',
@@ -826,7 +826,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           );
         }));
 
-    // 毛玻璃模糊程度（仅在启用毛玻璃效果时显示）- 初始渲染
+    // Frosted glass blur amount (shown only when the effect is enabled) - initial render
     this.toggleConditionalSection(
       container,
       'blur-amount-slider',
@@ -835,7 +835,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       blurEffectSetting.settingEl
     );
 
-    // 文本透明度
+    // Text opacity
     new Setting(container)
       .setName(t('settingsDetails.terminal.textOpacity'))
       .setDesc(t('settingsDetails.terminal.textOpacityDesc'))
@@ -851,8 +851,8 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * 渲染模糊程度滑块
-   * 提取为独立方法，用于 toggleConditionalSection 调用
+   * Render the blur amount slider
+   * Extracted into a separate method for toggleConditionalSection
    */
   private renderBlurAmountSlider(container: HTMLElement): void {
     new Setting(container)
@@ -870,7 +870,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * 渲染外观设置
+   * Render appearance settings
    */
   private renderAppearanceSettings(containerEl: HTMLElement): void {
     const appearanceCard = containerEl.createDiv({ cls: 'settings-card' });
@@ -879,7 +879,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       .setName(t('settingsDetails.terminal.appearanceSettings'))
       .setHeading();
 
-    // 字体大小
+    // Font size
     new Setting(appearanceCard)
       .setName(t('settingsDetails.terminal.fontSize'))
       .setDesc(t('settingsDetails.terminal.fontSizeDesc'))
@@ -892,7 +892,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           void this.saveSettings();
         }));
 
-    // 字体族
+    // Font family
     new Setting(appearanceCard)
       .setName(t('settingsDetails.terminal.fontFamily'))
       .setDesc(t('settingsDetails.terminal.fontFamilyDesc'))
@@ -904,7 +904,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           void this.saveSettings();
         }));
 
-    // 光标样式
+    // Cursor style
     new Setting(appearanceCard)
       .setName(t('settingsDetails.terminal.cursorStyle'))
       .setDesc(t('settingsDetails.terminal.cursorStyleDesc'))
@@ -921,7 +921,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         });
       });
 
-    // 光标闪烁
+    // Cursor blink
     new Setting(appearanceCard)
       .setName(t('settingsDetails.terminal.cursorBlink'))
       .setDesc(t('settingsDetails.terminal.cursorBlinkDesc'))
@@ -932,7 +932,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           void this.saveSettings();
         }));
 
-    // 渲染器类型
+    // Renderer type
     new Setting(appearanceCard)
       .setName(t('settingsDetails.terminal.rendererType'))
       .setDesc(t('settingsDetails.terminal.rendererTypeDesc'))
@@ -951,8 +951,8 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * 更新背景图片设置可见性
-   * 仅在自定义主题设置已渲染时生效
+   * Update background image settings visibility
+   * Only takes effect after custom theme settings have been rendered
    */
   private updateBackgroundImageSettingsVisibility(): void {
     const customColorContainer = this.context.containerEl.querySelector<HTMLElement>(
@@ -1154,7 +1154,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * 渲染行为设置
+   * Render behavior settings
    */
   private renderBehaviorSettings(containerEl: HTMLElement): void {
     const behaviorCard = containerEl.createDiv({ cls: 'settings-card' });
@@ -1163,7 +1163,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       .setName(t('settingsDetails.terminal.behaviorSettings'))
       .setHeading();
 
-    // 滚动缓冲区大小
+    // Scrollback buffer size
     new Setting(behaviorCard)
       .setName(t('settingsDetails.terminal.scrollback'))
       .setDesc(t('settingsDetails.terminal.scrollbackDesc'))
@@ -1172,7 +1172,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         .setPlaceholder('1000')
         .setValue(String(this.context.plugin.settings.scrollback))
         .onChange((value) => {
-          // 只在输入时保存，不验证
+          // Save only while typing, without validation
           const numValue = parseInt(value);
           if (!isNaN(numValue)) {
             this.context.plugin.settings.scrollback = numValue;
@@ -1181,7 +1181,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           }
         });
       
-      // 失去焦点时验证
+      // Validate on blur
       text.inputEl.addEventListener('blur', () => {
         const value = text.inputEl.value;
         const numValue = parseInt(value);
@@ -1202,28 +1202,28 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * 验证自定义 Shell 路径
-   * @param containerEl 容器元素
-   * @param path Shell 路径
+   * Validate the custom Shell path
+   * @param containerEl Container element
+   * @param path Shell path
    */
   private async validateCustomShellPath(containerEl: HTMLElement, path: string): Promise<void> {
-    // 移除之前的验证消息
+    // Remove the previous validation message
     const existingValidation = containerEl.querySelector('.shell-path-validation');
     if (existingValidation) {
       existingValidation.remove();
     }
     
-    // 如果路径为空，不显示验证消息
+    // If the path is empty, do not show a validation message
     if (!path || path.trim() === '') {
       return;
     }
     
-    // 创建验证消息容器
+    // Create the validation message container
     const validationEl = containerEl.createDiv({
       cls: 'shell-path-validation setting-item-description terminal-settings-validation'
     });
     
-    // 验证路径
+    // Validate the path
     const isValid = await validateShellPath(path);
     if (!validationEl.isConnected) return;
 
@@ -1244,7 +1244,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * 渲染功能显示设置
+   * Render feature visibility settings
    */
   private renderVisibilitySettings(containerEl: HTMLElement): void {
     const visibilityCard = containerEl.createDiv({ cls: 'settings-card' });
@@ -1253,7 +1253,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       .setName(t('visibility.visibilitySettings'))
       .setHeading();
 
-    // 在命令面板中显示
+    // Show in the command palette
     new Setting(visibilityCard)
       .setName(t('visibility.showInCommandPalette'))
       .setDesc(t('visibility.showInCommandPaletteDesc'))
@@ -1265,7 +1265,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           this.context.plugin.updateFeatureVisibility();
         }));
 
-    // 在侧边栏显示图标
+    // Show the icon in the ribbon
     new Setting(visibilityCard)
       .setName(t('visibility.showInRibbon'))
       .setDesc(t('visibility.showInRibbonDesc'))
@@ -1277,7 +1277,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           this.context.plugin.updateFeatureVisibility();
         }));
 
-    // 在新标签页显示
+    // Show in the new tab view
     new Setting(visibilityCard)
       .setName(t('visibility.showInNewTab'))
       .setDesc(t('visibility.showInNewTabDesc'))
@@ -1289,7 +1289,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           this.context.plugin.updateFeatureVisibility();
         }));
 
-    // 在状态栏显示
+    // Show in the status bar
     new Setting(visibilityCard)
       .setName(t('visibility.showInStatusBar'))
       .setDesc(t('visibility.showInStatusBarDesc'))
@@ -1301,14 +1301,14 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           this.context.plugin.updateFeatureVisibility();
         }));
 
-    // 调试设置卡片
+    // Debug settings card
     const debugCard = containerEl.createDiv({ cls: 'settings-card' });
 
     new Setting(debugCard)
       .setName(t('settingsDetails.advanced.performanceAndDebug'))
       .setHeading();
 
-    // 启用调试日志
+    // Enable debug logging
     new Setting(debugCard)
       .setName(t('settingsDetails.advanced.debugMode'))
       .setDesc(t('settingsDetails.advanced.debugModeDesc'))
@@ -1325,7 +1325,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * 渲染服务器连接设置
+   * Render server connection settings
    */
   private renderServerConnectionSettings(containerEl: HTMLElement): void {
     const connectionCard = containerEl.createDiv({ cls: 'settings-card' });
@@ -1335,7 +1335,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       .setDesc(t('settingsDetails.advanced.serverConnectionDesc'))
       .setHeading();
 
-    // 使用条件区域渲染设置内容，便于重置后刷新
+    // Render the settings content in a conditional section so it can refresh after reset
     this.toggleConditionalSection(
       connectionCard,
       'server-connection-settings',
@@ -1345,12 +1345,12 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * 渲染服务器连接设置内容
+   * Render server connection settings content
    */
   private renderServerConnectionContent(containerEl: HTMLElement): void {
     const settings = this.context.plugin.settings;
 
-    // 离线模式
+    // Offline mode
     new Setting(containerEl)
       .setName(t('settingsDetails.advanced.offlineMode'))
       .setDesc(t('settingsDetails.advanced.offlineModeDesc'))
@@ -1365,11 +1365,11 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
               serverManager.updateOfflineMode(value);
             })
             .catch(() => {
-              // ServerManager 可能尚未初始化
+              // ServerManager may not be initialized yet
             });
         }));
 
-    // 下载加速源
+    // Download accelerator source
     new Setting(containerEl)
       .setName(t('settingsDetails.advanced.downloadAccelerator'))
       .setDesc(t('settingsDetails.advanced.downloadAcceleratorDesc'))
@@ -1385,11 +1385,11 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
               serverManager.updateDownloadAcceleratorUrl(settings.serverConnection.downloadAcceleratorUrl);
             })
             .catch(() => {
-              // ServerManager 可能尚未初始化
+              // ServerManager may not be initialized yet
             });
         }));
 
-    // 重置按钮
+    // Reset button
     new Setting(containerEl)
       .setName(t('settingsDetails.advanced.resetToDefaults'))
       .setDesc(t('settingsDetails.advanced.resetToDefaultsDesc'))
@@ -1405,7 +1405,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
               serverManager.updateDownloadAcceleratorUrl(this.context.plugin.settings.serverConnection.downloadAcceleratorUrl);
             })
             .catch(() => {
-              // ServerManager 可能尚未初始化
+              // ServerManager may not be initialized yet
             });
 
           const parentCard = containerEl.parentElement;

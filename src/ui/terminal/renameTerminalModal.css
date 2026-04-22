@@ -1,14 +1,14 @@
 /**
- * 重命名终端模态框样式
+ * Rename terminal modal styles
  */
 
-/* 模态框容器 */
+/* Modal container */
 .rename-terminal-modal .modal {
   max-width: 250px;
   padding: 20px 24px;
 }
 
-/* 标题区域 */
+/* Title section */
 .rename-terminal-modal .modal-title {
   margin-bottom: 16px;
 }
@@ -21,12 +21,12 @@
   line-height: 1.4;
 }
 
-/* 输入区域容器 */
+/* Input section container */
 .rename-terminal-modal .rename-input-container {
   margin-bottom: 20px;
 }
 
-/* 输入框标签 */
+/* Input label */
 .rename-terminal-modal .rename-input-label {
   display: block;
   margin-bottom: 6px;
@@ -35,7 +35,7 @@
   color: var(--text-muted);
 }
 
-/* 输入框 */
+/* Input field */
 .rename-terminal-modal .rename-input {
   width: 100%;
   padding: 8px 12px;
@@ -62,7 +62,7 @@
   color: var(--text-faint);
 }
 
-/* 按钮容器 */
+/* Button container */
 .rename-terminal-modal .modal-button-container {
   display: flex;
   justify-content: flex-end;
@@ -70,7 +70,7 @@
   margin-top: 20px;
 }
 
-/* 按钮基础样式 */
+/* Base button styles */
 .rename-terminal-modal .modal-button-container button {
   padding: 6px 16px;
   font-size: 13px;
@@ -90,7 +90,7 @@
   transform: translateY(0);
 }
 
-/* 取消按钮 */
+/* Cancel button */
 .rename-terminal-modal .modal-button-container button.mod-cancel {
   color: var(--text-normal);
   background-color: var(--background-modifier-form-field);
@@ -100,7 +100,7 @@
   background-color: var(--background-modifier-form-field-highlighted);
 }
 
-/* 确认按钮 */
+/* Confirm button */
 .rename-terminal-modal .modal-button-container button.mod-cta {
   color: var(--text-on-accent);
   background-color: var(--interactive-accent);
@@ -110,7 +110,7 @@
   background-color: var(--interactive-accent-hover);
 }
 
-/* 响应式设计 */
+/* Responsive layout */
 @media (max-width: 600px) {
   .rename-terminal-modal .modal {
     max-width: 90vw;
@@ -135,12 +135,12 @@
   }
 }
 
-/* 暗色主题优化 */
+/* Dark theme adjustments */
 .theme-dark .rename-terminal-modal .rename-input {
   background-color: var(--background-primary-alt);
 }
 
-/* 动画效果 */
+/* Animation effects */
 .rename-terminal-modal .modal-content {
   animation: rename-modal-fade-in 0.2s ease-out;
 }

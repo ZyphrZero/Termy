@@ -1,5 +1,5 @@
-// OSC 133/633 扫描器
-// 解析 Shell Integration 序列 (支持跨数据块)
+// OSC 133/633 scanner
+// Parses Shell Integration sequences, including across data chunks
 
 #[derive(Debug, Clone, Copy)]
 pub enum OscSource {

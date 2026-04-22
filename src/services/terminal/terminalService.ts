@@ -1,10 +1,10 @@
 /**
- * TerminalService - 基于统一 Rust 服务器的终端服务
+ * TerminalService - terminal service built on the unified Rust server
  * 
- * 职责:
- * 1. 使用 ServerManager 管理统一服务器
- * 2. 管理所有终端实例
- * 3. 处理服务器崩溃和自动重启
+ * Responsibilities:
+ * 1. Use ServerManager to manage the unified server
+ * 2. Manage all terminal instances
+ * 3. Handle server crashes and automatic restarts
  * 
 
  */
@@ -19,7 +19,7 @@ import { t } from '@/i18n';
 import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
 
-// 预加载 TerminalInstance 模块，避免首次创建终端时的动态 import 延迟
+// Preload the TerminalInstance module to avoid dynamic import latency when creating the first terminal
 let terminalInstanceModule: typeof import('./terminalInstance') | null = null;
 const preloadTerminalInstance = async () => {
   if (!terminalInstanceModule) {
@@ -27,7 +27,7 @@ const preloadTerminalInstance = async () => {
   }
   return terminalInstanceModule;
 };
-// 立即开始预加载
+// Start preloading immediately
 void preloadTerminalInstance().catch((error) => {
   errorLog('[TerminalService] 预加载 TerminalInstance 失败:', error);
 });
@@ -35,17 +35,17 @@ void preloadTerminalInstance().catch((error) => {
 /**
  * TerminalService
  * 
- * 使用 ServerManager 管理统一服务器，不再独立管理 PTY 服务器进程
+ * Uses ServerManager to manage the unified server instead of managing the PTY server process independently
  */
 export class TerminalService {
   private app: App;
   private settings: TerminalSettings;
   private serverManager: ServerManager;
   
-  // 终端实例管理
+  // Terminal instance registry
   private terminals: Map<string, TerminalInstance> = new Map();
   
-  // 关闭状态标志
+  // Shutdown state flag
   private isShuttingDown = false;
 
   constructor(app: App, settings: TerminalSettings, serverManager: ServerManager) {
@@ -53,15 +53,15 @@ export class TerminalService {
     this.settings = settings;
     this.serverManager = serverManager;
     
-    // 监听服务器事件
+    // Listen for server events
     this.setupServerEventHandlers();
   }
 
   /**
-   * 设置服务器事件处理器
+   * Set up server event handlers
    */
   private setupServerEventHandlers(): void {
-    // 监听服务器崩溃事件
+    // Listen for server error events
     this.serverManager.on('server-error', (error) => {
       if (!this.isShuttingDown) {
         errorLog('[TerminalService] 服务器错误:', error);
@@ -69,37 +69,37 @@ export class TerminalService {
       }
     });
     
-    // 监听 WebSocket 断开事件
+    // Listen for WebSocket disconnect events
     this.serverManager.on('ws-disconnected', () => {
       if (!this.isShuttingDown) {
         debugLog('[TerminalService] WebSocket 断开');
-        // 通知所有终端实例
+        // Notify all terminal instances
         this.terminals.forEach(terminal => {
           terminal.handleServerCrash();
         });
       }
     });
     
-    // 监听服务器重启成功
+    // Listen for successful server starts
     this.serverManager.on('server-started', (port) => {
       debugLog(`[TerminalService] 服务器已启动，端口: ${port}`);
     });
   }
 
   /**
-   * 处理服务器崩溃
+   * Handle server crashes
    */
   private handleServerCrash(): void {
-    // 通知所有终端实例
+    // Notify all terminal instances
     this.terminals.forEach(terminal => {
       terminal.handleServerCrash();
     });
   }
 
   /**
-   * 确保服务器运行
+   * Ensure the server is running
    * 
-   * @returns 服务器端口号
+   * @returns The server port number
    */
   async ensureServer(): Promise<number> {
     await this.serverManager.ensureServer();
@@ -111,29 +111,29 @@ export class TerminalService {
   }
 
   /**
-   * 获取 PTY 客户端
+   * Get the PTY client
    */
   getPtyClient(): PtyClient {
     return this.serverManager.pty();
   }
 
   /**
-   * 创建新的终端实例
+   * Create a new terminal instance
    * 
-   * @returns 创建的终端实例
-   * @throws Error 如果终端创建失败
+   * @returns The created terminal instance
+   * @throws Error if terminal creation fails
    */
   async createTerminal(): Promise<TerminalInstance> {
     try {
-      // 确保服务器运行
+      // Ensure the server is running
       await this.serverManager.ensureServer();
       
       debugLog('[TerminalService] 创建终端');
 
-      // 使用预加载的模块
+      // Use the preloaded module
       const { TerminalInstance } = await preloadTerminalInstance();
       
-      // 获取工作目录（如果启用了自动进入项目目录）
+      // Get the working directory if auto-entering the vault directory is enabled
       let cwd: string | undefined;
       if (this.settings.autoEnterVaultDirectory) {
         cwd = this.getVaultPath();
@@ -142,7 +142,7 @@ export class TerminalService {
         }
       }
       
-      // 处理自定义 shell 路径
+      // Handle a custom shell path
       const currentShell = getCurrentPlatformShell(this.settings);
       let shellType: string = currentShell;
       if (currentShell === 'custom') {
@@ -152,10 +152,10 @@ export class TerminalService {
         }
       }
       
-      // 获取 shell 启动参数
+      // Get shell startup arguments
       const shellArgs = this.settings.shellArgs.length > 0 ? this.settings.shellArgs : undefined;
       
-      // 创建终端实例，传入 ServerManager
+      // Create the terminal instance with the current settings
       const terminal = new TerminalInstance({
         shellType: shellType,
         shellArgs: shellArgs,
@@ -178,7 +178,7 @@ export class TerminalService {
         textOpacity: this.settings.textOpacity,
       });
       
-      // 初始化终端（使用 ServerManager）
+      // Initialize the terminal through ServerManager
       await terminal.initializeWithServerManager(this.serverManager);
       
       this.terminals.set(terminal.id, terminal);
@@ -195,8 +195,8 @@ export class TerminalService {
   }
 
   /**
-   * 获取 Vault 路径
-   * @returns Vault 的绝对路径，如果无法获取则返回 undefined
+   * Get the Vault path
+   * @returns The absolute Vault path, or undefined if it cannot be resolved
    */
   private getVaultPath(): string | undefined {
     try {
@@ -211,28 +211,28 @@ export class TerminalService {
   }
 
   /**
-   * 获取终端实例
+   * Get a terminal instance
    * 
-   * @param id 终端实例 ID
-   * @returns 终端实例，如果不存在则返回 undefined
+   * @param id The terminal instance ID
+   * @returns The terminal instance, or undefined if it does not exist
    */
   getTerminal(id: string): TerminalInstance | undefined {
     return this.terminals.get(id);
   }
 
   /**
-   * 获取所有终端实例
+   * Get all terminal instances
    * 
-   * @returns 所有终端实例数组
+   * @returns An array of all terminal instances
    */
   getAllTerminals(): TerminalInstance[] {
     return Array.from(this.terminals.values());
   }
 
   /**
-   * 销毁指定的终端实例
+   * Destroy the specified terminal instance
    * 
-   * @param id 终端实例 ID
+   * @param id The terminal instance ID
    */
   async destroyTerminal(id: string): Promise<void> {
     const terminal = this.terminals.get(id);
@@ -244,7 +244,7 @@ export class TerminalService {
       } finally {
         this.terminals.delete(id);
         
-        // 如果这是最后一个终端，停止服务器
+        // Stop the server if this was the last terminal
         if (this.terminals.size === 0 && !this.isShuttingDown) {
           debugLog('[TerminalService] 最后一个终端已关闭，停止服务器');
           await this.serverManager.shutdown();
@@ -254,7 +254,7 @@ export class TerminalService {
   }
 
   /**
-   * 销毁所有终端实例
+   * Destroy all terminal instances
    */
   destroyAllTerminals(): void {
     const failedTerminals: string[] = [];
@@ -268,63 +268,63 @@ export class TerminalService {
       }
     }
 
-    // 清空映射
+    // Clear the map
     this.terminals.clear();
 
-    // 如果有失败的终端，记录警告
+    // Log a warning if any terminals failed to clean up
     if (failedTerminals.length > 0) {
       debugWarn(`[TerminalService] 以下终端清理失败: ${failedTerminals.join(', ')}`);
     }
   }
 
   /**
-   * 更新设置
+   * Update settings
    * 
-   * @param settings 新的设置
+   * @param settings The new settings
    */
   updateSettings(settings: TerminalSettings): void {
     this.settings = settings;
   }
 
   /**
-   * 获取服务器状态
+   * Get the server status
    * 
-   * @returns 服务器是否正在运行
+   * @returns Whether the server is currently running
    */
   isServerRunning(): boolean {
     return this.serverManager.isServerRunning();
   }
 
   /**
-   * 获取服务器端口
+   * Get the server port
    * 
-   * @returns 服务器端口，如果未运行则返回 null
+   * @returns The server port, or null if the server is not running
    */
   getServerPort(): number | null {
     return this.serverManager.getServerPort();
   }
 
   /**
-   * 获取终端数量
+   * Get the terminal count
    * 
-   * @returns 当前终端实例数量
+   * @returns The current number of terminal instances
    */
   getTerminalCount(): number {
     return this.terminals.size;
   }
 
   /**
-   * 关闭服务（插件卸载时调用）
+   * Shut down the service (called when the plugin unloads)
    */
   async shutdown(): Promise<void> {
     this.isShuttingDown = true;
     
     debugLog('[TerminalService] 开始关闭终端服务');
     
-    // 销毁所有终端
+    // Destroy all terminals
     this.destroyAllTerminals();
     
-    // 确保服务器停止
+    // Ensure the server is stopped
     if (this.serverManager.isServerRunning()) {
       debugLog('[TerminalService] 停止服务器');
       await this.serverManager.shutdown();

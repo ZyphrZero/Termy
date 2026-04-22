@@ -1,11 +1,11 @@
 /**
- * ServerManager - 统一服务器管理器
+ * ServerManager - unified server manager
  * 
- * 职责:
- * 1. 管理统一 Rust 服务器进程的生命周期
- * 2. 管理单一 WebSocket 连接
- * 3. 提供模块化 API (pty/voice/llm/utils)
- * 4. 处理服务器崩溃和自动重启
+ * Responsibilities:
+ * 1. Manage the lifecycle of the unified Rust server process
+ * 2. Manage a single WebSocket connection
+ * 3. Provide modular APIs (pty/voice/llm/utils)
+ * 4. Handle server crashes and automatic restarts
  * 
  */
 
@@ -28,87 +28,87 @@ import { PtyClient } from './ptyClient';
 import { BinaryDownloader } from './binaryDownloader';
 
 /**
- * 事件监听器类型
+ * Event listener type
  */
 type EventListener<K extends keyof ServerEvents> = ServerEvents[K];
 
 /**
- * websocket重连配置
+ * WebSocket reconnect config
  */
 interface ReconnectConfig {
-  /** 最大重连次数 */
+  /** Maximum reconnect attempts */
   maxAttempts: number;
-  /** 重连间隔 (ms) */
+  /** Reconnect interval (ms) */
   interval: number;
 }
 
 /**
- * 统一服务器管理器
+ * Unified server manager
  * 
- * 替代 BinaryManager + TerminalService + VoiceServerManager
+ * Replaces BinaryManager + TerminalService + VoiceServerManager
  */
 export class ServerManager {
-  /** 插件目录 */
+  /** Plugin directory */
   private pluginDir: string;
   
-  /** 插件版本 */
+  /** Plugin version */
   private version: string;
   
-  /** 调试模式（仅控制日志输出） */
+  /** Debug mode (controls logging output only) */
   private debugMode: boolean;
   
-  /** 离线模式（跳过版本检测和自动下载） */
+  /** Offline mode (skips version checks and automatic downloads) */
   private offlineMode: boolean;
   
-  /** 二进制下载器 */
+  /** Binary downloader */
   private binaryDownloader: BinaryDownloader;
   
-  /** 服务器进程 */
+  /** Server process */
   private process: ChildProcess | null = null;
   
-  /** WebSocket 连接 */
+  /** WebSocket connection */
   private ws: WebSocket | null = null;
   
-  /** 服务器端口 */
+  /** Server port */
   private port: number | null = null;
   
-  /** 是否正在关闭 */
+  /** Whether shutdown is in progress */
   private isShuttingDown = false;
   
-  /** 服务器重启尝试次数 */
+  /** Server restart attempt count */
   private restartAttempts = 0;
   
-  /** 最大服务器重启次数 */
+  /** Maximum server restart attempts */
   private readonly maxRestartAttempts = 3;
   
-  /** WebSocket 重连尝试次数 */
+  /** WebSocket reconnect attempt count */
   private wsReconnectAttempts = 0;
   
-  /** 重连配置 */
+  /** Reconnect config */
   private reconnectConfig: ReconnectConfig = {
     maxAttempts: 5,
     interval: 3000,
   };
   
-  /** 是否正在重连 */
+  /** Whether reconnection is in progress */
   private isReconnecting = false;
   
-  /** 重连定时器 */
+  /** Reconnect timer */
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   
-  /** 服务器启动 Promise */
+  /** Server startup Promise */
   private serverStartPromise: Promise<void> | null = null;
   
-  /** WebSocket 连接 Promise */
+  /** WebSocket connection Promise */
   private wsConnectPromise: Promise<void> | null = null;
 
-  /** 二进制更新 Promise */
+  /** Binary update Promise */
   private binaryUpdatePromise: Promise<void> | null = null;
   
-  /** 事件监听器 */
+  /** Event listeners */
   private eventListeners: Map<keyof ServerEvents, Set<EventListener<keyof ServerEvents>>> = new Map();
   
-  // 模块客户端 (懒加载)
+  // Module clients (lazy-loaded)
   private _ptyClient: PtyClient | null = null;
 
   constructor(
@@ -126,32 +126,32 @@ export class ServerManager {
   }
 
   // ============================================================================
-  // 公共 API
+  // Public API
   // ============================================================================
 
   /**
-   * 确保服务器运行
+   * Ensure the server is running
    * 
 
    */
   async ensureServer(): Promise<void> {
-    // 如果服务器已经运行，直接返回
+    // If the server is already running, return immediately
     if (this.port !== null && this.ws?.readyState === WebSocket.OPEN) {
       return;
     }
 
-    // 如果正在启动，等待启动完成
+    // If startup is already in progress, wait for it to finish
     if (this.serverStartPromise) {
       return this.serverStartPromise;
     }
 
-    // 启动服务器
+    // Start the server
     this.serverStartPromise = this.startServer();
     return this.serverStartPromise;
   }
 
   /**
-   * 确保二进制文件已更新（不启动服务器）
+   * Ensure the binary has been updated (without starting the server)
    */
   async ensureBinaryUpdated(): Promise<void> {
     if (this.offlineMode) {
@@ -162,7 +162,7 @@ export class ServerManager {
   }
 
   /**
-   * 获取 PTY 客户端
+   * Get the PTY client
    * 
 
    */
@@ -177,7 +177,7 @@ export class ServerManager {
   }
 
   /**
-   * 关闭服务器
+   * Shut down the server
    * 
 
    */
@@ -186,10 +186,10 @@ export class ServerManager {
     
     debugLog('[ServerManager] 关闭服务器...');
     
-    // 取消重连定时器
+    // Cancel the reconnect timer
     this.cancelReconnect();
     
-    // 关闭 WebSocket 连接
+    // Close the WebSocket connection
     if (this.ws) {
       try {
         this.ws.close(1000, 'Shutdown');
@@ -199,12 +199,12 @@ export class ServerManager {
       this.ws = null;
     }
     
-    // 停止服务器进程
+    // Stop the server process
     if (this.process) {
       try {
         this.process.kill('SIGTERM');
         
-        // 等待进程退出
+        // Wait for the process to exit
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => {
             if (this.process && !this.process.killed) {
@@ -228,12 +228,12 @@ export class ServerManager {
       }
     }
     
-    // 清理状态
+    // Clear state
     this.port = null;
     this.serverStartPromise = null;
     this.wsConnectPromise = null;
     
-    // 销毁模块客户端
+    // Destroy module clients
     this._ptyClient?.destroy();
     
     this._ptyClient = null;
@@ -244,42 +244,42 @@ export class ServerManager {
   }
 
   /**
-   * 服务器是否运行中
+   * Whether the server is running
    */
   isServerRunning(): boolean {
     return this.port !== null && this.process !== null;
   }
 
   /**
-   * WebSocket 是否已连接
+   * Whether the WebSocket is connected
    */
   isConnected(): boolean {
     return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
   }
 
   /**
-   * 是否正在重连
+   * Whether reconnection is in progress
    */
   isReconnectingWebSocket(): boolean {
     return this.isReconnecting;
   }
 
   /**
-   * 获取 WebSocket 重连尝试次数
+   * Get the WebSocket reconnect attempt count
    */
   getReconnectAttempts(): number {
     return this.wsReconnectAttempts;
   }
 
   /**
-   * 获取服务器端口
+   * Get the server port
    */
   getServerPort(): number | null {
     return this.port;
   }
 
   /**
-   * 注册事件监听器
+   * Register an event listener
    */
   on<K extends keyof ServerEvents>(event: K, callback: ServerEvents[K]): void {
     if (!this.eventListeners.has(event)) {
@@ -289,7 +289,7 @@ export class ServerManager {
   }
 
   /**
-   * 移除事件监听器
+   * Remove an event listener
    */
   off<K extends keyof ServerEvents>(event: K, callback: ServerEvents[K]): void {
     const listeners = this.eventListeners.get(event);
@@ -299,11 +299,11 @@ export class ServerManager {
   }
 
   // ============================================================================
-  // 私有方法
+  // Private methods
   // ============================================================================
 
   /**
-   * 启动服务器
+   * Start the server
    */
   private async startServer(): Promise<void> {
     try {
@@ -313,10 +313,10 @@ export class ServerManager {
       
       await this.ensureBinaryReady();
       
-      // 确保可执行权限 (Unix)
+      // Ensure executable permission (Unix)
       await this.ensureExecutable(binaryPath);
       
-      // 启动进程
+      // Start the process
       this.process = spawn(binaryPath, ['--port', '0'], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
@@ -329,23 +329,23 @@ export class ServerManager {
       
       debugLog('[ServerManager] 服务器进程已启动, PID:', this.process.pid);
       
-      // 监听进程错误
+      // Listen for process errors
       this.process.on('error', (error) => {
         errorLog('[ServerManager] 服务器进程错误:', error);
         this.handleServerError(error);
       });
       
-      // 等待端口信息
+      // Wait for port information
       const port = await this.waitForServerPort();
       this.port = port;
       this.restartAttempts = 0;
       
       debugLog(`[ServerManager] 服务器已启动，端口: ${port}`);
       
-      // 设置退出处理器
+      // Set up the exit handler
       this.setupServerExitHandler();
       
-      // 建立 WebSocket 连接
+      // Establish the WebSocket connection
       await this.connectWebSocket();
       
       this.emit('server-started', port);
@@ -364,7 +364,7 @@ export class ServerManager {
   }
 
   /**
-   * 获取二进制文件路径
+   * Get the binary path
    */
   private getBinaryPath(): string {
     const platform = process.platform;
@@ -465,7 +465,7 @@ export class ServerManager {
   }
 
   /**
-   * 确保文件可执行 (Unix)
+   * Ensure the file is executable (Unix)
    */
   private async ensureExecutable(filePath: string): Promise<void> {
     if (process.platform === 'win32') {
@@ -486,7 +486,7 @@ export class ServerManager {
   }
 
   /**
-   * 等待服务器输出端口信息
+   * Wait for the server to output port information
    */
   private async waitForServerPort(): Promise<number> {
     return new Promise((resolve, reject) => {
@@ -523,13 +523,13 @@ export class ServerManager {
             }
           }
         } catch {
-          // JSON 解析失败，继续等待
+          // JSON parsing failed, keep waiting
         }
       };
 
       this.process.stdout.on('data', onData);
       
-      // 监听 stderr 用于调试
+      // Listen to stderr for debugging
       this.process.stderr?.on('data', (data: Buffer) => {
         debugLog('[ServerManager] stderr:', data.toString());
       });
@@ -547,7 +547,7 @@ export class ServerManager {
   }
 
   /**
-   * 建立 WebSocket 连接
+   * Establish the WebSocket connection
    */
   private async connectWebSocket(): Promise<void> {
     if (this.wsConnectPromise) {
@@ -581,11 +581,11 @@ export class ServerManager {
         clearTimeout(timeout);
         debugLog('[ServerManager] WebSocket 已连接');
         
-        // 重置重连计数
+        // Reset the reconnect counter
         this.wsReconnectAttempts = 0;
         this.isReconnecting = false;
         
-        // 更新所有模块客户端的 WebSocket
+        // Update the WebSocket on all module clients
         this.updateClientsWebSocket();
         
         this.emit('ws-connected');
@@ -596,12 +596,12 @@ export class ServerManager {
         debugLog('[ServerManager] WebSocket 已断开, code:', event.code, 'reason:', event.reason);
         this.wsConnectPromise = null;
         
-        // 清除模块客户端的 WebSocket
+        // Clear the WebSocket on module clients
         this._ptyClient?.setWebSocket(null);
         
         this.emit('ws-disconnected');
         
-        // 如果不是主动关闭，尝试重连
+        // If this was not an intentional shutdown, try to reconnect
         if (!this.isShuttingDown && this.port !== null) {
           this.scheduleReconnect();
         }
@@ -610,7 +610,7 @@ export class ServerManager {
       this.ws.onerror = (event) => {
         clearTimeout(timeout);
         errorLog('[ServerManager] WebSocket 错误:', event);
-        // 不在这里 reject，让 onclose 处理
+        // Do not reject here; let onclose handle it
       };
 
       this.ws.onmessage = (event) => {
@@ -622,7 +622,7 @@ export class ServerManager {
   }
 
   /**
-   * 更新所有模块客户端的 WebSocket
+   * Update the WebSocket on all module clients
    */
   private updateClientsWebSocket(): void {
     if (this.ws) {
@@ -631,10 +631,10 @@ export class ServerManager {
   }
 
   /**
-   * 处理 WebSocket 消息
+   * Handle WebSocket messages
    */
   private handleWebSocketMessage(event: MessageEvent): void {
-    // 处理二进制消息 (PTY 输出)
+    // Handle binary messages (PTY output)
     if (event.data instanceof ArrayBuffer) {
       this._ptyClient?.handleBinaryMessage(event.data);
       return;
@@ -651,11 +651,11 @@ export class ServerManager {
       return;
     }
     
-    // 处理 JSON 消息
+    // Handle JSON messages
     try {
       const msg: ServerMessage = JSON.parse(event.data);
       
-      // 根据模块分发消息
+      // Dispatch messages by module
       switch (msg.module) {
         case 'pty':
           this._ptyClient?.handleMessage(msg);
@@ -669,15 +669,15 @@ export class ServerManager {
   }
 
   /**
-   * 处理 WebSocket 断开 - 调度重连
+   * Handle WebSocket disconnection and schedule reconnect
    */
   private scheduleReconnect(): void {
-    // 如果已经在重连或正在关闭，跳过
+    // If reconnection is already in progress or shutdown is underway, skip
     if (this.isReconnecting || this.isShuttingDown) {
       return;
     }
     
-    // 检查是否超过最大重连次数
+    // Check whether the maximum reconnect attempts has been exceeded
     if (this.wsReconnectAttempts >= this.reconnectConfig.maxAttempts) {
       errorLog(
         `[ServerManager] WebSocket 重连失败，已达到最大重试次数 (${this.reconnectConfig.maxAttempts})`
@@ -711,7 +711,7 @@ export class ServerManager {
   }
 
   /**
-   * 执行 WebSocket 重连
+   * Perform WebSocket reconnect
    */
   private async attemptReconnect(): Promise<void> {
     if (this.isShuttingDown || !this.port) {
@@ -734,13 +734,13 @@ export class ServerManager {
       errorLog('[ServerManager] WebSocket 重连失败:', error);
       this.isReconnecting = false;
       
-      // 继续尝试重连
+      // Keep trying to reconnect
       this.scheduleReconnect();
     }
   }
 
   /**
-   * 取消重连
+   * Cancel reconnect
    */
   private cancelReconnect(): void {
     if (this.reconnectTimer) {
@@ -752,7 +752,7 @@ export class ServerManager {
   }
 
   /**
-   * 设置服务器退出处理器
+   * Set up the server exit handler
    * 
 
    */
@@ -784,13 +784,13 @@ export class ServerManager {
         );
       }
 
-      // 尝试自动重启
+      // Try automatic restart
       this.attemptRestart();
     });
   }
 
   /**
-   * 尝试自动重启服务器
+   * Try to automatically restart the server
    */
   private attemptRestart(): void {
     if (this.restartAttempts < this.maxRestartAttempts) {
@@ -827,7 +827,7 @@ export class ServerManager {
   }
 
   /**
-   * 处理服务器进程错误
+   * Handle server process errors
    */
   private handleServerError(error: Error): void {
     const errorCode = (error as NodeJS.ErrnoException).code;
@@ -859,7 +859,7 @@ export class ServerManager {
   }
 
   /**
-   * 触发事件
+   * Emit an event
    */
   private emit<K extends keyof ServerEvents>(
     event: K,
@@ -878,7 +878,7 @@ export class ServerManager {
   }
 
   /**
-   * 重置关闭状态（用于重新启用服务）
+   * Reset the shutdown state (used when re-enabling the service)
    */
   resetShutdownState(): void {
     this.isShuttingDown = false;
@@ -888,7 +888,7 @@ export class ServerManager {
   }
 
   /**
-   * 手动触发重连（供外部调用）
+   * Manually trigger reconnect (for external callers)
    */
   async reconnect(): Promise<void> {
     if (this.isShuttingDown) {
@@ -898,31 +898,31 @@ export class ServerManager {
       );
     }
     
-    // 重置重连计数
+    // Reset the reconnect counter
     this.wsReconnectAttempts = 0;
     this.cancelReconnect();
     
-    // 关闭现有连接
+    // Close the existing connection
     if (this.ws) {
       this.ws.close(1000, 'Manual reconnect');
       this.ws = null;
     }
     
-    // 如果服务器还在运行，直接重连 WebSocket
+    // If the server is still running, reconnect the WebSocket directly
     if (this.port !== null && this.process !== null) {
       await this.connectWebSocket();
     } else {
-      // 否则重启整个服务器
+      // Otherwise restart the entire server
       await this.ensureServer();
     }
   }
 
   /**
-   * 更新连接配置
-   * @param config 连接配置
+   * Update connection config
+   * @param config Connection config
    */
   updateConnectionConfig(config: Partial<ReconnectConfig>): void {
-    // 检查配置是否有变化
+    // Check whether the config changed
     const hasChanges = Object.entries(config).some(
       ([key, value]) => this.reconnectConfig[key as keyof ReconnectConfig] !== value
     );

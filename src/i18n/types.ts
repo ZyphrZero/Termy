@@ -1,19 +1,19 @@
 /**
- * i18n 类型定义文件
- * 定义所有翻译键的类型结构，确保类型安全
+ * i18n type definitions
+ * Defines the type structure for all translation keys to ensure type safety
  */
 
 /**
- * 支持的语言区域
+ * Supported locales
  */
 export type SupportedLocale = 'en' | 'zh-CN' | 'ja' | 'ko' | 'ru';
 
 /**
- * 翻译键接口
- * 包含终端插件所有可翻译文本的类型定义
+ * Translation key interface
+ * Contains type definitions for all translatable text in the terminal plugin
  */
 export interface TranslationKeys {
-  // 通用文本
+  // Common text
   common: {
     confirm: string;
     cancel: string;
@@ -27,7 +27,7 @@ export interface TranslationKeys {
     info: string;
   };
 
-  // 插件信息
+  // Plugin information
   plugin: {
     name: string;
     loadingMessage: string;
@@ -36,7 +36,7 @@ export interface TranslationKeys {
     unloadedMessage: string;
   };
 
-  // 终端
+  // Terminal
   terminal: {
     defaultTitle: string;
     loading: string;
@@ -72,7 +72,7 @@ export interface TranslationKeys {
     };
   };
 
-  // 命令
+  // Commands
   commands: {
     openTerminal: string;
     terminalSearch: string;
@@ -88,12 +88,12 @@ export interface TranslationKeys {
     presetScriptPrefix: string;
   };
 
-  // 侧边栏
+  // Ribbon
   ribbon: {
     terminalTooltip: string;
   };
 
-  // 功能可见性
+  // Feature visibility
   visibility: {
     showInCommandPalette: string;
     showInCommandPaletteDesc: string;
@@ -106,7 +106,7 @@ export interface TranslationKeys {
     visibilitySettings: string;
   };
 
-  // 通知消息
+  // Notice messages
   notices: {
     serverStartFailed: string;
     wsReconnectFailed: string;
@@ -142,7 +142,7 @@ export interface TranslationKeys {
     };
   };
 
-  // 设置
+  // Settings
   settings: {
     tabs: {
       terminal: string;
@@ -156,7 +156,7 @@ export interface TranslationKeys {
     };
   };
 
-  // 设置详情 - 终端
+  // Setting details - Terminal
   settingsDetails: {
     terminal: {
       appearanceSettings: string;
@@ -275,7 +275,7 @@ export interface TranslationKeys {
     };
   };
 
-  // 模态框
+  // Modals
   modals: {
     renameTerminal: {
       title: string;
@@ -287,14 +287,14 @@ export interface TranslationKeys {
     };
   };
 
-  // 错误消息
+  // Error messages
   errors: {
     serverNotRunning: string;
     connectionLost: string;
     invalidMessage: string;
   };
 
-  // 终端实例
+  // Terminal instance
   terminalInstance: {
     rendererNotSupported: string;
     webglContextLost: string;
@@ -307,14 +307,14 @@ export interface TranslationKeys {
     xtermInitFailed: string;
   };
 
-  // 终端服务
+  // Terminal service
   terminalService: {
     processNotStarted: string;
     portInfoTimeout: string;
     startFailedWithCode: string;
   };
 
-  // Shell 类型
+  // Shell types
   shellTypes: {
     cmd: string;
     powershell: string;
@@ -325,34 +325,34 @@ export interface TranslationKeys {
     custom: string;
   };
 
-  // 新实例行为
+  // New instance behavior
   newInstanceBehavior: {
     newTab: string;
     newPane: string;
     newWindow: string;
   };
 
-  // 光标样式
+  // Cursor styles
   cursorStyles: {
     block: string;
     underline: string;
     bar: string;
   };
 
-  // 渲染器类型
+  // Renderer types
   rendererTypes: {
     canvas: string;
     webgl: string;
   };
 
-  // 背景图片尺寸
+  // Background image sizes
   backgroundImageSizes: {
     cover: string;
     contain: string;
     auto: string;
   };
 
-  // Shell 选项
+  // Shell options
   shellOptions: {
     cmd: string;
     powershell: string;
@@ -364,7 +364,7 @@ export interface TranslationKeys {
     custom: string;
   };
 
-  // 布局选项
+  // Layout options
   layoutOptions: {
     replaceTab: string;
     newTab: string;
@@ -377,14 +377,14 @@ export interface TranslationKeys {
     newWindow: string;
   };
 
-  // 背景尺寸选项
+  // Background size options
   backgroundSizeOptions: {
     cover: string;
     contain: string;
     auto: string;
   };
 
-  // 背景位置选项
+  // Background position options
   backgroundPositionOptions: {
     center: string;
     top: string;
@@ -397,14 +397,14 @@ export interface TranslationKeys {
     bottomRight: string;
   };
 
-  // 光标样式选项
+  // Cursor style options
   cursorStyleOptions: {
     block: string;
     underline: string;
     bar: string;
   };
 
-  // 渲染器选项
+  // Renderer options
   rendererOptions: {
     canvas: string;
     webgl: string;

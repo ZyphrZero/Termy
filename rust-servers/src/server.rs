@@ -1,5 +1,5 @@
-// WebSocket 服务器实现
-// 终端服务器的 WebSocket 服务器，处理 PTY 模块的消息
+// WebSocket server implementation
+// WebSocket server for the terminal server that handles PTY module messages
 
 use tokio::net::TcpListener;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
@@ -9,7 +9,7 @@ use tokio::sync::Mutex as TokioMutex;
 
 use crate::router::{MessageRouter, ModuleType, RouterError, ServerResponse};
 
-/// 日志宏
+/// Logging macro
 macro_rules! log_info {
     ($($arg:tt)*) => {
         eprintln!("[INFO] {}", format!($($arg)*));
@@ -31,15 +31,15 @@ macro_rules! log_debug {
 }
 
 // ============================================================================
-// 服务器配置和实现
+// Server configuration and implementation
 // ============================================================================
 
-/// WebSocket 服务器配置
+/// WebSocket server configuration
 pub struct ServerConfig {
     pub port: u16,
 }
 
-/// WebSocket 服务器
+/// WebSocket server
 pub struct Server {
     config: ServerConfig,
 }
@@ -49,7 +49,7 @@ impl Server {
         Self { config }
     }
 
-    /// 启动服务器
+    /// Start the server
     pub async fn start(&self) -> Result<u16, Box<dyn std::error::Error>> {
         let addr = format!("127.0.0.1:{}", self.config.port);
         let listener = TcpListener::bind(&addr).await?;
@@ -58,15 +58,15 @@ impl Server {
 
         log_info!("服务器绑定到 {}", local_addr);
 
-        // 输出端口信息到 stdout (JSON 格式)
-        // TypeScript 端会解析这个 JSON 来获取端口号
+        // Write port information to stdout in JSON format
+        // The TypeScript side parses this JSON to get the port number
         println!(
             r#"{{"port": {}, "pid": {}}}"#,
             port,
             std::process::id()
         );
 
-        // 主循环：接受 WebSocket 连接
+        // Main loop: accept WebSocket connections
         tokio::spawn(async move {
             log_info!("正在监听 WebSocket 连接...");
             while let Ok((stream, addr)) = listener.accept().await {
@@ -84,35 +84,35 @@ impl Server {
 }
 
 // ============================================================================
-// 连接处理
+// Connection handling
 // ============================================================================
 
-/// WebSocket 发送器类型别名
+/// WebSocket sender type alias
 pub type WsSender = Arc<TokioMutex<futures_util::stream::SplitSink<
     tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
     Message
 >>>;
 
-/// 处理单个 WebSocket 连接
+/// Handle a single WebSocket connection
 async fn handle_connection(
     stream: tokio::net::TcpStream,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // 升级到 WebSocket
+    // Upgrade to WebSocket
     let ws_stream = accept_async(stream).await?;
     
     log_info!("WebSocket 连接已建立");
     
-    // 分离读写流
+    // Split the read and write streams
     let (ws_sender, mut ws_receiver) = ws_stream.split();
     let ws_sender: WsSender = Arc::new(TokioMutex::new(ws_sender));
     
-    // 创建消息路由器
+    // Create the message router
     let router = Arc::new(MessageRouter::new());
     
-    // 设置 WebSocket 发送器 (用于 PTY 输出)
+    // Set the WebSocket sender (used for PTY output)
     router.set_ws_sender(Arc::clone(&ws_sender)).await;
     
-    // 消息处理循环
+    // Message handling loop
     while let Some(msg_result) = ws_receiver.next().await {
         match msg_result {
             Ok(msg) => {
@@ -120,7 +120,7 @@ async fn handle_connection(
                 
                 match msg {
                     Message::Text(text) => {
-                        // 处理文本消息
+                        // Handle text messages
                         if let Err(e) = handle_text_message(
                             &text,
                             &router,
@@ -130,8 +130,8 @@ async fn handle_connection(
                         }
                     }
                     Message::Binary(data) => {
-                        // 二进制数据 - 写入 PTY
-                        // 格式: [session_id_length: u8][session_id: bytes][data: bytes]
+                        // Binary data, written to the PTY
+                        // Format: [session_id_length: u8][session_id: bytes][data: bytes]
                         log_debug!("收到二进制数据: {} 字节", data.len());
                         
                         if data.len() < 2 {
@@ -165,12 +165,12 @@ async fn handle_connection(
                         break;
                     }
                     Message::Ping(data) => {
-                        // 响应 Ping
+                        // Reply to Ping
                         let mut sender = ws_sender.lock().await;
                         sender.send(Message::Pong(data)).await?;
                     }
                     Message::Pong(_) => {
-                        // 忽略 Pong
+                        // Ignore Pong
                     }
                     _ => {
                         log_debug!("忽略的消息类型");
@@ -186,35 +186,35 @@ async fn handle_connection(
     
     log_info!("WebSocket 连接已关闭");
     
-    // 清理所有 PTY 会话
+    // Clean up all PTY sessions
     router.pty_handler().cleanup_all().await;
     
     Ok(())
 }
 
-/// 处理文本消息
+/// Handle a text message
 async fn handle_text_message(
     text: &str,
     router: &Arc<MessageRouter>,
     ws_sender: &WsSender,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // 解析消息
+    // Parse the message
     match router.parse_message(text) {
         Ok(msg) => {
             let module = msg.module;
             
-            // 路由消息到对应模块
+            // Route the message to the matching module
             match router.route(msg).await {
                 Ok(Some(response)) => {
-                    // 发送响应
+                    // Send the response
                     send_response(ws_sender, &response).await?;
                 }
                 Ok(None) => {
-                    // 模块处理成功但无需响应
+                    // The module handled the message successfully and no response is needed
                     log_debug!("模块处理完成，无响应");
                 }
                 Err(e) => {
-                    // 模块处理错误，发送错误响应
+                    // Module handling failed, so send an error response
                     log_error!("模块处理错误: {}", e);
                     let error_response = router.create_error_response(module, &e);
                     send_response(ws_sender, &error_response).await?;
@@ -222,10 +222,10 @@ async fn handle_text_message(
             }
         }
         Err(e) => {
-            // 消息解析错误
+            // Message parsing failed
             log_error!("消息解析错误: {}", e);
             
-            // 尝试从原始 JSON 中提取 module 字段用于错误响应
+            // Try to extract the module field from the raw JSON for the error response
             let module = extract_module_from_json(text);
             let error_response = create_parse_error_response(module, &e);
             send_response(ws_sender, &error_response).await?;
@@ -235,9 +235,9 @@ async fn handle_text_message(
     Ok(())
 }
 
-/// 从 JSON 中提取 module 字段
+/// Extract the module field from JSON
 fn extract_module_from_json(text: &str) -> ModuleType {
-    // 尝试解析 JSON 并提取 module 字段
+    // Try to parse the JSON and extract the module field
     if let Ok(value) = serde_json::from_str::<serde_json::Value>(text) {
         if let Some(module_str) = value.get("module").and_then(|v| v.as_str()) {
             if module_str == "pty" {
@@ -246,11 +246,11 @@ fn extract_module_from_json(text: &str) -> ModuleType {
         }
     }
     
-    // 默认返回 Pty 模块
+    // Default to the Pty module
     ModuleType::Pty
 }
 
-/// 创建解析错误响应
+/// Create a parse error response
 fn create_parse_error_response(module: ModuleType, error: &RouterError) -> ServerResponse {
     ServerResponse::error(
         module,
@@ -259,7 +259,7 @@ fn create_parse_error_response(module: ModuleType, error: &RouterError) -> Serve
     )
 }
 
-/// 发送响应消息
+/// Send a response message
 pub async fn send_response(
     ws_sender: &WsSender,
     response: &ServerResponse,
@@ -270,7 +270,7 @@ pub async fn send_response(
     Ok(())
 }
 
-/// 发送原始 JSON 消息
+/// Send a raw JSON message
 #[allow(dead_code)]
 pub async fn send_json(
     ws_sender: &WsSender,
@@ -281,7 +281,7 @@ pub async fn send_json(
     Ok(())
 }
 
-/// 发送二进制消息
+/// Send a binary message
 #[allow(dead_code)]
 pub async fn send_binary(
     ws_sender: &WsSender,

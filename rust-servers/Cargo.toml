@@ -1,4 +1,4 @@
-# Rust 终端服务器
+# Rust terminal server
 [package]
 name = "termy-server"
 version = "1.0.0"
@@ -10,34 +10,34 @@ name = "termy-server"
 path = "src/main.rs"
 
 [dependencies]
-# PTY 支持
+# PTY support
 portable-pty = "0.9"
 which = "6.0"
 
-# 异步运行时
+# Async runtime
 tokio = { version = "1", features = ["rt", "net", "sync", "signal", "macros", "time"] }
 
 # WebSocket
 tokio-tungstenite = { version = "0.28", features = ["native-tls"] }
 futures-util = "0.3"
 
-# 序列化
+# Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# 错误处理
+# Error handling
 thiserror = "2.0"
 
-# 异步 trait 支持
+# Async trait support
 async-trait = "0.1"
 
-# UUID 生成
+# UUID generation
 uuid = { version = "1.0", features = ["v4"] }
 
-# 共享的 release profile 配置
+# Shared release profile configuration
 [profile.release]
-opt-level = 3       # 优化速度而非大小
-lto = "thin"        # 使用 thin LTO，平衡编译速度和运行时性能
-codegen-units = 1   # 更好的优化
-strip = true        # 移除符号表
-panic = "abort"     # 减少二进制大小
+opt-level = 3       # Optimize for speed rather than size
+lto = "thin"        # Use thin LTO to balance compile time and runtime performance
+codegen-units = 1   # Improve optimization quality
+strip = true        # Strip the symbol table
+panic = "abort"     # Reduce binary size

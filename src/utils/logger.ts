@@ -1,25 +1,25 @@
 /**
- * 日志工具 - 仅在调试模式下输出日志
+ * Logging utilities - only output logs in debug mode
  */
 
 let debugMode = false;
 
 /**
- * 设置调试模式
+ * Set debug mode
  */
 export function setDebugMode(enabled: boolean): void {
   debugMode = enabled;
 }
 
 /**
- * 获取调试模式状态
+ * Get the current debug mode status
  */
 export function isDebugMode(): boolean {
   return debugMode;
 }
 
 /**
- * 调试日志 - 仅在调试模式下输出
+ * Debug logs - only output in debug mode
  */
 export function debugLog(...args: unknown[]): void {
   if (debugMode) {
@@ -28,7 +28,7 @@ export function debugLog(...args: unknown[]): void {
 }
 
 /**
- * 调试警告 - 仅在调试模式下输出
+ * Debug warnings - only output in debug mode
  */
 export function debugWarn(...args: unknown[]): void {
   if (debugMode) {
@@ -37,7 +37,7 @@ export function debugWarn(...args: unknown[]): void {
 }
 
 /**
- * 错误日志 - 始终输出（错误信息很重要）
+ * Error logs - always output (error messages are important)
  */
 export function errorLog(...args: unknown[]): void {
   console.error(...args);

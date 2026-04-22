@@ -1,5 +1,5 @@
 /**
- * 预设工作流编辑模态框
+ * Preset workflow edit modal
  */
 
 import type { App } from 'obsidian';

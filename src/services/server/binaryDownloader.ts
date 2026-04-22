@@ -1,11 +1,11 @@
 /**
- * BinaryDownloader - 二进制文件下载器
+ * BinaryDownloader - binary downloader
  * 
- * 职责:
- * 1. 检测当前平台
- * 2. 从 GitHub Release 下载对应的二进制文件
- * 3. 校验 SHA256
- * 4. 管理下载进度
+ * Responsibilities:
+ * 1. Detect the current platform
+ * 2. Download the matching binary from GitHub Releases
+ * 3. Verify SHA256
+ * 4. Track download progress
  */
 
 import * as fs from 'fs';
@@ -17,52 +17,52 @@ import * as https from 'https';
 import { debugLog, debugWarn, errorLog } from '@/utils/logger';
 import { t } from '@/i18n';
 
-/** 下载进度回调 */
+/** Download progress callback */
 export type DownloadProgressCallback = (progress: DownloadProgress) => void;
 
-/** 下载进度信息 */
+/** Download progress info */
 export interface DownloadProgress {
-  /** 当前阶段 */
+  /** Current stage */
   stage: 'checking' | 'downloading' | 'verifying' | 'complete' | 'error';
-  /** 进度百分比 (0-100) */
+  /** Progress percentage (0-100) */
   percent: number;
-  /** 已下载字节数 */
+  /** Downloaded bytes */
   downloadedBytes?: number;
-  /** 总字节数 */
+  /** Total bytes */
   totalBytes?: number;
-  /** 错误信息 */
+  /** Error message */
   error?: string;
 }
 
-/** 二进制信息 */
+/** Binary info */
 interface BinaryInfo {
-  /** 文件名 */
+  /** Filename */
   filename: string;
-  /** 下载 URL */
+  /** Download URL */
   url: string;
-  /** SHA256 校验和 URL */
+  /** SHA256 checksum URL */
   checksumUrl: string;
 }
 
 
 
 export class BinaryDownloader {
-  /** GitHub 仓库 */
+  /** GitHub repository */
   private readonly repo = 'ZyphrZero/Termy';
   
-  /** 插件目录 */
+  /** Plugin directory */
   private pluginDir: string;
   
-  /** 当前插件版本 */
+  /** Current plugin version */
   private version: string;
   
-  /** 下载加速源 */
+  /** Download accelerator URL */
   private downloadAcceleratorUrl: string;
   
-  /** 已安装版本缓存（避免重复进程调用） */
+  /** Installed version cache (avoids repeated process invocations) */
   private installedVersionCache: string | null | undefined = undefined;
   
-  /** 版本缓存文件名 */
+  /** Version cache filename */
   private readonly versionCacheFileName = '.termy-server.version.json';
 
   constructor(pluginDir: string, version: string, downloadAcceleratorUrl: string = '') {
@@ -76,8 +76,8 @@ export class BinaryDownloader {
   }
 
   /**
-   * 检查二进制文件是否存在且版本匹配
-   * @param skipVersionCheck 是否跳过版本检查（调试模式使用）
+   * Check whether the binary exists and the version matches
+   * @param skipVersionCheck Whether to skip version checks (used in debug mode)
    */
   binaryExists(skipVersionCheck = false): boolean {
     const binaryPath = this.getBinaryPath();
@@ -85,27 +85,27 @@ export class BinaryDownloader {
       return false;
     }
     
-    // 如果跳过版本检查，只要文件存在就返回 true
+    // If version checks are skipped, return true as long as the file exists
     if (skipVersionCheck) {
       return true;
     }
     
-    // 检查版本是否匹配
+    // Check whether the version matches
     const installedVersion = this.getInstalledVersion();
     return installedVersion === this.version;
   }
   
   /**
-   * 检查是否需要更新（文件存在但版本不匹配）
-   * @param skipVersionCheck 是否跳过版本检查（调试模式使用）
+   * Check whether an update is needed (the file exists but the version does not match)
+   * @param skipVersionCheck Whether to skip version checks (used in debug mode)
    */
   needsUpdate(skipVersionCheck = false): boolean {
     const binaryPath = this.getBinaryPath();
     if (!fs.existsSync(binaryPath)) {
-      return false; // 文件不存在，需要下载而非更新
+      return false; // The file does not exist, so it needs to be downloaded rather than updated
     }
     
-    // 如果跳过版本检查，认为不需要更新
+    // If version checks are skipped, assume no update is needed
     if (skipVersionCheck) {
       return false;
     }
@@ -115,8 +115,8 @@ export class BinaryDownloader {
   }
   
   /**
-   * 获取已安装的二进制版本
-   * @param skipExecution 是否跳过执行二进制文件（调试模式使用）
+   * Get the installed binary version
+   * @param skipExecution Whether to skip executing the binary (used in debug mode)
    */
   private getInstalledVersion(skipExecution = false): string | null {
     try {
@@ -136,7 +136,7 @@ export class BinaryDownloader {
         return cachedVersion;
       }
       
-      // 如果跳过执行，尝试从文件元数据推断版本
+      // If execution is skipped, try to infer the version from file metadata
       if (skipExecution) {
         debugLog('[BinaryDownloader] 跳过版本检测，使用预期版本:', this.version);
         this.installedVersionCache = this.version;
@@ -179,7 +179,7 @@ export class BinaryDownloader {
   }
 
   /**
-   * 获取二进制文件路径
+   * Get the binary path
    */
   getBinaryPath(): string {
     const platform = process.platform;
@@ -191,7 +191,7 @@ export class BinaryDownloader {
   }
 
   /**
-   * 下载二进制文件
+   * Download the binary
    */
   async download(onProgress?: DownloadProgressCallback): Promise<void> {
     const notify = (progress: DownloadProgress) => {
@@ -204,10 +204,10 @@ export class BinaryDownloader {
     try {
       notify({ stage: 'checking', percent: 0 });
       
-      // 获取二进制信息
+      // Get binary info
       const binaryInfo = this.getBinaryInfo();
 
-      // 确保目录存在
+      // Ensure the directory exists
       const binariesDir = path.join(this.pluginDir, 'binaries');
       if (!fs.existsSync(binariesDir)) {
         fs.mkdirSync(binariesDir, { recursive: true });
@@ -215,12 +215,12 @@ export class BinaryDownloader {
 
       notify({ stage: 'downloading', percent: 10 });
       
-      // 下载二进制文件
+      // Download the binary
       this.safeUnlink(tempPath);
       
       try {
         await this.downloadFile(binaryInfo.url, tempPath, (percent, downloadedBytes, totalBytes) => {
-          // 下载阶段占 10% - 80%
+          // The download stage accounts for 10% - 80%
           notify({
             stage: 'downloading',
             percent: 10 + percent * 0.7,
@@ -229,11 +229,11 @@ export class BinaryDownloader {
           });
         });
       } catch (downloadError) {
-        // 如果下载失败，提供详细的错误信息
+        // If the download fails, provide detailed error information
         const errorMsg = downloadError instanceof Error ? downloadError.message : String(downloadError);
         debugWarn('[BinaryDownloader] 下载失败:', errorMsg);
         
-        // 如果是 404 错误，可能是版本不存在，尝试最新版本
+        // If this is a 404 error, the version may not exist, so try the latest version
         if (errorMsg.includes('404')) {
           debugLog('[BinaryDownloader] 尝试下载最新版本...');
           const latestBaseUrl = `https://github.com/${this.repo}/releases/latest/download`;
@@ -249,7 +249,7 @@ export class BinaryDownloader {
             });
           });
           
-          // 更新校验和 URL
+          // Update the checksum URL
           binaryInfo.checksumUrl = latestChecksumUrl;
         } else {
           throw downloadError;
@@ -258,7 +258,7 @@ export class BinaryDownloader {
 
       notify({ stage: 'verifying', percent: 85 });
       
-      // 下载并验证校验和
+      // Download and verify the checksum
       if (binaryInfo.checksumUrl) {
         try {
           const checksumContent = await this.fetchText(binaryInfo.checksumUrl);
@@ -267,7 +267,7 @@ export class BinaryDownloader {
           const actualHash = await this.calculateSHA256(tempPath);
           
           if (actualHash !== expectedHash) {
-            // 删除损坏的文件
+            // Delete the corrupted file
             this.safeUnlink(tempPath);
             throw new Error(
               t('notices.checksumMismatch') || 
@@ -277,12 +277,12 @@ export class BinaryDownloader {
           
           debugLog('[BinaryDownloader] SHA256 校验通过');
         } catch (checksumError) {
-          // 校验和下载失败时，仅警告但不阻止使用
+          // If checksum download fails, warn only and do not block usage
           debugWarn('[BinaryDownloader] 校验和验证失败:', checksumError);
         }
       }
 
-      // 设置可执行权限 (Unix)
+      // Set executable permission (Unix)
       if (process.platform !== 'win32') {
         fs.chmodSync(tempPath, 0o755);
       }
@@ -311,8 +311,8 @@ export class BinaryDownloader {
   }
 
   /**
-   * 获取二进制文件信息
-   * 直接构造 GitHub Release 下载 URL，绕过 API 限流
+   * Get binary info
+   * Build the GitHub Release download URL directly to bypass API rate limits
    */
   private getBinaryInfo(): BinaryInfo {
     const platform = process.platform;
@@ -320,8 +320,8 @@ export class BinaryDownloader {
     const ext = platform === 'win32' ? '.exe' : '';
     const filename = `termy-server-${platform}-${arch}${ext}`;
 
-    // 直接构造 GitHub Release 下载 URL
-    // 格式: https://github.com/{owner}/{repo}/releases/download/{tag}/{filename}
+    // Build the GitHub Release download URL directly
+    // Format: https://github.com/{owner}/{repo}/releases/download/{tag}/{filename}
     const baseUrl = `https://github.com/${this.repo}/releases/download/${this.version}`;
     
     const downloadUrl = this.applyDownloadAccelerator(`${baseUrl}/${filename}`);
@@ -337,7 +337,7 @@ export class BinaryDownloader {
   }
 
   /**
-   * 下载文件
+   * Download a file
    */
   private async downloadFile(
     url: string, 
@@ -549,7 +549,7 @@ export class BinaryDownloader {
   }
 
   /**
-   * 获取文本内容
+   * Get text content
    */
   private async fetchText(url: string): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -567,7 +567,7 @@ export class BinaryDownloader {
           const statusCode = response.statusCode ?? 0;
           const redirectLocation = response.headers.location;
 
-          // 处理重定向
+          // Handle redirects
           if (statusCode >= 300 && statusCode < 400 && redirectLocation) {
             response.resume();
             const nextUrl = new URL(redirectLocation, urlObj).toString();
@@ -599,7 +599,7 @@ export class BinaryDownloader {
   }
 
   /**
-   * 计算文件 SHA256
+   * Calculate the file SHA256
    */
   private async calculateSHA256(filePath: string): Promise<string> {
     return new Promise((resolve, reject) => {

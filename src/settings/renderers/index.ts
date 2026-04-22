@@ -1,5 +1,5 @@
 /**
- * 设置渲染器导出
+ * Settings renderer exports
  */
 
 export { BaseSettingsRenderer } from './baseRenderer';

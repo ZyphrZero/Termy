@@ -1,6 +1,6 @@
 /**
- * 终端插件设置标签页
- * 提供终端配置界面
+ * Terminal plugin settings tab
+ * Provides the terminal configuration interface
  */
 
 import type { App } from 'obsidian';
@@ -12,7 +12,7 @@ import { t } from '../i18n';
 import { createTermyLogoSvg } from '../ui/icons';
 
 /**
- * 终端设置标签页类
+ * Terminal settings tab class
  */
 export class TerminalSettingTab extends PluginSettingTab {
   plugin: TerminalPlugin;
@@ -29,16 +29,16 @@ export class TerminalSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    // 添加主容器类
+    // Add the main container class
     containerEl.addClass('terminal-settings-container');
 
-    // 渲染头部区域
+    // Render the header section
     this.renderHeader(containerEl);
 
-    // 内容容器
+    // Content container
     const contentEl = containerEl.createDiv({ cls: 'terminal-settings-content' });
 
-    // 创建渲染器上下文
+    // Create the renderer context
     const context: RendererContext = {
       app: this.app,
       plugin: this.plugin,
@@ -46,29 +46,29 @@ export class TerminalSettingTab extends PluginSettingTab {
       expandedSections: this.expandedSections
     };
 
-    // 渲染终端设置
+    // Render terminal settings
     this.terminalRenderer.render(context);
   }
 
   /**
-   * 渲染头部区域
+   * Render the header section
    */
   private renderHeader(containerEl: HTMLElement): void {
     const headerEl = containerEl.createDiv({ cls: 'terminal-settings-header settings-header' });
 
-    // 标题行（包含 icon、标题和重载按钮）
+    // Title row (includes the icon, title, and reload button)
     const titleRow = headerEl.createDiv({ cls: 'settings-title-row' });
 
-    // 左侧：Logo + 标题
+    // Left side: logo + title
     const titleGroup = titleRow.createDiv({ cls: 'settings-title-group' });
     
-    // 添加 Termy Logo
+    // Add the Termy logo
     const iconContainer = titleGroup.createDiv({ cls: 'settings-title-icon' });
     iconContainer.appendChild(createTermyLogoSvg(32));
 
     titleGroup.createDiv({ cls: 'settings-title', text: t('settings.header.title') });
 
-    // 右侧：反馈链接 + 重载按钮
+    // Right side: feedback link + reload button
     const actionsGroup = titleRow.createDiv({ cls: 'settings-actions-group' });
     
     const feedbackContainer = actionsGroup.createDiv({ cls: 'settings-feedback' });
@@ -88,11 +88,11 @@ export class TerminalSettingTab extends PluginSettingTab {
 
   private async reloadPlugin(): Promise<void> {
     const pluginId = this.plugin.manifest.id;
-    // @ts-expect-error -- 访问 Obsidian 内部 API
+    // @ts-expect-error -- Accessing Obsidian internal API
     await this.app.plugins.disablePlugin(pluginId);
-    // @ts-expect-error -- 访问 Obsidian 内部 API
+    // @ts-expect-error -- Accessing Obsidian internal API
     await this.app.plugins.enablePlugin(pluginId);
-    // @ts-expect-error -- 访问 Obsidian 内部 API
+    // @ts-expect-error -- Accessing Obsidian internal API
     this.app.setting.openTabById(pluginId);
   }
 }

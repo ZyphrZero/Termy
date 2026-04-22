@@ -5,6 +5,15 @@ All notable changes to Termy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Reworked preset scripts into preset workflows with configurable action lists, including terminal commands, Obsidian command search, and external link actions.
+- Standardized internal source comments to English across the TypeScript, CSS, and Rust codebases for easier maintenance.
+
+### Fixed
+- Merged community fix from [#3](https://github.com/ZyphrZero/Termy/pull/3) to bump the esbuild target to ES2021, preserving xterm's `requestMode()` handling and preventing TUI sessions such as Claude Code from freezing on DECRQM output, and added a bundle smoke check to catch regressions before packaging.
+
 ## [1.2.3] - 2026-02-26
 
 ### Added
@@ -114,16 +123,9 @@ If you're upgrading from version 1.1.1 or earlier:
 - First launch may take a few seconds to start the PTY server.
 - On macOS, you may need to allow the binary in System Preferences > Security & Privacy.
 
-## [Unreleased]
-
-### Planned
-- Additional shell configurations.
-- More theme options.
-- Performance optimizations.
-- Additional language support.
-
 ---
 
+[Unreleased]: https://github.com/ZyphrZero/Termy/compare/1.2.3...HEAD
 [1.2.3]: https://github.com/ZyphrZero/Termy/releases/tag/1.2.3
 [1.2.2]: https://github.com/ZyphrZero/Termy/releases/tag/1.2.2
 [1.2.1]: https://github.com/ZyphrZero/Termy/releases/tag/1.2.1

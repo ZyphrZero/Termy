@@ -1,6 +1,6 @@
 /**
- * I18n 服务
- * 负责管理语言资源和提供翻译功能
+ * I18n service
+ * Manages language resources and provides translation functions
  */
 
 import { en } from './locales/en';
@@ -21,19 +21,19 @@ class I18nService {
   };
 
   /**
-   * 初始化 i18n 服务，检测当前语言
+   * Initialize the i18n service and detect the current language
    */
   initialize(): void {
     this.currentLocale = this.detectLocale();
   }
 
   /**
-   * 检测 Obsidian 当前语言设置
-   * 从 localStorage 读取 'language' 键
+   * Detect Obsidian's current language setting
+   * Read the 'language' key from localStorage
    */
   private detectLocale(): SupportedLocale {
     const lang = window.localStorage.getItem('language');
-    // zh, zh-CN, zh-TW 都使用中文
+    // zh, zh-CN, and zh-TW all use Chinese
     if (lang && (lang === 'zh' || lang.startsWith('zh-'))) {
       return 'zh-CN';
     }
@@ -56,10 +56,10 @@ class I18nService {
   }
 
   /**
-   * 获取翻译文本
-   * @param key 翻译键（支持点号分隔的嵌套键，如 'settings.tabs.terminal'）
-   * @param params 插值参数，用于替换模板中的 {{key}} 占位符
-   * @returns 翻译后的文本，如果找不到则返回原始键名
+   * Get translated text
+   * @param key Translation key (supports dot-separated nested keys, such as 'settings.tabs.terminal')
+   * @param params Interpolation parameters used to replace {{key}} placeholders in the template
+   * @returns The translated text, or the original key if not found
    */
   t(key: string, params?: Record<string, string | number>): string {
     const value = this.getNestedValue(this.resources[this.currentLocale], key)
@@ -70,10 +70,10 @@ class I18nService {
   }
 
   /**
-   * 获取嵌套对象的值
-   * @param obj 对象
-   * @param path 点号分隔的路径
-   * @returns 值或 undefined
+   * Get a value from a nested object
+   * @param obj Object
+   * @param path Dot-separated path
+   * @returns The value or undefined
    */
   private getNestedValue(obj: unknown, path: string): string | undefined {
     const keys = path.split('.');
@@ -91,10 +91,10 @@ class I18nService {
   }
 
   /**
-   * 插值替换
-   * @param template 模板字符串
-   * @param params 参数对象
-   * @returns 替换后的字符串
+   * Interpolate placeholders
+   * @param template Template string
+   * @param params Parameter object
+   * @returns The interpolated string
    */
   private interpolate(template: string, params: Record<string, string | number>): string {
     return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
@@ -103,23 +103,23 @@ class I18nService {
   }
 
   /**
-   * 设置当前语言
-   * @param locale 要设置的语言
+   * Set the current language
+   * @param locale The language to set
    */
   setLocale(locale: SupportedLocale): void {
     this.currentLocale = locale;
   }
 
   /**
-   * 获取当前语言
+   * Get the current language
    */
   getLocale(): SupportedLocale {
     return this.currentLocale;
   }
 }
 
-// 导出单例实例
+// Export the singleton instance
 export const i18n = new I18nService();
 
-// 便捷函数，用于快速获取翻译
+// Convenience function for quickly retrieving translations
 export const t = (key: string, params?: Record<string, string | number>): string => i18n.t(key, params);

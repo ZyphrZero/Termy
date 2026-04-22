@@ -1,16 +1,16 @@
-// Shell 检测和配置
+// Shell detection and configuration
 
 use portable_pty::CommandBuilder;
 use std::env;
 use std::path::Path;
 use which::which;
 
-/// 智能检测系统默认 Shell
+/// Intelligently detect the system default shell
 ///
-/// 检测优先级:
-/// 1. SHELL 环境变量（用户覆盖）
-/// 2. 平台特定的智能检测
-/// 3. 安全的回退值
+/// Detection priority:
+/// 1. SHELL environment variable (user override)
+/// 2. Platform-specific smart detection
+/// 3. Safe fallback value
 pub fn detect_default_shell() -> String {
     #[cfg(windows)]
     {
@@ -25,45 +25,45 @@ pub fn detect_default_shell() -> String {
 
 #[cfg(windows)]
 fn detect_windows_shell() -> String {
-    // 1. 检查 SHELL 环境变量（用户覆盖，如 Git Bash 设置）
+    // 1. Check the SHELL environment variable (user override, such as a Git Bash setup)
     if let Ok(shell) = env::var("SHELL") {
         return shell;
     }
 
-    // 2. 优先使用 Windows PowerShell 5.x（更广泛的兼容性）
-    //    PowerShell 5.x 是 Windows 内置的，几乎所有 Windows 系统都有
+    // 2. Prefer Windows PowerShell 5.x for broader compatibility
+    //    PowerShell 5.x is built into Windows and is available on nearly all Windows systems
     if let Ok(path) = which("powershell") {
         return path.to_string_lossy().into_owned();
     }
 
-    // 3. 如果 PowerShell 5.x 不可用，尝试 PowerShell Core (pwsh)
-    //    PowerShell 7+ 需要单独安装，不是所有系统都有
+    // 3. If PowerShell 5.x is unavailable, try PowerShell Core (pwsh)
+    //    PowerShell 7+ requires a separate installation and is not present on all systems
     if let Ok(path) = which("pwsh") {
         return path.to_string_lossy().into_owned();
     }
 
-    // 4. 使用 COMSPEC 环境变量（通常是 cmd.exe）
+    // 4. Use the COMSPEC environment variable, which is usually cmd.exe
     if let Ok(shell) = env::var("COMSPEC") {
         return shell;
     }
 
-    // 5. 最后回退到 cmd.exe
+    // 5. Fall back to cmd.exe as a last resort
     "cmd.exe".to_string()
 }
 
 #[cfg(not(windows))]
 fn detect_unix_shell() -> String {
-    // 1. 优先使用 SHELL 环境变量
+    // 1. Prefer the SHELL environment variable
     if let Ok(shell) = env::var("SHELL") {
         return shell;
     }
 
-    // 2. 检查常见 Shell（按流行度排序）
+    // 2. Check common shells in order of popularity
     let shell_candidates = [
-        "/bin/zsh",  // macOS 默认
-        "/bin/bash", // Linux 常见默认
-        "/bin/fish", // 现代 Shell
-        "/bin/sh",   // POSIX 标准
+        "/bin/zsh",  // macOS default
+        "/bin/bash", // Common Linux default
+        "/bin/fish", // Modern shell
+        "/bin/sh",   // POSIX standard
     ];
 
     for shell in shell_candidates {
@@ -72,18 +72,18 @@ fn detect_unix_shell() -> String {
         }
     }
 
-    // 3. 最后回退
+    // 3. Fall back as a last resort
     "/bin/sh".to_string()
 }
 
-/// 根据 shell 类型获取 Shell 命令
+/// Get the shell command for a shell type
 pub fn get_shell_by_type(shell_type: Option<&str>) -> CommandBuilder {
     match shell_type {
         Some("cmd") => CommandBuilder::new("cmd.exe"),
         Some("powershell") => {
             #[cfg(windows)]
             {
-                // 明确使用 Windows PowerShell 5.x，不使用 pwsh
+                // Explicitly use Windows PowerShell 5.x instead of pwsh
                 if let Ok(path) = which("powershell") {
                     eprintln!("[INFO] [Shell] 使用 PowerShell 5.x: {}", path.display());
                     CommandBuilder::new(path.to_string_lossy().into_owned())
@@ -94,20 +94,20 @@ pub fn get_shell_by_type(shell_type: Option<&str>) -> CommandBuilder {
             }
             #[cfg(not(windows))]
             {
-                // 非 Windows 平台，使用默认 shell
+                // On non-Windows platforms, use the default shell
                 get_default_shell()
             }
         }
         Some("pwsh") => {
             #[cfg(windows)]
             {
-                // 明确使用 PowerShell Core (pwsh)
+                // Explicitly use PowerShell Core (pwsh)
                 if let Ok(path) = which("pwsh") {
                     eprintln!("[INFO] [Shell] 使用 PowerShell 7: {}", path.display());
                     CommandBuilder::new(path.to_string_lossy().into_owned())
                 } else {
                     eprintln!("[WARN] [Shell] PowerShell 7 未安装，降级到 PowerShell 5.x");
-                    // 回退到 Windows PowerShell
+                    // Fall back to Windows PowerShell
                     if let Ok(path) = which("powershell") {
                         eprintln!("[INFO] [Shell] 使用 PowerShell 5.x: {}", path.display());
                         CommandBuilder::new(path.to_string_lossy().into_owned())
@@ -126,43 +126,43 @@ pub fn get_shell_by_type(shell_type: Option<&str>) -> CommandBuilder {
         Some("gitbash") => {
             #[cfg(windows)]
             {
-                // Git Bash: 优先通过 PATH 查找，回退到常见安装路径
+                // Git Bash: prefer resolving it from PATH, then fall back to common install paths
                 if let Some(bash_path) = detect_gitbash() {
                     let mut cmd = CommandBuilder::new(bash_path);
-                    // 添加 --login 参数以加载用户配置
+                    // Add --login so the user's shell configuration is loaded
                     cmd.arg("--login");
                     cmd
                 } else {
-                    // 回退到默认 shell
+                    // Fall back to the default shell
                     get_default_shell()
                 }
             }
             #[cfg(not(windows))]
             {
-                // 非 Windows 平台，使用 bash
+                // On non-Windows platforms, use bash
                 CommandBuilder::new("bash")
             }
         }
         Some("bash") => CommandBuilder::new("bash"),
         Some("zsh") => CommandBuilder::new("zsh"),
         Some(custom) if custom.starts_with("custom:") => {
-            // 自定义 shell 路径，格式: "custom:/path/to/shell"
-            let path = &custom[7..]; // 移除 "custom:" 前缀
+            // Custom shell path in the format "custom:/path/to/shell"
+            let path = &custom[7..]; // Remove the "custom:" prefix
             CommandBuilder::new(path)
         }
-        _ => get_default_shell(), // None 或未知类型，使用默认
+        _ => get_default_shell(), // None or an unknown type uses the default
     }
 }
 
-/// 获取默认 Shell 命令
+/// Get the default shell command
 pub fn get_default_shell() -> CommandBuilder {
     CommandBuilder::new(detect_default_shell())
 }
 
 #[cfg(windows)]
 fn detect_gitbash() -> Option<String> {
-    // 1. 优先检查 Git Bash 标准安装路径
-    //    这样可以避免误检测到 WSL bash（WSL bash 通常在 WindowsApps 目录）
+    // 1. Check standard Git Bash install paths first
+    //    This avoids mistakenly detecting WSL bash, which is usually under WindowsApps
     let userprofile = env::var("USERPROFILE").unwrap_or_default();
     let gitbash_paths = vec![
         "C:\\Program Files\\Git\\bin\\bash.exe".to_string(),
@@ -176,11 +176,11 @@ fn detect_gitbash() -> Option<String> {
         }
     }
 
-    // 2. 回退：通过 PATH 查找 bash
-    //    但排除 WSL bash（通常在 WindowsApps 目录）
+    // 2. Fall back to finding bash in PATH
+    //    but exclude WSL bash, which is usually under WindowsApps
     if let Ok(path) = which("bash.exe").or_else(|_| which("bash")) {
         let path_str = path.to_string_lossy();
-        // 排除 WSL bash
+        // Exclude WSL bash
         if !path_str.contains("WindowsApps") {
             return Some(path_str.into_owned());
         }
@@ -189,7 +189,7 @@ fn detect_gitbash() -> Option<String> {
     None
 }
 
-/// 获取 Shell 启动参数（用于登录 Shell 行为）
+/// Get shell startup arguments for login-shell behavior
 #[allow(dead_code)]
 pub fn get_shell_login_args(shell_path: &str) -> Vec<String> {
     let shell_name = Path::new(shell_path)
@@ -214,10 +214,10 @@ mod tests {
 
     #[test]
     fn test_get_default_shell() {
-        // 只测试函数能成功返回，不检查具体内容
-        // 因为 CommandBuilder 没有提供公开 API 来获取程序路径
+        // Only verify that the function returns successfully without checking the exact result
+        // because CommandBuilder does not provide a public API to read back the program path
         let _shell = get_default_shell();
-        // 如果能到达这里，函数工作正常
+        // Reaching this point means the function worked
     }
 
     #[test]
@@ -241,42 +241,42 @@ mod tests {
     #[test]
     fn test_get_shell_by_type_cmd() {
         let _cmd = get_shell_by_type(Some("cmd"));
-        // 测试不会 panic
+        // Verify that it does not panic
     }
     
     #[test]
     fn test_get_shell_by_type_powershell() {
         let _cmd = get_shell_by_type(Some("powershell"));
-        // 测试不会 panic
+        // Verify that it does not panic
     }
     
     #[test]
     fn test_get_shell_by_type_bash() {
         let _cmd = get_shell_by_type(Some("bash"));
-        // 测试不会 panic
+        // Verify that it does not panic
     }
     
     #[test]
     fn test_get_shell_by_type_zsh() {
         let _cmd = get_shell_by_type(Some("zsh"));
-        // 测试不会 panic
+        // Verify that it does not panic
     }
     
     #[test]
     fn test_get_shell_by_type_custom() {
         let _cmd = get_shell_by_type(Some("custom:/bin/sh"));
-        // 测试不会 panic
+        // Verify that it does not panic
     }
     
     #[test]
     fn test_get_shell_by_type_none() {
         let _cmd = get_shell_by_type(None);
-        // 测试不会 panic
+        // Verify that it does not panic
     }
     
     #[test]
     fn test_get_shell_by_type_unknown() {
         let _cmd = get_shell_by_type(Some("unknown_shell"));
-        // 未知类型应该返回默认 shell
+        // An unknown type should return the default shell
     }
 }

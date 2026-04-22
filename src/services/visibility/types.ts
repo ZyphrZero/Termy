@@ -1,25 +1,25 @@
 /**
- * 功能可见性类型定义
+ * Feature visibility type definitions
  */
 
 /**
- * 功能可见性配置接口
+ * Feature visibility config interface
  */
 export interface VisibilityConfig {
-  /** 功能是否启用（主开关） */
+  /** Whether the feature is enabled (master switch) */
   enabled: boolean;
-  /** 是否在命令面板中显示 */
+  /** Whether to show in the command palette */
   showInCommandPalette: boolean;
-  /** 是否在侧边栏显示图标 */
+  /** Whether to show an icon in the ribbon */
   showInRibbon: boolean;
-  /** 是否在新标签页中显示 */
+  /** Whether to show in new tabs */
   showInNewTab: boolean;
-  /** 是否在状态栏显示 */
+  /** Whether to show in the status bar */
   showInStatusBar: boolean;
 }
 
 /**
- * 默认可见性配置
+ * Default visibility config
  */
 export const DEFAULT_VISIBILITY_CONFIG: VisibilityConfig = {
   enabled: true,
@@ -30,33 +30,33 @@ export const DEFAULT_VISIBILITY_CONFIG: VisibilityConfig = {
 };
 
 /**
- * Ribbon 图标配置
+ * Ribbon icon config
  */
 export interface RibbonConfig {
-  /** 图标名称 (Obsidian icon name) */
+  /** Icon name (Obsidian icon name) */
   icon: string;
-  /** 提示文本 */
+  /** Tooltip text */
   tooltip: string;
-  /** 点击回调 */
+  /** Click callback */
   callback: () => void | Promise<void>;
 }
 
 /**
- * 功能注册配置
+ * Feature registration config
  */
 export interface FeatureRegistrationConfig {
-  /** 功能标识符 */
+  /** Feature identifier */
   id: 'terminal';
-  /** 获取可见性配置的函数 */
+  /** Function that gets the visibility config */
   getVisibility: () => VisibilityConfig;
-  /** Ribbon 图标配置（可选） */
+  /** Ribbon icon config (optional) */
   ribbon?: RibbonConfig;
-  /** 可见性变更回调（可选） */
+  /** Visibility change callback (optional) */
   onVisibilityChange?: (visibility: VisibilityConfig) => void;
 }
 
 /**
- * 功能注册信息
+ * Feature registration info
  */
 export interface FeatureRegistration {
   config: FeatureRegistrationConfig;

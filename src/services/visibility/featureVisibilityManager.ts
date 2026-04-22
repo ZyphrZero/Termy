@@ -1,6 +1,6 @@
 /**
- * 功能可见性管理器
- * 集中管理终端功能的 UI 可见性
+ * Feature visibility manager
+ * Centrally manages UI visibility for terminal features
  */
 
 import type { Plugin } from 'obsidian';
@@ -18,7 +18,7 @@ export class FeatureVisibilityManager {
   }
 
   /**
-   * 注册功能模块
+   * Register a feature
    */
   registerFeature(config: FeatureRegistrationConfig): void {
     try {
@@ -27,7 +27,7 @@ export class FeatureVisibilityManager {
         ribbonRegistered: false,
       });
 
-      // 初始化 Ribbon 图标
+      // Initialize the ribbon icon
       this.updateRibbonVisibility(config.id);
     } catch (error) {
       errorLog(`[FeatureVisibility] Failed to register feature ${config.id}:`, error);
@@ -35,17 +35,17 @@ export class FeatureVisibilityManager {
   }
 
   /**
-   * 更新指定功能的可见性
+   * Update visibility for the specified feature
    */
   updateVisibility(featureId: 'terminal'): void {
     const registration = this._registeredFeatures.get(featureId);
     if (!registration) return;
 
     try {
-      // 更新 Ribbon 图标
+      // Update the ribbon icon
       this.updateRibbonVisibility(featureId);
 
-      // 调用自定义回调
+      // Invoke the custom callback
       const visibility = registration.config.getVisibility();
       registration.config.onVisibilityChange?.(visibility);
     } catch (error) {
@@ -54,7 +54,7 @@ export class FeatureVisibilityManager {
   }
 
   /**
-   * 更新所有已注册功能的可见性
+   * Update visibility for all registered features
    */
   updateAllVisibility(): void {
     for (const featureId of this._registeredFeatures.keys()) {
@@ -63,7 +63,7 @@ export class FeatureVisibilityManager {
   }
 
   /**
-   * 获取功能的可见性配置
+   * Get the feature visibility config
    */
   getVisibility(featureId: 'terminal'): VisibilityConfig | null {
     const registration = this._registeredFeatures.get(featureId);
@@ -78,20 +78,20 @@ export class FeatureVisibilityManager {
   }
 
   /**
-   * 检查功能在指定 UI 位置是否可见
+   * Check whether the feature is visible at the specified UI position
    */
   isVisibleAt(featureId: 'terminal', position: keyof VisibilityConfig): boolean {
     const visibility = this.getVisibility(featureId);
     if (!visibility) return false;
 
-    // 功能未启用时，所有位置都不可见
+    // When the feature is disabled, it is hidden in every position
     if (!visibility.enabled) return false;
 
     return visibility[position] === true;
   }
 
   /**
-   * 更新 Ribbon 图标可见性
+   * Update ribbon icon visibility
    */
   private updateRibbonVisibility(featureId: 'terminal'): void {
     const registration = this._registeredFeatures.get(featureId);
@@ -102,12 +102,12 @@ export class FeatureVisibilityManager {
       const shouldShow = visibility.enabled && visibility.showInRibbon;
 
       if (shouldShow && !this._ribbonIcon) {
-        // 添加图标
+        // Add the icon
         const { icon, tooltip, callback } = registration.config.ribbon;
         this._ribbonIcon = this._plugin.addRibbonIcon(icon, tooltip, callback);
         registration.ribbonRegistered = true;
       } else if (!shouldShow && this._ribbonIcon) {
-        // 移除图标
+        // Remove the icon
         this._ribbonIcon.remove();
         this._ribbonIcon = null;
         registration.ribbonRegistered = false;
@@ -118,7 +118,7 @@ export class FeatureVisibilityManager {
   }
 
   /**
-   * 清理资源
+   * Clean up resources
    */
   cleanup(): void {
     if (this._ribbonIcon) {

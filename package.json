@@ -1,17 +1,19 @@
 {
   "name": "termy",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "type": "module",
   "description": "Full terminal emulator with split panes, preset scripts, multiple shells, and native Rust PTY backend.",
   "main": "main.js",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
     "dev": "node esbuild.config.mjs",
-    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production && node scripts/verify-build.js",
     "build:rust": "node scripts/build-rust.js",
     "build:rust:clean": "node scripts/build-rust.js --clean",
     "package": "node scripts/package-plugin.js",
     "package:zip": "node scripts/package-plugin.js --zip",
+    "test:terminal-keyboard": "node --experimental-strip-types --experimental-specifier-resolution=node --test src/services/terminal/enhancedKeyboardProtocol.test.ts",
+    "verify:bundle": "node scripts/verify-build.js",
     "release": "pnpm build && pnpm build:rust && pnpm package:zip",
     "install:dev": "pnpm build && pnpm build:rust && node scripts/install-dev.js"
   },

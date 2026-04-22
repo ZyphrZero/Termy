@@ -12,7 +12,7 @@ import { RenameTerminalModal } from './renameTerminalModal';
 export const TERMINAL_VIEW_TYPE = 'terminal-view';
 
 /**
- * 终端视图类
+ * Terminal view class
  */
 export class TerminalView extends ItemView {
   protected terminalService: TerminalService | null;
@@ -46,7 +46,7 @@ export class TerminalView extends ItemView {
   getIcon(): string { return 'terminal'; }
 
   onPaneMenu(menu: Menu): void {
-    // Obsidian 可能会传入包装对象，需要获取真实的视图实例
+    // Obsidian may pass a wrapper object, so resolve the real view instance
     const view = (this as TerminalView & { realView?: TerminalView }).realView ?? this;
     
     menu.addItem((item) => {
@@ -77,12 +77,12 @@ export class TerminalView extends ItemView {
   }
 
   onOpen(): Promise<void> {
-    // 使用 contentEl 而不是 containerEl.children[1]
+    // Use contentEl instead of containerEl.children[1]
     const container = this.contentEl;
     container.empty();
     container.addClass('terminal-view-container');
 
-    // 创建搜索栏容器
+    // Create the search bar container
     this.searchContainer = container.createDiv('terminal-search-container');
     this.createSearchUI();
 
@@ -103,18 +103,18 @@ export class TerminalView extends ItemView {
   }
 
   /**
-   * 创建搜索 UI
+   * Create the search UI
    */
   private createSearchUI(): void {
     if (!this.searchContainer) return;
 
-    // 搜索输入框
+    // Search input
     this.searchInput = document.createElement('input');
     this.searchInput.type = 'text';
     this.searchInput.placeholder = t('terminal.search.placeholder');
     this.searchInput.className = 'terminal-search-input';
 
-    // 搜索输入事件
+    // Search input handler
     this.searchInput.addEventListener('input', () => {
       this.performSearch();
     });
@@ -134,19 +134,19 @@ export class TerminalView extends ItemView {
 
     this.searchContainer.appendChild(this.searchInput);
 
-    // 上一个按钮
+    // Previous button
     const prevBtn = this.createSearchButton('chevron-up', t('terminal.search.previous'), () => {
       this.terminalInstance?.searchPrevious();
     });
     this.searchContainer.appendChild(prevBtn);
 
-    // 下一个按钮
+    // Next button
     const nextBtn = this.createSearchButton('chevron-down', t('terminal.search.next'), () => {
       this.terminalInstance?.searchNext();
     });
     this.searchContainer.appendChild(nextBtn);
 
-    // 关闭按钮
+    // Close button
     const closeBtn = this.createSearchButton('x', t('terminal.search.close'), () => {
       this.hideSearch();
     });
@@ -154,7 +154,7 @@ export class TerminalView extends ItemView {
   }
 
   /**
-   * 创建搜索按钮
+   * Create a search button
    */
   private createSearchButton(icon: string, title: string, onClick: () => void): HTMLElement {
     const btn = document.createElement('button');
@@ -166,7 +166,7 @@ export class TerminalView extends ItemView {
   }
 
   /**
-   * 执行搜索
+   * Perform a search
    */
   private performSearch(): void {
     const query = this.searchInput?.value || '';
@@ -174,7 +174,7 @@ export class TerminalView extends ItemView {
   }
 
   /**
-   * 显示搜索栏
+   * Show the search bar
    */
   showSearch(): void {
     if (this.searchContainer) {
@@ -185,7 +185,7 @@ export class TerminalView extends ItemView {
   }
 
   /**
-   * 隐藏搜索栏
+   * Hide the search bar
    */
   hideSearch(): void {
     if (this.searchContainer) {
@@ -234,7 +234,7 @@ export class TerminalView extends ItemView {
         this.updateDropHintText();
       });
 
-      // 设置搜索状态回调
+      // Set the search state callback
       this.terminalInstance.onSearchStateChange((visible) => {
         if (visible) {
           this.showSearch();
@@ -243,7 +243,7 @@ export class TerminalView extends ItemView {
         }
       });
 
-      // 设置右键菜单回调
+      // Set context menu callbacks
       this.terminalInstance.setOnNewTerminal(() => {
         void this.createNewTerminal();
       });
@@ -269,11 +269,11 @@ export class TerminalView extends ItemView {
   }
 
   /**
-   * 创建新终端
+   * Create a new terminal
    */
   private async createNewTerminal(): Promise<void> {
-    // 触发插件的 activateTerminalView 方法
-    // 通过 workspace 获取插件实例
+    // Trigger the plugin's activateTerminalView method
+    // Get the plugin instance through the workspace
     const plugin = this.getTerminalPlugin();
     if (plugin) {
       await plugin.activateTerminalView();
@@ -281,7 +281,7 @@ export class TerminalView extends ItemView {
   }
 
   /**
-   * 拆分终端（供命令使用）
+   * Split the terminal (used by commands)
    */
   async splitTerminal(direction: 'horizontal' | 'vertical'): Promise<void> {
     const { workspace } = this.app;
@@ -766,7 +766,7 @@ export class TerminalView extends ItemView {
   }
 
   /**
-   * 刷新主题/背景相关外观
+   * Refresh theme/background-related appearance
    */
   refreshAppearance(): void {
     if (!this.terminalInstance) return;
@@ -836,7 +836,7 @@ export class TerminalView extends ItemView {
   }
 
   /**
-   * 获取终端实例（供外部调用）
+   * Get the terminal instance (for external callers)
    */
   getTerminalInstance(): TerminalInstance | null {
     return this.terminalInstance;

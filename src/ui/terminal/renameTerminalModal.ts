@@ -1,5 +1,5 @@
 /**
- * 终端重命名模态框
+ * Terminal rename modal
  */
 
 import type { App } from 'obsidian';
@@ -22,24 +22,24 @@ export class RenameTerminalModal extends Modal {
   onOpen(): void {
     const { contentEl, modalEl } = this;
     
-    // 添加自定义样式类
+    // Add custom style class
     modalEl.addClass('rename-terminal-modal');
     contentEl.empty();
 
-    // 标题
+    // Title
     const titleEl = contentEl.createDiv({ cls: 'modal-title' });
     titleEl.createDiv({ cls: 'modal-title-text', text: t('modals.renameTerminal.title') });
 
-    // 输入区域容器
+    // Input area container
     const inputContainer = contentEl.createDiv({ cls: 'rename-input-container' });
     
-    // 标签
+    // Label
     inputContainer.createEl('label', { 
       cls: 'rename-input-label',
       text: t('modals.renameTerminal.placeholder')
     });
     
-    // 输入框
+    // Input field
     this.inputEl = inputContainer.createEl('input', {
       cls: 'rename-input',
       type: 'text',
@@ -47,12 +47,12 @@ export class RenameTerminalModal extends Modal {
       placeholder: t('modals.renameTerminal.placeholder')
     });
 
-    // 输入事件
+    // Input handler
     this.inputEl.addEventListener('input', (e) => {
       this.inputValue = (e.target as HTMLInputElement).value;
     });
 
-    // 回车确认
+    // Confirm on Enter
     this.inputEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -63,24 +63,24 @@ export class RenameTerminalModal extends Modal {
       }
     });
 
-    // 按钮容器
+    // Button container
     const buttonContainer = contentEl.createDiv({ cls: 'modal-button-container' });
 
-    // 取消按钮
+    // Cancel button
     const cancelBtn = buttonContainer.createEl('button', {
       cls: 'mod-cancel',
       text: t('common.cancel')
     });
     cancelBtn.addEventListener('click', () => this.close());
 
-    // 确认按钮
+    // Confirm button
     const confirmBtn = buttonContainer.createEl('button', {
       cls: 'mod-cta',
       text: t('common.confirm')
     });
     confirmBtn.addEventListener('click', () => this.submit());
 
-    // 自动聚焦并选中文本
+    // Auto-focus and select the text
     setTimeout(() => {
       this.inputEl?.focus();
       this.inputEl?.select();

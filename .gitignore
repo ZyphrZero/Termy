@@ -40,8 +40,8 @@ coverage/
 .env.local
 .dev-install-config.json
 
-# ACE Tool
+# ACE Tool Mcp
 .ace-tool/
 
-AGENTS.md
-llms/
+# oh-my-codex
+.omx/

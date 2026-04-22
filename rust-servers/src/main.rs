@@ -1,10 +1,10 @@
 // Terminal Server Main Program
-// 独立的终端服务器，提供 PTY 功能
+// Standalone terminal server that provides PTY functionality
 
 mod server;
 mod router;
 
-// 功能模块
+// Feature modules
 pub mod pty;
 
 use server::{Server, ServerConfig};
@@ -15,7 +15,7 @@ const SERVER_VERSION: &str = match option_env!("TERMINAL_SERVER_VERSION") {
     None => env!("CARGO_PKG_VERSION"),
 };
 
-/// 日志宏
+/// Logging macro
 macro_rules! log_info {
     ($($arg:tt)*) => {
         eprintln!("[INFO] {}", format!($($arg)*));
@@ -30,7 +30,7 @@ macro_rules! log_debug {
     };
 }
 
-/// 解析命令行参数
+/// Parse command-line arguments
 fn parse_args() -> u16 {
     let args: Vec<String> = env::args().collect();
     let mut port: u16 = 0;
@@ -69,22 +69,22 @@ fn parse_args() -> u16 {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 解析命令行参数
+    // Parse command-line arguments
     let port = parse_args();
 
     log_debug!("启动参数: port={}", port);
 
-    // 创建服务器配置
+    // Create the server configuration
     let config = ServerConfig { port };
 
-    // 创建并启动服务器
+    // Create and start the server
     let server = Server::new(config);
     let port = server.start().await?;
 
-    // 保持主线程运行
+    // Keep the main thread running
     log_info!("Terminal Server 已启动，监听端口: {}", port);
     
-    // 等待 Ctrl+C 信号
+    // Wait for the Ctrl+C signal
     tokio::signal::ctrl_c().await?;
     log_info!("收到退出信号，正在关闭服务器...");
 

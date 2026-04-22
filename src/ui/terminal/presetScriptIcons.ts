@@ -1,5 +1,5 @@
 /**
- * 预设脚本图标工具
+ * Preset script icon utilities
  */
 
 import { setIcon } from 'obsidian';
@@ -111,7 +111,7 @@ const SIMPLE_ICON_ORDER = [
 ] as const;
 
 const DEFAULT_ICON_OPTIONS = [
-  // 基础与终端
+  // Basics and terminal
   'terminal',
   'terminal-square',
   'command',
@@ -122,7 +122,7 @@ const DEFAULT_ICON_OPTIONS = [
   'files',
   'search',
   'filter',
-  // 执行动作
+  // Execution actions
   'play',
   'pause',
   'square',
@@ -130,7 +130,7 @@ const DEFAULT_ICON_OPTIONS = [
   'rotate-ccw',
   'download',
   'upload',
-  // 开发与部署
+  // Development and deployment
   'git-branch',
   'git-commit',
   'git-merge',
@@ -140,19 +140,19 @@ const DEFAULT_ICON_OPTIONS = [
   'hard-drive',
   'package',
   'box',
-  // 操作与编辑
+  // Actions and editing
   'copy',
   'clipboard',
   'scissors',
   'trash',
   'plus',
   'minus',
-  // 配置与工具
+  // Settings and tools
   'settings',
   'sliders-horizontal',
   'wrench',
   'hammer',
-  // 状态与提醒
+  // Status and alerts
   'check',
   'x',
   'alert-triangle',
@@ -160,14 +160,14 @@ const DEFAULT_ICON_OPTIONS = [
   'bell',
   'clock',
   'calendar',
-  // 安全与网络
+  // Security and network
   'shield',
   'lock',
   'unlock',
   'key',
   'globe',
   'link',
-  // 常用语义
+  // Common semantic icons
   'sparkles',
   'wand-2',
   'bot',

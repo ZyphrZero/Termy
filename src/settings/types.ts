@@ -1,32 +1,32 @@
 /**
- * 设置模块类型定义
+ * Settings module type definitions
  */
 
 import type { App } from 'obsidian';
 import type TerminalPlugin from '../main';
 
 /**
- * 渲染器上下文接口
- * 传递给设置渲染器的共享依赖和状态
+ * Renderer context interface
+ * Shared dependencies and state passed to settings renderers
  */
 export interface RendererContext {
-  /** Obsidian App 实例 */
+  /** Obsidian App instance */
   app: App;
-  /** 插件实例 */
+  /** Plugin instance */
   plugin: TerminalPlugin;
-  /** 设置内容容器元素 */
+  /** Settings content container element */
   containerEl: HTMLElement;
-  /** 当前展开的区块集合 */
+  /** Set of currently expanded sections */
   expandedSections: Set<string>;
 }
 
 /**
- * 设置渲染器接口
+ * Settings renderer interface
  */
 export interface ISettingsRenderer {
   /**
-   * 渲染设置内容
-   * @param context 渲染器上下文
+   * Render settings content
+   * @param context Renderer context
    */
   render(context: RendererContext): void;
 }

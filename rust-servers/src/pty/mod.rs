@@ -1,5 +1,5 @@
-// PTY 模块
-// 提供终端会话管理功能
+// PTY module
+// Provides terminal session management
 
 mod session;
 mod shell;
@@ -19,7 +19,7 @@ use tokio_tungstenite::tungstenite::Message;
 use futures_util::SinkExt;
 use uuid::Uuid;
 
-/// 日志宏
+/// Logging macros
 macro_rules! log_info {
     ($($arg:tt)*) => {
         eprintln!("[INFO] [PTY] {}", format!($($arg)*));
@@ -41,23 +41,23 @@ macro_rules! log_debug {
 }
 
 // ============================================================================
-// PTY 会话上下文
+// PTY session context
 // ============================================================================
 
-/// 单个 PTY 会话的上下文
+/// Context for a single PTY session
 ///
-/// 包含一个 PTY 会话所需的所有资源
+/// Contains all resources required for one PTY session
 struct PtySessionContext {
-    /// PTY 会话
+    /// PTY session
     session: Arc<TokioMutex<PtySession>>,
-    /// PTY 写入器
+    /// PTY writer
     writer: Arc<Mutex<PtyWriter>>,
-    /// 读取任务句柄
+    /// Read task handle
     read_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl PtySessionContext {
-    /// 创建新的会话上下文
+    /// Create a new session context
     fn new(
         session: Arc<TokioMutex<PtySession>>,
         writer: Arc<Mutex<PtyWriter>>,
@@ -71,21 +71,21 @@ impl PtySessionContext {
 }
 
 // ============================================================================
-// PTY 处理器
+// PTY handler
 // ============================================================================
 
-/// PTY 模块处理器
-/// 
-/// 管理多个 PTY 会话的生命周期，处理终端相关的消息
+/// PTY module handler
+///
+/// Manages the lifecycle of multiple PTY sessions and handles terminal-related messages
 pub struct PtyHandler {
-    /// 会话管理器: session_id → PtySessionContext
+    /// Session registry: session_id -> PtySessionContext
     sessions: TokioMutex<HashMap<String, PtySessionContext>>,
-    /// WebSocket 发送器 (用于发送 PTY 输出)
+    /// WebSocket sender (used to send PTY output)
     ws_sender: TokioMutex<Option<WsSender>>,
 }
 
 impl PtyHandler {
-    /// 创建新的 PTY 处理器
+    /// Create a new PTY handler
     pub fn new() -> Self {
         Self {
             sessions: TokioMutex::new(HashMap::new()),
@@ -93,13 +93,13 @@ impl PtyHandler {
         }
     }
     
-    /// 设置 WebSocket 发送器
+    /// Set the WebSocket sender
     pub async fn set_ws_sender(&self, sender: WsSender) {
         let mut ws_sender = self.ws_sender.lock().await;
         *ws_sender = Some(sender);
     }
     
-    /// 处理 init 消息 - 创建 PTY 会话
+    /// Handle the init message and create a PTY session
     async fn handle_init(
         &self,
         shell_type: Option<String>,
@@ -107,12 +107,12 @@ impl PtyHandler {
         cwd: Option<String>,
         env: Option<HashMap<String, String>>,
     ) -> Result<Option<ServerResponse>, RouterError> {
-        // 生成唯一的 session_id
+        // Generate a unique session_id
         let session_id = Uuid::new_v4().to_string();
         
         log_info!("初始化 PTY 会话: session_id={}, shell_type={:?}, cwd={:?}", session_id, shell_type, cwd);
         
-        // 创建 PTY 会话
+        // Create the PTY session
         let (pty_session, pty_reader, pty_writer) = PtySession::new(
             80,
             24,
@@ -122,7 +122,7 @@ impl PtyHandler {
             env.as_ref(),
         ).map_err(|e| RouterError::ModuleError(format!("创建 PTY 会话失败: {}", e)))?;
         
-        // 创建会话上下文
+        // Create the session context
         let pty_session = Arc::new(TokioMutex::new(pty_session));
         let pty_reader = Arc::new(Mutex::new(pty_reader));
         let pty_writer = Arc::new(Mutex::new(pty_writer));
@@ -132,11 +132,11 @@ impl PtyHandler {
             Arc::clone(&pty_writer),
         );
         
-        // 启动 PTY 输出读取任务
+        // Start the PTY output reader task
         let read_task = self.start_read_task(session_id.clone(), pty_reader, pty_writer, shell_type).await?;
         context.read_task = Some(read_task);
         
-        // 存储会话上下文
+        // Store the session context
         {
             let mut sessions = self.sessions.lock().await;
             sessions.insert(session_id.clone(), context);
@@ -144,7 +144,7 @@ impl PtyHandler {
         
         log_info!("PTY 会话创建成功: session_id={}", session_id);
         
-        // 返回成功响应，包含 session_id
+        // Return a success response that includes the session_id
         Ok(Some(ServerResponse::new(
             ModuleType::Pty,
             "init_complete",
@@ -155,9 +155,9 @@ impl PtyHandler {
         )))
     }
     
-    /// 启动 PTY 输出读取任务
-    /// 
-    /// 返回任务句柄，由调用者负责存储
+    /// Start the PTY output reader task
+    ///
+    /// Returns the task handle, which the caller stores
     async fn start_read_task(
         &self,
         session_id: String,
@@ -175,7 +175,7 @@ impl PtyHandler {
         
         let ws_sender = ws_sender.ok_or_else(|| RouterError::ModuleError("WebSocket sender not set".to_string()))?;
         
-        // 启动读取任务
+        // Start the reader task
         let task = tokio::spawn(async move {
             enum ReadEvent {
                 Data(Vec<u8>),
@@ -267,8 +267,8 @@ impl PtyHandler {
                         batch_buffer.len()
                     );
 
-                    // 构建带 session_id 前缀的二进制帧
-                    // 格式: [session_id_length: u8][session_id: bytes][data: bytes]
+                    // Build a binary frame prefixed with the session_id
+                    // Format: [session_id_length: u8][session_id: bytes][data: bytes]
                     let session_id_bytes = session_id.as_bytes();
                     let session_id_len = session_id_bytes.len() as u8;
 
@@ -313,10 +313,10 @@ impl PtyHandler {
                 }
 
                 if pending_exit {
-                    // EOF - 进程退出
+                    // EOF: the process has exited
                     log_info!("PTY 输出结束: session_id={}", session_id);
 
-                    // 发送 exit 事件
+                    // Send the exit event
                     let exit_response = ServerResponse::new(
                         ModuleType::Pty,
                         "exit",
@@ -337,7 +337,7 @@ impl PtyHandler {
         Ok(task)
     }
     
-    /// 处理 resize 消息 - 调整终端尺寸
+    /// Handle the resize message and resize the terminal
     async fn handle_resize(&self, session_id: &str, cols: u16, rows: u16) -> Result<Option<ServerResponse>, RouterError> {
         log_info!("调整终端尺寸: session_id={}, {}x{}", session_id, cols, rows);
         
@@ -349,10 +349,10 @@ impl PtyHandler {
         pty.resize(cols, rows)
             .map_err(|e| RouterError::ModuleError(format!("调整终端尺寸失败: {}", e)))?;
         
-        Ok(None) // resize 不需要响应
+        Ok(None) // resize does not require a response
     }
     
-    /// 写入数据到指定会话的 PTY
+    /// Write data to the PTY for the specified session
     pub async fn write_data(&self, session_id: &str, data: &[u8]) -> Result<(), RouterError> {
         let sessions = self.sessions.lock().await;
         let context = sessions.get(session_id)
@@ -365,18 +365,18 @@ impl PtyHandler {
         Ok(())
     }
     
-    /// 销毁指定会话
+    /// Destroy the specified session
     pub async fn handle_destroy(&self, session_id: &str) -> Result<(), RouterError> {
         log_info!("销毁 PTY 会话: session_id={}", session_id);
         
         let mut sessions = self.sessions.lock().await;
         if let Some(mut context) = sessions.remove(session_id) {
-            // 终止 PTY 进程
+            // Terminate the PTY process
             if let Ok(mut session) = context.session.try_lock() {
                 let _ = session.kill();
             }
             
-            // 异步终止读取任务，不等待完成
+            // End the reader task asynchronously without waiting for completion
             if let Some(task) = context.read_task.take() {
                 tokio::spawn(async move {
                     let _ = task.await;
@@ -391,7 +391,7 @@ impl PtyHandler {
         }
     }
     
-    /// 清理所有会话 (连接关闭时调用)
+    /// Clean up all sessions (called when the connection closes)
     pub async fn cleanup_all(&self) {
         log_info!("清理所有 PTY 会话");
         
@@ -399,12 +399,12 @@ impl PtyHandler {
         for (session_id, mut context) in sessions.drain() {
             log_info!("清理会话: {}", session_id);
             
-            // 终止 PTY 进程
+            // Terminate the PTY process
             if let Ok(mut session) = context.session.try_lock() {
                 let _ = session.kill();
             }
             
-            // 等待读取任务结束
+            // Wait for the reader task to finish
             if let Some(task) = context.read_task.take() {
                 let _ = task.await;
             }
@@ -413,7 +413,7 @@ impl PtyHandler {
         log_info!("所有 PTY 会话已清理");
     }
     
-    /// 检查是否有活跃会话
+    /// Check whether any sessions are active
     pub async fn has_sessions(&self) -> bool {
         let sessions = self.sessions.lock().await;
         !sessions.is_empty()
@@ -445,7 +445,7 @@ impl ModuleHandler for PtyHandler {
                 self.handle_init(shell_type, shell_args, cwd, env).await
             }
             "resize" => {
-                // resize 需要 session_id
+                // resize requires a session_id
                 let session_id: Option<String> = msg.get_field("session_id");
                 let session_id = session_id.ok_or_else(|| {
                     RouterError::ModuleError("SESSION_ID_REQUIRED".to_string())
@@ -457,7 +457,7 @@ impl ModuleHandler for PtyHandler {
                 self.handle_resize(&session_id, cols, rows).await
             }
             "destroy" => {
-                // destroy 需要 session_id
+                // destroy requires a session_id
                 let session_id: Option<String> = msg.get_field("session_id");
                 let session_id = session_id.ok_or_else(|| {
                     RouterError::ModuleError("SESSION_ID_REQUIRED".to_string())
@@ -467,7 +467,7 @@ impl ModuleHandler for PtyHandler {
                 Ok(None)
             }
             "env" => {
-                // env 命令在原实现中只是记录日志，实际环境变量在 init 时设置
+                // In the original implementation, the env command only logged data; actual environment variables are set during init
                 let cwd: Option<String> = msg.get_field("cwd");
                 let env: Option<HashMap<String, String>> = msg.get_field("env");
                 log_info!("收到 env 命令: cwd={:?}, env={:?}", cwd, env);

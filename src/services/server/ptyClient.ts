@@ -1,8 +1,8 @@
 /**
- * PtyClient - PTY 模块客户端 (多会话支持)
+ * PtyClient - PTY module client (multi-session support)
  * 
- * 提供终端会话管理功能，支持多个独立的 PTY 会话。
- * 每个终端实例对应一个独立的 session_id，事件通过会话级别 API 分发。
+ * Provides terminal session management with support for multiple independent PTY sessions.
+ * Each terminal instance maps to an independent session_id, and events are dispatched through the session-scoped API.
  */
 
 import { ModuleClient } from './moduleClient';
@@ -20,16 +20,16 @@ type SessionEventHandler<K extends keyof SessionEventListeners> =
   SessionEventListeners[K] extends Set<infer Handler> ? Handler : never;
 
 /**
- * PTY 模块客户端
+ * PTY module client
  */
 export class PtyClient extends ModuleClient {
-  /** 会话级别事件监听器: sessionId -> event -> handlers */
+  /** Session-scoped event listeners: sessionId -> event -> handlers */
   private sessionListeners: Map<string, SessionEventListeners> = new Map();
   
-  /** 等待 init_complete 响应的 Promise resolver */
+  /** Promise resolvers waiting for init_complete responses */
   private initResolvers: Map<string, { resolve: (sessionId: string) => void; reject: (error: Error) => void }> = new Map();
   
-  /** 临时存储 init 请求的 ID，用于关联响应 */
+  /** Temporarily stores the init request ID for response correlation */
   private pendingInitId: string | null = null;
 
   constructor() {
@@ -37,18 +37,18 @@ export class PtyClient extends ModuleClient {
   }
 
   /**
-   * 初始化 PTY 会话
+   * Initialize a PTY session
    * 
-   * @param config PTY 配置
-   * @returns Promise<string> 返回 session_id
+   * @param config PTY config
+   * @returns Promise<string> Returns session_id
    */
   async init(config: PtyConfig = {}): Promise<string> {
     return new Promise((resolve, reject) => {
-      // 生成临时 ID 用于关联响应
+      // Generate a temporary ID for correlating the response
       const tempId = `init-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       this.pendingInitId = tempId;
       
-      // 设置超时
+      // Set timeout
       const timeout = setTimeout(() => {
         this.initResolvers.delete(tempId);
         if (this.pendingInitId === tempId) {
@@ -57,7 +57,7 @@ export class PtyClient extends ModuleClient {
         reject(new Error('PTY init timeout'));
       }, 30000);
       
-      // 包装 resolver 以清除超时
+      // Wrap resolvers so the timeout is cleared
       const wrappedResolve = (sessionId: string) => {
         clearTimeout(timeout);
         this.initResolvers.delete(tempId);
@@ -78,7 +78,7 @@ export class PtyClient extends ModuleClient {
       
       this.initResolvers.set(tempId, { resolve: wrappedResolve, reject: wrappedReject });
       
-      // 发送 init 消息
+      // Send init message
       this.send('init', {
         shell_type: config.shell_type,
         shell_args: config.shell_args,
@@ -91,31 +91,31 @@ export class PtyClient extends ModuleClient {
   }
 
   /**
-   * 调整终端尺寸
+   * Resize the terminal
    * 
-   * @param sessionId 会话 ID
-   * @param cols 列数
-   * @param rows 行数
+   * @param sessionId Session ID
+   * @param cols Number of columns
+   * @param rows Number of rows
    */
   resize(sessionId: string, cols: number, rows: number): void {
     this.send('resize', { session_id: sessionId, cols, rows });
   }
 
   /**
-   * 写入文本数据
+   * Write text data
    * 
-   * @param sessionId 会话 ID
-   * @param data 文本数据
+   * @param sessionId Session ID
+   * @param data Text data
    */
   write(sessionId: string, data: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }
-    // PTY 文本输入：格式为 [session_id_length][session_id][data]
+    // PTY text input: format [session_id_length][session_id][data]
     const sessionIdBytes = new TextEncoder().encode(sessionId);
     const dataBytes = new TextEncoder().encode(data);
     
-    // 构建二进制帧
+    // Build the binary frame
     const frame = new Uint8Array(1 + sessionIdBytes.length + dataBytes.length);
     frame[0] = sessionIdBytes.length;
     frame.set(sessionIdBytes, 1);
@@ -125,10 +125,10 @@ export class PtyClient extends ModuleClient {
   }
 
   /**
-   * 写入二进制数据
+   * Write binary data
    * 
-   * @param sessionId 会话 ID
-   * @param data 二进制数据
+   * @param sessionId Session ID
+   * @param data Binary data
    */
   writeBinary(sessionId: string, data: Uint8Array | ArrayBuffer): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -138,7 +138,7 @@ export class PtyClient extends ModuleClient {
     const sessionIdBytes = new TextEncoder().encode(sessionId);
     const dataArray = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
     
-    // 构建二进制帧
+    // Build the binary frame
     const frame = new Uint8Array(1 + sessionIdBytes.length + dataArray.length);
     frame[0] = sessionIdBytes.length;
     frame.set(sessionIdBytes, 1);
@@ -148,64 +148,64 @@ export class PtyClient extends ModuleClient {
   }
 
   /**
-   * 销毁指定会话
+   * Destroy the specified session
    * 
-   * @param sessionId 会话 ID
+   * @param sessionId Session ID
    */
   destroySession(sessionId: string): void {
     this.send('destroy', { session_id: sessionId });
-    // 清理该会话的监听器
+    // Clear listeners for this session
     this.sessionListeners.delete(sessionId);
   }
 
-  // ==================== 会话级别事件注册 ====================
+  // ==================== Session-scoped event registration ====================
 
   /**
-   * 注册会话级别的输出处理器
+   * Register a session-scoped output handler
    * 
-   * @param sessionId 会话 ID
-   * @param handler 输出处理器
-   * @returns 取消注册的函数
+   * @param sessionId Session ID
+   * @param handler Output handler
+   * @returns Unregister function
    */
   onSessionOutput(sessionId: string, handler: (data: Uint8Array) => void): () => void {
     return this.onSession(sessionId, 'output', handler);
   }
 
   /**
-   * 注册会话级别的退出处理器
+   * Register a session-scoped exit handler
    * 
-   * @param sessionId 会话 ID
-   * @param handler 退出处理器
-   * @returns 取消注册的函数
+   * @param sessionId Session ID
+   * @param handler Exit handler
+   * @returns Unregister function
    */
   onSessionExit(sessionId: string, handler: (code: number) => void): () => void {
     return this.onSession(sessionId, 'exit', handler);
   }
 
   /**
-   * 注册会话级别的错误处理器
+   * Register a session-scoped error handler
    * 
-   * @param sessionId 会话 ID
-   * @param handler 错误处理器
-   * @returns 取消注册的函数
+   * @param sessionId Session ID
+   * @param handler Error handler
+   * @returns Unregister function
    */
   onSessionError(sessionId: string, handler: (code: string, message: string) => void): () => void {
     return this.onSession(sessionId, 'error', handler);
   }
 
   /**
-   * 注册会话级别的 Shell 集成事件处理器
+   * Register a session-scoped Shell integration event handler
    * 
-   * @param sessionId 会话 ID
-   * @param handler Shell 事件处理器
-   * @returns 取消注册的函数
+   * @param sessionId Session ID
+   * @param handler Shell event handler
+   * @returns Unregister function
    */
   onSessionShellEvent(sessionId: string, handler: (event: ShellEvent) => void): () => void {
     return this.onSession(sessionId, 'shellEvent', handler);
   }
 
   /**
-   * 注册会话级别事件监听器
+   * Register a session-scoped event listener
    */
   private onSession<K extends keyof SessionEventListeners>(
     sessionId: string,
@@ -222,7 +222,7 @@ export class PtyClient extends ModuleClient {
     }
     
     const listeners = this.sessionListeners.get(sessionId)!;
-    // 通过事件类型关联处理器集合，避免联合类型推断成交叉函数
+    // Use the event type to select the handler set and avoid union inference collapsing into an intersection signature
     const eventListeners = listeners[event] as Set<SessionEventHandler<K>>;
     eventListeners.add(handler);
     
@@ -236,7 +236,7 @@ export class PtyClient extends ModuleClient {
   }
 
   /**
-   * 触发会话级别事件 - output
+   * Emit a session-scoped event - output
    */
   private emitSessionOutput(sessionId: string, data: Uint8Array): void {
     const listeners = this.sessionListeners.get(sessionId);
@@ -252,7 +252,7 @@ export class PtyClient extends ModuleClient {
   }
 
   /**
-   * 触发会话级别事件 - exit
+   * Emit a session-scoped event - exit
    */
   private emitSessionExit(sessionId: string, code: number): void {
     const listeners = this.sessionListeners.get(sessionId);
@@ -268,7 +268,7 @@ export class PtyClient extends ModuleClient {
   }
 
   /**
-   * 触发会话级别事件 - error
+   * Emit a session-scoped event - error
    */
   private emitSessionError(sessionId: string, code: string, message: string): void {
     const listeners = this.sessionListeners.get(sessionId);
@@ -284,7 +284,7 @@ export class PtyClient extends ModuleClient {
   }
 
   /**
-   * 触发会话级别事件 - shell_event
+   * Emit a session-scoped event - shell_event
    */
   private emitSessionShellEvent(sessionId: string, event: ShellEvent): void {
     const listeners = this.sessionListeners.get(sessionId);
@@ -300,14 +300,14 @@ export class PtyClient extends ModuleClient {
   }
 
   /**
-   * 处理服务器消息
+   * Handle server messages
    */
   protected onMessage(msg: ServerMessage): void {
     const sessionId = msg.session_id as string | undefined;
     
     switch (msg.type) {
       case 'init_complete':
-        // 处理 init 响应
+        // Handle init response
         if (sessionId && this.pendingInitId) {
           const resolver = this.initResolvers.get(this.pendingInitId);
           if (resolver) {
@@ -321,7 +321,7 @@ export class PtyClient extends ModuleClient {
         break;
         
       case 'output':
-        // 输出数据 (JSON 格式的输出，二进制数据在 handleBinaryMessage 中处理)
+        // Output data (JSON-formatted output; binary data is handled in handleBinaryMessage)
         if (sessionId && msg.data) {
           const data = msg.data as number[];
           const uint8Data = new Uint8Array(data);
@@ -333,7 +333,7 @@ export class PtyClient extends ModuleClient {
         if (sessionId) {
           const code = (msg.code as number) || 0;
           this.emitSessionExit(sessionId, code);
-          // 清理该会话的监听器
+          // Clear listeners for this session
           this.sessionListeners.delete(sessionId);
         }
         break;
@@ -344,7 +344,7 @@ export class PtyClient extends ModuleClient {
           const message = msg.message as string;
           this.emitSessionError(sessionId, code, message);
         } else if (this.pendingInitId) {
-          // init 错误
+          // init error
           const resolver = this.initResolvers.get(this.pendingInitId);
           if (resolver) {
             resolver.reject(new Error(msg.message as string || 'PTY error'));
@@ -364,10 +364,10 @@ export class PtyClient extends ModuleClient {
   }
 
   /**
-   * 处理二进制消息 (PTY 输出)
-   * 由 ServerManager 调用
+   * Handle binary messages (PTY output)
+   * Called by ServerManager
    * 
-   * 帧格式: [session_id_length: u8][session_id: bytes][data: bytes]
+   * Frame format: [session_id_length: u8][session_id: bytes][data: bytes]
    */
   handleBinaryMessage(data: ArrayBuffer): void {
     const bytes = new Uint8Array(data);
@@ -377,7 +377,7 @@ export class PtyClient extends ModuleClient {
       return;
     }
     
-    // 解析 session_id
+    // Parse session_id
     const sessionIdLength = bytes[0];
     if (bytes.length < 1 + sessionIdLength) {
       errorLog('[PtyClient] 二进制消息格式错误: session_id 长度不足');
@@ -387,17 +387,17 @@ export class PtyClient extends ModuleClient {
     const sessionIdBytes = bytes.slice(1, 1 + sessionIdLength);
     const sessionId = new TextDecoder().decode(sessionIdBytes);
     
-    // 提取数据
+    // Extract data
     const outputData = bytes.slice(1 + sessionIdLength);
     
     debugLog(`[PtyClient] 收到会话 ${sessionId} 的输出, 长度: ${outputData.length}`);
     
-    // 触发会话级别事件
+    // Emit the session-scoped event
     this.emitSessionOutput(sessionId, outputData);
   }
 
   /**
-   * 清理资源
+   * Clean up resources
    */
   override destroy(): void {
     this.sessionListeners.clear();

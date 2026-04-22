@@ -1,30 +1,30 @@
 /**
- * ModuleClient - 模块客户端基类
+ * ModuleClient - base module client class
  * 
- * 提供与统一服务器通信的基础功能
+ * Provides the core functionality for communicating with the unified server
  */
 
 import type { ModuleType, ClientMessage, ServerMessage } from './types';
 import { debugLog, errorLog } from '@/utils/logger';
 
 /**
- * 消息处理器类型
+ * Message handler type
  */
 export type MessageHandler = (msg: ServerMessage) => void;
 
 /**
- * 模块客户端基类
+ * Base module client class
  * 
- * 各模块客户端继承此类实现特定功能
+ * Module-specific clients extend this class to implement their own functionality
  */
 export abstract class ModuleClient {
-  /** 模块类型 */
+  /** Module type */
   protected readonly module: ModuleType;
   
-  /** WebSocket 连接 (由 ServerManager 注入) */
+  /** WebSocket connection (injected by ServerManager) */
   protected ws: WebSocket | null = null;
   
-  /** 消息处理器 */
+  /** Message handlers */
   private messageHandlers: Set<MessageHandler> = new Set();
 
   constructor(module: ModuleType) {
@@ -32,8 +32,8 @@ export abstract class ModuleClient {
   }
 
   /**
-   * 设置 WebSocket 连接
-   * 由 ServerManager 调用
+   * Set the WebSocket connection
+   * Called by ServerManager
    */
   setWebSocket(ws: WebSocket | null): void {
     this.ws = ws;
@@ -44,17 +44,17 @@ export abstract class ModuleClient {
   }
 
   /**
-   * 检查是否已连接
+   * Check whether connected
    */
   isConnected(): boolean {
     return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
   }
 
   /**
-   * 发送消息到服务器
+   * Send a message to the server
    * 
-   * @param type 消息类型
-   * @param payload 消息负载
+   * @param type Message type
+   * @param payload Message payload
    */
   protected send(type: string, payload: Record<string, unknown> = {}): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -77,9 +77,9 @@ export abstract class ModuleClient {
   }
 
   /**
-   * 发送二进制数据
+   * Send binary data
    * 
-   * @param data 二进制数据
+   * @param data Binary data
    */
   protected sendBinary(data: ArrayBuffer | Uint8Array): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -95,18 +95,18 @@ export abstract class ModuleClient {
   }
 
   /**
-   * 处理来自服务器的消息
-   * 由 ServerManager 调用
+   * Handle messages from the server
+   * Called by ServerManager
    * 
-   * @param msg 服务器消息
+   * @param msg Server message
    */
   handleMessage(msg: ServerMessage): void {
-    // 只处理属于本模块的消息
+    // Only handle messages for this module
     if (msg.module !== this.module) {
       return;
     }
 
-    // 调用所有注册的处理器
+    // Call all registered handlers
     this.messageHandlers.forEach(handler => {
       try {
         handler(msg);
@@ -115,15 +115,15 @@ export abstract class ModuleClient {
       }
     });
 
-    // 调用子类的消息处理方法
+    // Call the subclass message handler
     this.onMessage(msg);
   }
 
   /**
-   * 注册消息处理器
+   * Register a message handler
    * 
-   * @param handler 消息处理器
-   * @returns 取消注册的函数
+   * @param handler Message handler
+   * @returns Unregister function
    */
   protected addMessageHandler(handler: MessageHandler): () => void {
     this.messageHandlers.add(handler);
@@ -131,14 +131,14 @@ export abstract class ModuleClient {
   }
 
   /**
-   * 子类实现的消息处理方法
+   * Message handler implemented by subclasses
    * 
-   * @param msg 服务器消息
+   * @param msg Server message
    */
   protected abstract onMessage(msg: ServerMessage): void;
 
   /**
-   * 清理资源
+   * Clean up resources
    */
   destroy(): void {
     this.messageHandlers.clear();

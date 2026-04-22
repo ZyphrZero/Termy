@@ -1,5 +1,5 @@
 /**
- * 终端实例类 - 基于统一 Rust 服务器的 PtyClient 通信实现
+ * Terminal instance class - a PtyClient-based implementation built on the unified Rust server
  * 
 
  */
@@ -13,17 +13,17 @@ import type { PtyClient } from '@/services/server/ptyClient';
 import type { ShellEvent, ShellEventSource } from '@/services/server/types';
 import { shell } from 'electron';
 
-// xterm.js CSS（静态导入，esbuild 会处理）
+// xterm.js CSS (static import handled by esbuild)
 import '@xterm/xterm/css/xterm.css';
 
-// xterm.js 模块类型声明（动态导入）
+// xterm.js module type declarations (for dynamic import)
 type Terminal = import('@xterm/xterm').Terminal;
 type FitAddon = import('@xterm/addon-fit').FitAddon;
 type SearchAddon = import('@xterm/addon-search').SearchAddon;
 type CanvasAddon = import('@xterm/addon-canvas').CanvasAddon;
 type WebglAddon = import('@xterm/addon-webgl').WebglAddon;
 
-// xterm.js 模块缓存
+// xterm.js module cache
 let xtermModules: {
   Terminal: typeof import('@xterm/xterm').Terminal;
   FitAddon: typeof import('@xterm/addon-fit').FitAddon;
@@ -34,11 +34,11 @@ let xtermModules: {
 } | null = null;
 
 /**
- * 动态加载 xterm.js 模块（首次调用时加载，后续使用缓存）
- * @throws {Error} 如果模块加载失败
+ * Dynamically load xterm.js modules (loaded on first use and cached afterward)
+ * @throws {Error} If module loading fails
  */
 async function loadXtermModules() {
-  // 如果已缓存，直接返回
+  // Return cached modules immediately if available
   if (xtermModules) {
     debugLog('[Terminal] 使用缓存的 xterm.js 模块');
     return xtermModules;
@@ -63,7 +63,7 @@ async function loadXtermModules() {
       import('@xterm/addon-web-links')
     ]);
     
-    // 验证所有模块都已成功加载
+    // Verify that all modules were loaded successfully
     if (!Terminal || !FitAddon || !SearchAddon || !CanvasAddon || !WebglAddon || !WebLinksAddon) {
       throw new Error('One or more xterm.js modules failed to load');
     }
@@ -76,7 +76,7 @@ async function loadXtermModules() {
     const errorMsg = error instanceof Error ? error.message : String(error);
     errorLog('[Terminal] xterm.js 模块加载失败:', error);
     
-    // 清除可能的部分缓存
+    // Clear any partial cache that may have been created
     xtermModules = null;
     
     throw new Error(t('terminalInstance.xtermLoadFailed', { message: errorMsg }));
@@ -106,9 +106,9 @@ export interface TerminalOptions {
   textOpacity?: number;
 }
 
-/** 搜索状态变化回调 */
+/** Search state change callback */
 export type SearchStateCallback = (visible: boolean) => void;
-/** 字体大小变化回调 */
+/** Font size change callback */
 export type FontSizeChangeCallback = (fontSize: number) => void;
 
 export class TerminalInstance {
@@ -121,13 +121,13 @@ export class TerminalInstance {
   private renderer: CanvasAddon | WebglAddon | null = null;
   private rendererType: 'canvas' | 'webgl' | null = null;
   
-  // 使用 PtyClient 替代直接的 WebSocket
+  // Use PtyClient instead of a direct WebSocket
   private ptyClient: PtyClient | null = null;
   
-  // 会话 ID (多会话支持)
+  // Session ID (multi-session support)
   private sessionId: string | null = null;
   
-  // 事件取消函数
+  // Event unsubscribe callbacks
   private outputUnsubscribe: (() => void) | null = null;
   private exitUnsubscribe: (() => void) | null = null;
   private errorUnsubscribe: (() => void) | null = null;
@@ -140,32 +140,32 @@ export class TerminalInstance {
   private isDestroyed = false;
   private titleChangeCallback: ((title: string) => void) | null = null;
   
-  // 搜索相关
+  // Search-related state
   private searchVisible = false;
   private searchStateCallback: SearchStateCallback | null = null;
   private lastSearchQuery = '';
   
-  // 字体大小相关
+  // Font size state
   private currentFontSize: number;
   private fontSizeChangeCallback: FontSizeChangeCallback | null = null;
   private readonly minFontSize = 8;
   private readonly maxFontSize = 32;
 
-  // 输入批处理
+  // Input batching
   private pendingInput: string[] = [];
   private inputFlushTimer: number | null = null;
   private readonly inputBatchIntervalMs = 4;
 
-  // 右键菜单回调（用于拆分终端、新建终端等需要外部处理的操作）
+  // Context menu callbacks for actions like split/new terminal that need external handling
   private contextMenuCallbacks: {
     onNewTerminal?: () => void;
     onSplitTerminal?: (direction: 'horizontal' | 'vertical') => void;
   } = {};
 
-  // 当前工作目录（通过 shell prompt 输出提取）
+  // Current working directory (extracted from shell prompt output)
   private currentCwd: string | null = null;
 
-  // Shell 集成事件
+  // Shell integration events
   private shellEventCallback: ((event: ShellEvent) => void) | null = null;
   private commandHistory: Array<{
     startTime: number;
@@ -185,8 +185,8 @@ export class TerminalInstance {
   }
 
   /**
-   * 初始化 xterm.js 实例（动态加载模块）
-   * @throws {Error} 如果模块加载或初始化失败
+   * Initialize the xterm.js instance (modules loaded dynamically)
+   * @throws {Error} If module loading or initialization fails
    */
   private async initXterm(): Promise<void> {
     try {
@@ -211,9 +211,9 @@ export class TerminalInstance {
       this.xterm.loadAddon(this.fitAddon);
       this.xterm.loadAddon(this.searchAddon);
       
-      // Ctrl+点击打开链接
+      // Ctrl+click opens links
       const webLinksAddon = new WebLinksAddon((event, uri) => {
-        // 只在 Ctrl+点击（Windows/Linux）或 Cmd+点击（macOS）时打开链接
+        // Only open links on Ctrl+click (Windows/Linux) or Cmd+click (macOS)
         if (event.ctrlKey || event.metaKey) {
           event.preventDefault();
           void shell.openExternal(uri).catch((error) => {
@@ -334,7 +334,7 @@ export class TerminalInstance {
 
 
   /**
-   * 使用 ServerManager 初始化终端
+   * Initialize the terminal with ServerManager
    * 
 
    */
@@ -342,16 +342,16 @@ export class TerminalInstance {
     if (this.isInitialized || this.isDestroyed) return;
 
     try {
-      // 动态加载 xterm.js 模块
+      // Load xterm.js modules dynamically
       await this.initXterm();
       
-      // 确保服务器运行
+      // Ensure the server is running
       await serverManager.ensureServer();
       
-      // 获取 PtyClient
+      // Get the PtyClient
       this.ptyClient = serverManager.pty();
       
-      // 初始化 PTY 会话并获取 session_id
+      // Initialize the PTY session and get the session_id
       this.sessionId = await this.ptyClient.init({
         shell_type: this.shellType === 'default' ? undefined : this.shellType,
         shell_args: this.options.shellArgs,
@@ -364,7 +364,7 @@ export class TerminalInstance {
       
       debugLog('[Terminal] 获取到 session_id:', this.sessionId);
       
-      // 设置会话级别的事件处理器
+      // Set up session-level event handlers
       this.setupPtyClientHandlers();
       
       this.setupXtermHandlers();
@@ -382,38 +382,38 @@ export class TerminalInstance {
   }
 
   /**
-   * 设置 PtyClient 事件处理器 (会话级别)
+   * Set up PtyClient event handlers (session-level)
    */
   private setupPtyClientHandlers(): void {
     if (!this.ptyClient || !this.sessionId) return;
     
-    // 处理输出数据 (会话级别)
+    // Handle output data (session-level)
     this.outputUnsubscribe = this.ptyClient.onSessionOutput(this.sessionId, (data: Uint8Array) => {
       const text = new TextDecoder().decode(data);
       this.extractCwdFromOutput(text);
       this.xterm.write(data);
     });
     
-    // 处理退出事件 (会话级别)
+    // Handle exit events (session-level)
     this.exitUnsubscribe = this.ptyClient.onSessionExit(this.sessionId, (code: number) => {
       debugLog('[Terminal] PTY 会话退出, code:', code);
       this.xterm.write(`\r\n\x1b[33m[会话已结束, 退出码: ${code}]\x1b[0m\r\n`);
     });
     
-    // 处理错误事件 (会话级别)
+    // Handle error events (session-level)
     this.errorUnsubscribe = this.ptyClient.onSessionError(this.sessionId, (code: string, message: string) => {
       errorLog('[Terminal] PTY 错误:', code, message);
       this.xterm.write(`\r\n\x1b[1;31m[错误] ${message}\x1b[0m\r\n`);
     });
 
-    // 处理 Shell 集成事件
+    // Handle shell integration events
     this.shellEventUnsubscribe = this.ptyClient.onSessionShellEvent(this.sessionId, (event: ShellEvent) => {
       this.handleShellEvent(event);
     });
   }
 
   private setupXtermHandlers(): void {
-    // 处理用户输入
+    // Handle user input
     this.xterm.onData((data) => {
       this.queueInput(data);
     });
@@ -426,22 +426,22 @@ export class TerminalInstance {
       }
     });
     
-    // 自定义键盘事件处理:实现智能 Ctrl+C 行为
-    // - 有选中文本时:复制文本
-    // - 无选中文本时:发送中断信号
+    // Custom keyboard handler: smart Ctrl+C behavior
+    // - Copy selected text when there is a selection
+    // - Send an interrupt signal when there is no selection
     this.xterm.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-      // 只处理 keydown 事件
+      // Only handle keydown events
       if (event.type !== 'keydown') {
         return true;
       }
       
-      // Ctrl+C 智能处理
+      // Smart Ctrl+C handling
       if (event.ctrlKey && event.key === 'c') {
         const hasSelection = this.xterm.hasSelection();
         debugLog('[Terminal] Ctrl+C pressed, hasSelection:', hasSelection);
         
         if (hasSelection) {
-          // 有选中文本,执行复制操作
+          // Copy the selected text
           event.preventDefault();
           const selectedText = this.xterm.getSelection();
           debugLog('[Terminal] Copying selected text, length:', selectedText.length);
@@ -450,14 +450,14 @@ export class TerminalInstance {
           }).catch(error => {
             errorLog('[Terminal] Copy failed:', error);
           });
-          return false; // 阻止默认行为
+          return false; // Prevent default behavior
         }
-        // 无选中文本,允许 xterm.js 发送中断信号 (\x03)
+        // No selection: let xterm.js send the interrupt signal (\x03)
         debugLog('[Terminal] Sending interrupt signal (Ctrl+C)');
         return true;
       }
       
-      // Ctrl+V 粘贴处理
+      // Ctrl+V paste handling
       if (event.ctrlKey && event.key === 'v') {
         event.preventDefault();
         navigator.clipboard.readText().then(text => {
@@ -470,7 +470,7 @@ export class TerminalInstance {
         return false;
       }
       
-      // 其他按键正常处理
+      // Handle all other keys normally
       return true;
     });
   }
@@ -502,7 +502,7 @@ export class TerminalInstance {
   }
 
   /**
-   * 发送调整大小消息
+   * Send a resize message
    */
   private sendResize(cols: number, rows: number): void {
     if (this.ptyClient && this.sessionId) {
@@ -541,7 +541,7 @@ export class TerminalInstance {
     }
     this.pendingInput = [];
 
-    // 取消事件订阅
+    // Unsubscribe from events
     this.outputUnsubscribe?.();
     this.exitUnsubscribe?.();
     this.errorUnsubscribe?.();
@@ -552,7 +552,7 @@ export class TerminalInstance {
     this.errorUnsubscribe = null;
     this.shellEventUnsubscribe = null;
 
-    // 销毁 PTY 会话
+    // Destroy the PTY session
     if (this.ptyClient && this.sessionId) {
       this.ptyClient.destroySession(this.sessionId);
     }
@@ -565,7 +565,7 @@ export class TerminalInstance {
     }
     this.rendererType = null;
 
-    // 清理引用
+    // Clear references
     this.ptyClient = null;
     this.sessionId = null;
 
@@ -589,13 +589,13 @@ export class TerminalInstance {
       throw error;
     }
 
-    // 设置右键菜单和键盘快捷键
+    // Set up the context menu and keyboard shortcuts
     this.setupContextMenu(container);
     this.setupKeyboardShortcuts(container);
 
     const preferredRenderer = this.options.preferredRenderer || 'canvas';
 
-    // 异步加载渲染器
+    // Load the renderer asynchronously
     requestAnimationFrame(() => {
       void this.loadRenderer(preferredRenderer)
         .then(() => {
@@ -621,13 +621,13 @@ export class TerminalInstance {
   }
 
   /**
-   * 设置键盘快捷键
+   * Set up keyboard shortcuts
    */
   private setupKeyboardShortcuts(container: HTMLElement): void {
     container.addEventListener('keydown', (e: KeyboardEvent) => {
       const isCtrlOrCmd = e.ctrlKey || e.metaKey;
       
-      // Ctrl+Shift+A: 全选
+      // Ctrl+Shift+A: Select all
       if (isCtrlOrCmd && e.shiftKey && e.key === 'A') {
         e.preventDefault();
         e.stopPropagation();
@@ -635,7 +635,7 @@ export class TerminalInstance {
         return;
       }
       
-      // Ctrl+F: 搜索
+      // Ctrl+F: Search
       if (isCtrlOrCmd && e.key === 'f') {
         e.preventDefault();
         e.stopPropagation();
@@ -643,28 +643,28 @@ export class TerminalInstance {
         return;
       }
       
-      // Escape: 关闭搜索
+      // Escape: Close search
       if (e.key === 'Escape' && this.searchVisible) {
         e.preventDefault();
         this.hideSearch();
         return;
       }
       
-      // Ctrl+加号/等号: 放大字体
+      // Ctrl+plus/equal: Increase font size
       if (isCtrlOrCmd && (e.key === '=' || e.key === '+')) {
         e.preventDefault();
         this.increaseFontSize();
         return;
       }
       
-      // Ctrl+减号: 缩小字体
+      // Ctrl+minus: Decrease font size
       if (isCtrlOrCmd && e.key === '-') {
         e.preventDefault();
         this.decreaseFontSize();
         return;
       }
       
-      // Ctrl+0: 重置字体大小
+      // Ctrl+0: Reset font size
       if (isCtrlOrCmd && e.key === '0') {
         e.preventDefault();
         this.resetFontSize();
@@ -672,7 +672,7 @@ export class TerminalInstance {
       }
     });
 
-    // Ctrl+滚轮: 调整字体大小
+    // Ctrl+wheel: Adjust font size
     container.addEventListener('wheel', (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
@@ -686,19 +686,19 @@ export class TerminalInstance {
   }
 
   /**
-   * 设置终端右键菜单
+   * Set up the terminal context menu
    */
   private setupContextMenu(container: HTMLElement): void {
     container.addEventListener('contextmenu', (e: MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
       
-      // 计算鼠标点击位置对应的终端行列坐标
+      // Calculate the terminal row/column coordinates for the mouse click
       const rect = container.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       
-      // 使用 xterm.js 的内部方法计算坐标
+      // Calculate coordinates using xterm.js sizing assumptions
       const coords = this.getTerminalCoordinates(x, y);
       
       this.showContextMenu(e.clientX, e.clientY, coords);
@@ -707,10 +707,10 @@ export class TerminalInstance {
 
 
   /**
-   * 显示右键菜单
+   * Show the context menu
    */
   private showContextMenu(x: number, y: number, coords?: { col: number; row: number }): void {
-    // 移除已存在的菜单
+    // Remove any existing menu
     const existingMenu = document.querySelector('.terminal-context-menu');
     if (existingMenu) {
       existingMenu.remove();
@@ -723,7 +723,7 @@ export class TerminalInstance {
     const hasSelection = this.xterm.hasSelection();
     const selectedText = hasSelection ? this.xterm.getSelection() : '';
 
-    // 复制
+    // Copy
     menu.appendChild(this.createMenuItem(
       t('terminal.contextMenu.copy'),
       'copy',
@@ -737,7 +737,7 @@ export class TerminalInstance {
       'Ctrl+Shift+C'
     ));
 
-    // 复制为纯文本（去除 ANSI 转义序列）
+    // Copy as plain text (strip ANSI escape sequences)
     menu.appendChild(this.createMenuItem(
       t('terminal.contextMenu.copyAsPlainText'),
       'file-text',
@@ -751,7 +751,7 @@ export class TerminalInstance {
       }
     ));
 
-    // 粘贴
+    // Paste
     menu.appendChild(this.createMenuItem(
       t('terminal.contextMenu.paste'),
       'clipboard-paste',
@@ -764,7 +764,7 @@ export class TerminalInstance {
 
     menu.appendChild(this.createSeparator());
 
-    // 全选所有内容
+    // Select all content
     menu.appendChild(this.createMenuItem(
       t('terminal.contextMenu.selectAll'),
       'select-all',
@@ -773,7 +773,7 @@ export class TerminalInstance {
       'Ctrl+Shift+A'
     ));
 
-    // 选择当前行
+    // Select the current line
     if (coords) {
       menu.appendChild(this.createMenuItem(
         t('terminal.contextMenu.selectLine'),
@@ -783,7 +783,7 @@ export class TerminalInstance {
       ));
     }
 
-    // 搜索
+    // Search
     menu.appendChild(this.createMenuItem(
       t('terminal.contextMenu.search'),
       'search',
@@ -794,7 +794,7 @@ export class TerminalInstance {
 
     menu.appendChild(this.createSeparator());
 
-    // 复制当前路径
+    // Copy the current path
     menu.appendChild(this.createMenuItem(
       t('terminal.contextMenu.copyPath'),
       'folder',
@@ -805,7 +805,7 @@ export class TerminalInstance {
       }
     ));
 
-    // 在文件管理器中打开
+    // Open in the file manager
     menu.appendChild(this.createMenuItem(
       t('terminal.contextMenu.openInExplorer'),
       'folder-open',
@@ -818,7 +818,7 @@ export class TerminalInstance {
 
     menu.appendChild(this.createSeparator());
 
-    // 新建终端
+    // New terminal
     menu.appendChild(this.createMenuItem(
       t('terminal.contextMenu.newTerminal'),
       'terminal',
@@ -827,7 +827,7 @@ export class TerminalInstance {
       'Ctrl+O'
     ));
 
-    // 拆分终端子菜单
+    // Split terminal submenu
     const splitSubmenu = this.createSubmenuItem(
       t('terminal.contextMenu.splitTerminal'),
       'columns',
@@ -850,7 +850,7 @@ export class TerminalInstance {
 
     menu.appendChild(this.createSeparator());
 
-    // 字体大小子菜单
+    // Font size submenu
     const fontSubmenu = this.createSubmenuItem(
       t('terminal.contextMenu.fontSize'),
       'type',
@@ -877,7 +877,7 @@ export class TerminalInstance {
     );
     menu.appendChild(fontSubmenu);
 
-    // 清屏
+    // Clear the screen
     menu.appendChild(this.createMenuItem(
       t('terminal.contextMenu.clear'),
       'trash',
@@ -886,7 +886,7 @@ export class TerminalInstance {
       'Ctrl+Shift+R'
     ));
 
-    // 清空缓冲区
+    // Clear the buffer
     menu.appendChild(this.createMenuItem(
       t('terminal.contextMenu.clearBuffer'),
       'trash',
@@ -897,7 +897,7 @@ export class TerminalInstance {
 
     document.body.appendChild(menu);
 
-    // 调整菜单位置
+    // Adjust the menu position
     const rect = menu.getBoundingClientRect();
     if (rect.right > window.innerWidth) {
       menu.setCssStyles({ left: `${window.innerWidth - rect.width - 5}px` });
@@ -906,7 +906,7 @@ export class TerminalInstance {
       menu.setCssStyles({ top: `${window.innerHeight - rect.height - 5}px` });
     }
 
-    // 点击其他地方关闭菜单
+    // Close the menu when clicking elsewhere
     const closeMenu = (e: MouseEvent) => {
       if (!menu.contains(e.target as Node)) {
         menu.remove();
@@ -942,7 +942,7 @@ export class TerminalInstance {
   }
 
   /**
-   * 创建菜单项
+   * Create a menu item
    */
   private createMenuItem(
     label: string,
@@ -955,7 +955,7 @@ export class TerminalInstance {
     item.className = 'terminal-context-menu-item';
     if (!enabled) item.addClass('is-disabled');
 
-    // 图标
+    // Icon
     const iconEl = document.createElement('span');
     iconEl.className = 'terminal-context-menu-icon';
     if (!enabled) iconEl.addClass('is-disabled');
@@ -963,13 +963,13 @@ export class TerminalInstance {
     if (iconSvg) iconEl.appendChild(iconSvg);
     item.appendChild(iconEl);
 
-    // 文本
+    // Text
     const textEl = document.createElement('span');
     textEl.textContent = label;
     textEl.className = 'terminal-context-menu-text';
     item.appendChild(textEl);
 
-    // 快捷键
+    // Shortcut
     if (shortcut) {
       const shortcutEl = document.createElement('span');
       shortcutEl.textContent = shortcut;
@@ -989,7 +989,7 @@ export class TerminalInstance {
   }
 
   /**
-   * 创建子菜单项
+   * Create a submenu item
    */
   private createSubmenuItem(
     label: string,
@@ -1002,20 +1002,20 @@ export class TerminalInstance {
     const item = document.createElement('div');
     item.className = 'terminal-context-menu-item';
 
-    // 图标
+    // Icon
     const iconEl = document.createElement('span');
     iconEl.className = 'terminal-context-menu-icon';
     const iconSvg = this.createIconElement(icon);
     if (iconSvg) iconEl.appendChild(iconSvg);
     item.appendChild(iconEl);
 
-    // 文本
+    // Text
     const textEl = document.createElement('span');
     textEl.textContent = label;
     textEl.className = 'terminal-context-menu-text';
     item.appendChild(textEl);
 
-    // 箭头
+    // Arrow
     const arrowEl = document.createElement('span');
     arrowEl.className = 'terminal-context-submenu-arrow';
     const arrowSvg = this.createIconElement('chevron-right');
@@ -1024,7 +1024,7 @@ export class TerminalInstance {
 
     container.appendChild(item);
 
-    // 子菜单
+    // Submenu
     const submenu = document.createElement('div');
     submenu.className = 'terminal-context-submenu';
 
@@ -1034,12 +1034,12 @@ export class TerminalInstance {
 
     container.appendChild(submenu);
 
-    // 悬停显示子菜单
+    // Show the submenu on hover
     item.addEventListener('mouseenter', () => {
       submenu.addClass('is-visible');
       submenu.removeClass('is-flipped');
 
-      // 调整子菜单位置
+      // Adjust the submenu position
       const rect = submenu.getBoundingClientRect();
       if (rect.right > window.innerWidth) {
         submenu.addClass('is-flipped');
@@ -1054,7 +1054,7 @@ export class TerminalInstance {
   }
 
   /**
-   * 创建分隔线
+   * Create a separator
    */
   private createSeparator(): HTMLElement {
     const separator = document.createElement('div');
@@ -1063,16 +1063,16 @@ export class TerminalInstance {
   }
 
   /**
-   * 去除 ANSI 转义序列
+   * Strip ANSI escape sequences
    */
   private stripAnsiCodes(text: string): string {
-    // eslint-disable-next-line no-control-regex -- 需要匹配 ANSI 控制序列
+    // eslint-disable-next-line no-control-regex -- Need to match ANSI control sequences
     return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
   }
 
 
   /**
-   * 获取图标 SVG
+   * Get the icon SVG
    */
   private getIconSvg(icon: string): string {
     const icons: Record<string, string> = {
@@ -1108,10 +1108,10 @@ export class TerminalInstance {
     return svg ? (document.importNode(svg, true) as SVGElement) : null;
   }
 
-  // ==================== 搜索功能 ====================
+  // ==================== Search ====================
 
   /**
-   * 切换搜索框显示状态
+   * Toggle search bar visibility
    */
   toggleSearch(): void {
     if (this.searchVisible) {
@@ -1122,7 +1122,7 @@ export class TerminalInstance {
   }
 
   /**
-   * 显示搜索框
+   * Show the search bar
    */
   showSearch(): void {
     this.searchVisible = true;
@@ -1130,7 +1130,7 @@ export class TerminalInstance {
   }
 
   /**
-   * 隐藏搜索框
+   * Hide the search bar
    */
   hideSearch(): void {
     this.searchVisible = false;
@@ -1140,7 +1140,7 @@ export class TerminalInstance {
   }
 
   /**
-   * 搜索文本
+   * Search text
    */
   search(query: string, options?: { caseSensitive?: boolean; wholeWord?: boolean; regex?: boolean }): boolean {
     if (!query) {
@@ -1149,7 +1149,7 @@ export class TerminalInstance {
     }
     this.lastSearchQuery = query;
     
-    // 获取当前主题的颜色来设置搜索高亮
+    // Use the current theme colors for search highlighting
     const isDark = document.body.classList.contains('theme-dark');
     
     return this.searchAddon.findNext(query, {
@@ -1166,7 +1166,7 @@ export class TerminalInstance {
   }
 
   /**
-   * 搜索下一个
+   * Search next
    */
   searchNext(): boolean {
     if (!this.lastSearchQuery) return false;
@@ -1174,7 +1174,7 @@ export class TerminalInstance {
   }
 
   /**
-   * 搜索上一个
+   * Search previous
    */
   searchPrevious(): boolean {
     if (!this.lastSearchQuery) return false;
@@ -1182,7 +1182,7 @@ export class TerminalInstance {
   }
 
   /**
-   * 清除搜索高亮
+   * Clear search highlighting
    */
   clearSearch(): void {
     this.searchAddon.clearDecorations();
@@ -1190,20 +1190,20 @@ export class TerminalInstance {
   }
 
   /**
-   * 监听搜索状态变化
+   * Listen for search state changes
    */
   onSearchStateChange(callback: SearchStateCallback): void {
     this.searchStateCallback = callback;
   }
 
   /**
-   * 获取搜索是否可见
+   * Get whether the search UI is visible
    */
   isSearchVisible(): boolean {
     return this.searchVisible;
   }
 
-  // ==================== Shell 集成 ====================
+  // ==================== Shell Integration ====================
 
   private handleShellEvent(event: ShellEvent): void {
     if (event.type === 'command_start') {
@@ -1228,14 +1228,14 @@ export class TerminalInstance {
   }
 
   /**
-   * 监听 Shell 集成事件
+   * Listen for shell integration events
    */
   onShellEvent(callback: (event: ShellEvent) => void): void {
     this.shellEventCallback = callback;
   }
 
   /**
-   * 获取命令历史
+   * Get command history
    */
   getCommandHistory(): Array<{
     startTime: number;
@@ -1247,10 +1247,10 @@ export class TerminalInstance {
     return [...this.commandHistory];
   }
 
-  // ==================== 字体大小调整 ====================
+  // ==================== Font Size Adjustment ====================
 
   /**
-   * 增大字体
+   * Increase font size
    */
   increaseFontSize(): void {
     if (this.currentFontSize < this.maxFontSize) {
@@ -1259,7 +1259,7 @@ export class TerminalInstance {
   }
 
   /**
-   * 减小字体
+   * Decrease font size
    */
   decreaseFontSize(): void {
     if (this.currentFontSize > this.minFontSize) {
@@ -1268,14 +1268,14 @@ export class TerminalInstance {
   }
 
   /**
-   * 重置字体大小
+   * Reset font size
    */
   resetFontSize(): void {
     this.setFontSize(this.options.fontSize ?? 14);
   }
 
   /**
-   * 设置字体大小
+   * Set font size
    */
   setFontSize(size: number): void {
     const newSize = Math.max(this.minFontSize, Math.min(this.maxFontSize, size));
@@ -1288,39 +1288,39 @@ export class TerminalInstance {
   }
 
   /**
-   * 获取当前字体大小
+   * Get the current font size
    */
   getFontSize(): number {
     return this.currentFontSize;
   }
 
   /**
-   * 监听字体大小变化
+   * Listen for font size changes
    */
   onFontSizeChange(callback: FontSizeChangeCallback): void {
     this.fontSizeChangeCallback = callback;
   }
 
-  // ==================== 右键菜单回调设置 ====================
+  // ==================== Context Menu Callback Setup ====================
 
   /**
-   * 设置新建终端回调
+   * Set the new terminal callback
    */
   setOnNewTerminal(callback: () => void): void {
     this.contextMenuCallbacks.onNewTerminal = callback;
   }
 
   /**
-   * 设置拆分终端回调
+   * Set the split terminal callback
    */
   setOnSplitTerminal(callback: (direction: 'horizontal' | 'vertical') => void): void {
     this.contextMenuCallbacks.onSplitTerminal = callback;
   }
 
-  // ==================== 其他公共方法 ====================
+  // ==================== Other Public Methods ====================
 
   /**
-   * 写入数据到终端
+   * Write data to the terminal
    */
   write(data: string): void {
     if (this.ptyClient && this.sessionId) {
@@ -1356,12 +1356,12 @@ export class TerminalInstance {
 
 
   /**
-   * 从 shell 输出中提取当前工作目录
-   * 支持 OSC 序列和 PowerShell/CMD/Git Bash/Bash prompt 格式
+   * Extract the current working directory from shell output
+   * Supports OSC sequences and PowerShell/CMD/Git Bash/Bash prompt formats
    */
   private extractCwdFromOutput(data: string): void {
-    // OSC 7 格式 (标准): \x1b]7;file://hostname/path\x07 或 \x1b]7;file://hostname/path\x1b\\
-    // eslint-disable-next-line no-control-regex -- 需要匹配 ANSI 控制序列
+    // OSC 7 format (standard): \x1b]7;file://hostname/path\x07 or \x1b]7;file://hostname/path\x1b\\
+    // eslint-disable-next-line no-control-regex -- Need to match ANSI control sequences
     const osc7Match = data.match(/\x1b\]7;file:\/\/[^/]*([^\x07\x1b]+)[\x07\x1b]/);
     if (osc7Match) {
       try {
@@ -1370,12 +1370,12 @@ export class TerminalInstance {
         debugLog('[Terminal CWD] OSC7 matched:', path);
         return;
       } catch {
-        // 解码失败，忽略
+        // Ignore decode failures
       }
     }
     
-    // OSC 9;9 格式 (Windows Terminal/PowerShell): \x1b]9;9;path\x07
-    // eslint-disable-next-line no-control-regex -- 需要匹配 ANSI 控制序列
+    // OSC 9;9 format (Windows Terminal/PowerShell): \x1b]9;9;path\x07
+    // eslint-disable-next-line no-control-regex -- Need to match ANSI control sequences
     const osc9Match = data.match(/\x1b\]9;9;([^\x07\x1b]+)[\x07\x1b]/);
     if (osc9Match) {
       this.currentCwd = osc9Match[1];
@@ -1383,12 +1383,12 @@ export class TerminalInstance {
       return;
     }
     
-    // OSC 0 格式 (窗口标题，Git Bash 使用): \x1b]0;MINGW64:/path\x07
-    // eslint-disable-next-line no-control-regex -- 需要匹配 ANSI 控制序列
+    // OSC 0 format (window title, used by Git Bash): \x1b]0;MINGW64:/path\x07
+    // eslint-disable-next-line no-control-regex -- Need to match ANSI control sequences
     const osc0Match = data.match(/\x1b\]0;(?:MINGW(?:64|32)|MSYS):([^\x07]+)\x07/);
     if (osc0Match) {
       let path = osc0Match[1];
-      // 转换 Git Bash 路径格式到 Windows 格式
+      // Convert the Git Bash path format to Windows format
       if (/^\/[a-zA-Z]\//.test(path)) {
         const driveLetter = path[1].toUpperCase();
         path = `${driveLetter}:${path.substring(2).replace(/\//g, '\\')}`;
@@ -1398,8 +1398,8 @@ export class TerminalInstance {
       return;
     }
     
-    // Prompt 解析 (fallback for Windows shells)
-    // eslint-disable-next-line no-control-regex -- 需要匹配 ANSI 控制序列
+    // Prompt parsing (fallback for Windows shells)
+    // eslint-disable-next-line no-control-regex -- Need to match ANSI control sequences
     const cleanData = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
     
     // PowerShell prompt: PS path>
@@ -1433,7 +1433,7 @@ export class TerminalInstance {
       return;
     }
     
-    // WSL prompt: user@host:/mnt/c/path$ 或 user@host:~$
+    // WSL prompt: user@host:/mnt/c/path$ or user@host:~$
     const wslMatch = cleanData.match(/:\s*(\/[^\s$#>\r\n]+)\s*[$#]/);
     if (wslMatch) {
       this.currentCwd = wslMatch[1];
@@ -1442,14 +1442,14 @@ export class TerminalInstance {
   }
 
   /**
-   * 获取终端初始工作目录
+   * Get the terminal's initial working directory
    */
   getInitialCwd(): string {
     return this.options.cwd || process.env.HOME || process.env.USERPROFILE || process.cwd();
   }
 
   /**
-   * 获取当前工作目录
+   * Get the current working directory
    */
   getCwd(): string {
     return this.currentCwd || this.getInitialCwd();
@@ -1468,13 +1468,13 @@ export class TerminalInstance {
   }
 
   /**
-   * 将鼠标像素坐标转换为终端行列坐标
+   * Convert mouse pixel coordinates to terminal row/column coordinates
    */
   private getTerminalCoordinates(x: number, y: number): { col: number; row: number } {
     const fontSize = this.xterm.options.fontSize || 14;
-    const lineHeight = Math.ceil(fontSize * 1.2); // xterm.js 默认行高约为字体大小的 1.2 倍
+    const lineHeight = Math.ceil(fontSize * 1.2); // xterm.js default line height is about 1.2x the font size
     
-    // 计算字符宽度(等宽字体,宽度约为字体大小的 0.6 倍)
+    // Estimate character width for a monospace font at about 0.6x the font size
     const charWidth = fontSize * 0.6;
     
     const col = Math.floor(x / charWidth);
@@ -1486,12 +1486,12 @@ export class TerminalInstance {
   }
 
   /**
-   * 将 WSL 路径转换为 Windows 路径
-   * @param wslPath WSL 格式的路径 (如 /mnt/c/Users/...)
-   * @returns Windows 格式的路径 (如 C:\Users\...)
+   * Convert a WSL path to a Windows path
+   * @param wslPath A WSL-format path (for example, /mnt/c/Users/...)
+   * @returns A Windows-format path (for example, C:\Users\...)
    */
   private convertWslPathToWindows(wslPath: string): string {
-    // 匹配 /mnt/x/... 格式的路径
+    // Match paths in /mnt/x/... format
     const wslMountMatch = wslPath.match(/^\/mnt\/([a-zA-Z])\/(.*)$/);
     if (wslMountMatch) {
       const driveLetter = wslMountMatch[1].toUpperCase();
@@ -1502,8 +1502,8 @@ export class TerminalInstance {
   }
 
   /**
-   * 在文件管理器中打开指定路径
-   * @param path 要打开的路径
+   * Open the specified path in the file manager
+   * @param path The path to open
    */
   private openInFileManager(targetPath: string): void {
     const currentPlatform = platform();
@@ -1512,7 +1512,7 @@ export class TerminalInstance {
     
     let finalPath = targetPath;
     
-    // 如果是 WSL 终端，需要将 WSL 路径转换为 Windows 路径
+    // If this is a WSL terminal, convert the WSL path to a Windows path
     if (currentPlatform === 'win32' && this.shellType === 'wsl' && targetPath.startsWith('/mnt/')) {
       finalPath = this.convertWslPathToWindows(targetPath);
       debugLog('[Terminal] Converted WSL path to Windows path:', { original: targetPath, converted: finalPath });
@@ -1521,11 +1521,11 @@ export class TerminalInstance {
     debugLog('[Terminal] Final path for file manager:', finalPath);
     
     if (currentPlatform === 'win32') {
-      // Windows: 使用 explorer 命令，会前台打开窗口
-      // 注意: explorer 即使成功也可能返回非零退出码，忽略错误
+      // Windows: use explorer, which opens a foreground window
+      // Note: explorer may return a non-zero exit code even on success; ignore it
       exec(`explorer "${finalPath}"`);
     } else if (currentPlatform === 'darwin') {
-      // macOS: 使用 open 命令
+      // macOS: use open
       exec(`open "${finalPath}"`, (error: Error | null) => {
         if (error) {
           errorLog('[Terminal] Failed to open in Finder:', error);
@@ -1535,7 +1535,7 @@ export class TerminalInstance {
         }
       });
     } else {
-      // Linux: 使用 xdg-open
+      // Linux: use xdg-open
       exec(`xdg-open "${finalPath}"`, (error: Error | null) => {
         if (error) {
           errorLog('[Terminal] Failed to open in file manager:', error);
@@ -1548,13 +1548,13 @@ export class TerminalInstance {
   }
 
   /**
-   * 选中指定行的完整内容
-   * @param row 行号
+   * Select the full contents of the specified line
+   * @param row The line number
    */
   private selectLine(row: number): void {
     const buffer = this.xterm.buffer.active;
     
-    // 确保行号有效
+    // Ensure the line number is valid
     if (row < 0 || row >= buffer.length) {
       debugLog('[Terminal] Invalid row:', row);
       return;
@@ -1565,16 +1565,16 @@ export class TerminalInstance {
   }
 
   /**
-   * 清屏
-   * 清除当前屏幕内容,但保留滚动历史
+   * Clear the screen
+   * Clear the current screen contents while preserving scrollback history
    */
   private clearScreen(): void {
-    // 先发送 Ctrl+C 中断当前输入
+    // First send Ctrl+C to interrupt the current input
     if (this.ptyClient && this.sessionId) {
       this.ptyClient.write(this.sessionId, '\x03');
     }
     
-    // 等待一小段时间让中断生效,然后发送清屏命令
+    // Wait briefly for the interrupt to take effect, then send the clear command
     setTimeout(() => {
       const clearCommand = platform() === 'win32' ? 'cls\r' : 'clear\r';
       if (this.ptyClient && this.sessionId) {
@@ -1585,24 +1585,24 @@ export class TerminalInstance {
   }
 
   /**
-   * 清空缓冲区
-   * 完全重置终端状态,清除所有内容和历史记录
+   * Clear the buffer
+   * Fully reset terminal state, clearing all content and history
    */
   clearBuffer(): void {
-    // 先发送 Ctrl+C 中断当前输入
+    // First send Ctrl+C to interrupt the current input
     if (this.ptyClient && this.sessionId) {
       this.ptyClient.write(this.sessionId, '\x03');
     }
     
-    // 等待一小段时间让中断生效
+    // Wait briefly for the interrupt to take effect
     setTimeout(() => {
-      // 发送清屏命令到 shell
+      // Send the clear command to the shell
       const clearCommand = platform() === 'win32' ? 'cls\r' : 'clear\r';
       if (this.ptyClient && this.sessionId) {
         this.ptyClient.write(this.sessionId, clearCommand);
       }
       
-      // 清除 xterm.js 的滚动缓冲区和状态
+      // Clear xterm.js scrollback and state
       this.xterm.clear();
       this.xterm.reset();
       this.xterm.clearSelection();

@@ -1,5 +1,5 @@
 /**
- * 设置模块导出
+ * Settings module exports
  */
 
 export * from './settings';
