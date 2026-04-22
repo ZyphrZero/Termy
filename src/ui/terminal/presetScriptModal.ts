@@ -3,12 +3,13 @@
  */
 
 import type { App } from 'obsidian';
-import { Modal, Setting, setIcon } from 'obsidian';
+import { Modal, Notice, Setting, ToggleComponent, setIcon } from 'obsidian';
 import type {
   PresetScript,
   PresetWorkflowAction,
   PresetWorkflowActionType,
 } from '@/settings/settings';
+import type TerminalPlugin from '@/main';
 import { t } from '@/i18n';
 import { PRESET_SCRIPT_ICON_OPTIONS, renderPresetScriptIcon } from './presetScriptIcons';
 import {
@@ -41,9 +42,11 @@ const ACTION_OPTIONS: ActionOption[] = [
   },
 ];
 
-const COMMAND_SUGGESTION_LIMIT = 20;
+const COMMAND_SUGGESTION_LIMIT = 50;
 
 export class PresetScriptModal extends Modal {
+  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'gemini-cli']);
+  private readonly plugin: TerminalPlugin;
   private draft: PresetScript;
   private onSubmit: (script: PresetScript) => void;
   private isNew: boolean;
@@ -64,8 +67,15 @@ export class PresetScriptModal extends Modal {
   private actionsContainer: HTMLElement | null = null;
   private obsidianCommandOptions: ObsidianCommandOption[] = [];
 
-  constructor(app: App, script: PresetScript, onSubmit: (script: PresetScript) => void, isNew: boolean) {
+  constructor(
+    app: App,
+    plugin: TerminalPlugin,
+    script: PresetScript,
+    onSubmit: (script: PresetScript) => void,
+    isNew: boolean,
+  ) {
     super(app);
+    this.plugin = plugin;
     this.draft = this.normalizeDraft(script);
     this.onSubmit = onSubmit;
     this.isNew = isNew;
@@ -78,16 +88,29 @@ export class PresetScriptModal extends Modal {
     this.obsidianCommandOptions = listObsidianCommandOptions(this.app);
 
     const titleEl = contentEl.createDiv({ cls: 'modal-title' });
-    titleEl.createDiv({
+    const titleRow = titleEl.createDiv({ cls: 'preset-script-modal-title-row' });
+    titleRow.createDiv({
       cls: 'modal-title-text',
       text: this.isNew ? t('modals.presetScript.titleCreate') : t('modals.presetScript.titleEdit')
     });
+    if (this.isBuiltInPreset()) {
+      titleRow.createDiv({
+        cls: 'preset-script-built-in-badge',
+        text: t('common.builtIn'),
+      });
+    }
 
     const formEl = contentEl.createDiv({ cls: 'preset-script-form' });
     this.renderNameField(formEl);
     this.renderIconField(formEl);
     this.renderTerminalTitleField(formEl);
     this.renderActionsField(formEl);
+    if (this.draft.id === 'claude-code') {
+      this.renderClaudeCodeContextNotice(formEl);
+    }
+    if (this.draft.id === 'codex') {
+      this.renderCodexControls(formEl);
+    }
     this.renderToggles(formEl);
     this.renderButtons(contentEl);
 
@@ -205,6 +228,120 @@ export class PresetScriptModal extends Modal {
     confirmBtn.addEventListener('click', () => this.submit());
   }
 
+  private renderCodexControls(formEl: HTMLElement): void {
+    const settings = this.plugin.settings;
+    const section = this.renderIntegrationSection(
+      formEl,
+      'openai',
+      t('settingsDetails.advanced.codexCliIntegration')
+    );
+
+    new Setting(section)
+      .setName(t('settingsDetails.advanced.codexCliMcp'))
+      .setDesc(t('settingsDetails.advanced.codexCliMcpDesc'));
+
+    new Setting(section)
+      .setName(t('settingsDetails.advanced.codexCliMcpAutoRegister'))
+      .setDesc(t('settingsDetails.advanced.codexCliMcpAutoRegisterDesc'))
+      .addToggle(toggle => toggle
+        .setValue(settings.serverConnection.autoRegisterCodexCliMcp)
+        .onChange((value) => {
+          settings.serverConnection.autoRegisterCodexCliMcp = value;
+          void this.plugin.saveSettings()
+            .then(async () => {
+              if (value) {
+                await this.plugin.ensureCodexCliMcpConfigured();
+                new Notice(t('notices.settings.codexCliMcpRegistered'));
+              } else {
+                await this.plugin.removeCodexCliMcpRegistration();
+                new Notice(t('notices.settings.codexCliMcpRemoved'));
+              }
+            })
+            .catch((error) => {
+              new Notice(
+                value
+                  ? t('notices.settings.codexCliMcpRegisterFailed', { message: error instanceof Error ? error.message : String(error) })
+                  : t('notices.settings.codexCliMcpRemoveFailed', { message: error instanceof Error ? error.message : String(error) }),
+              );
+            });
+        }));
+
+    new Setting(section)
+      .setName(t('settingsDetails.advanced.codexCliMcpReregister'))
+      .setDesc(t('settingsDetails.advanced.codexCliMcpReregisterDesc'))
+      .addButton(button => button
+        .setButtonText(t('settingsDetails.advanced.codexCliMcpReregister'))
+        .onClick(() => {
+          void this.plugin.forceRegisterCodexCliMcp()
+            .then(() => {
+              new Notice(t('notices.settings.codexCliMcpRegistered'));
+            })
+            .catch((error) => {
+              new Notice(
+                t('notices.settings.codexCliMcpRegisterFailed', {
+                  message: error instanceof Error ? error.message : String(error),
+                }),
+              );
+            });
+        }))
+      .addButton(button => button
+        .setButtonText(t('settingsDetails.advanced.codexCliMcpRemove'))
+        .setWarning()
+        .onClick(() => {
+          void this.plugin.removeCodexCliMcpRegistration()
+            .then(() => {
+              new Notice(t('notices.settings.codexCliMcpRemoved'));
+            })
+            .catch((error) => {
+              new Notice(
+                t('notices.settings.codexCliMcpRemoveFailed', {
+                  message: error instanceof Error ? error.message : String(error),
+                }),
+              );
+            });
+        }));
+  }
+
+  private renderClaudeCodeContextNotice(formEl: HTMLElement): void {
+    const section = this.renderIntegrationSection(
+      formEl,
+      'claude',
+      t('settingsDetails.advanced.claudeCodeIntegration')
+    );
+
+    new Setting(section)
+      .setName(t('settingsDetails.advanced.claudeCodeContext'))
+      .setDesc(t('settingsDetails.advanced.claudeCodeContextDesc'));
+  }
+
+  private renderIntegrationSection(
+    formEl: HTMLElement,
+    iconName: string,
+    title: string,
+  ): HTMLElement {
+    const section = formEl.createDiv({ cls: 'preset-script-integration-section' });
+
+    const kicker = section.createDiv({
+      cls: 'preset-script-integration-kicker',
+      text: t('settingsDetails.advanced.contextAwareness'),
+    });
+    kicker.setAttribute('aria-hidden', 'true');
+
+    const header = section.createDiv({ cls: 'preset-script-integration-header' });
+    const icon = header.createDiv({ cls: 'preset-script-integration-icon' });
+    renderPresetScriptIcon(icon, iconName);
+    header.createDiv({
+      cls: 'preset-script-integration-title',
+      text: title,
+    });
+
+    return section.createDiv({ cls: 'preset-script-integration-body' });
+  }
+
+  private isBuiltInPreset(): boolean {
+    return this.builtInPresetIds.has(this.draft.id);
+  }
+
   private renderActionRows(): void {
     if (!this.actionsContainer) return;
     this.actionsContainer.empty();
@@ -225,11 +362,25 @@ export class PresetScriptModal extends Modal {
 
   private renderActionRow(action: PresetWorkflowAction, index: number, total: number): void {
     const row = this.actionsContainer!.createDiv({ cls: 'preset-workflow-action-row' });
+    row.toggleClass('is-disabled', action.enabled === false);
+    this.renderActionEnabledToggle(row, action);
     this.renderActionTypeSelect(row, action);
     this.renderActionValueInput(row, action);
+    this.renderActionNoteInput(row, action);
     this.renderActionDeleteButton(row, action);
     this.renderActionMoveUpButton(row, index);
     this.renderActionMoveDownButton(row, index, total);
+  }
+
+  private renderActionEnabledToggle(row: HTMLElement, action: PresetWorkflowAction): void {
+    const toggleWrap = row.createDiv({ cls: 'preset-workflow-action-toggle' });
+    const toggle = new ToggleComponent(toggleWrap);
+    toggle.setValue(action.enabled !== false);
+    toggle.toggleEl.setAttribute('aria-label', t('settingsDetails.terminal.presetScriptActionEnabled'));
+    toggle.onChange((value) => {
+      action.enabled = value;
+      row.toggleClass('is-disabled', !value);
+    });
   }
 
   private renderActionTypeSelect(row: HTMLElement, action: PresetWorkflowAction): void {
@@ -242,7 +393,8 @@ export class PresetScriptModal extends Modal {
   }
 
   private renderActionValueInput(row: HTMLElement, action: PresetWorkflowAction): void {
-    const valueInput = row.createEl('input', {
+    const valueWrap = row.createDiv({ cls: 'preset-workflow-action-value-wrap' });
+    const valueInput = valueWrap.createEl('input', {
       cls: 'preset-workflow-action-value',
       type: 'text',
       placeholder: this.getActionPlaceholder(action.type),
@@ -251,49 +403,214 @@ export class PresetScriptModal extends Modal {
     valueInput.addEventListener('input', () => {
       action.value = valueInput.value;
     });
-    this.attachCommandSuggestions(row, valueInput, action);
+    this.attachCommandSuggestions(valueWrap, valueInput, action);
+  }
+
+  private renderActionNoteInput(row: HTMLElement, action: PresetWorkflowAction): void {
+    const noteInput = row.createEl('textarea', {
+      cls: 'preset-workflow-action-note',
+      attr: {
+        rows: '2',
+        placeholder: t('settingsDetails.terminal.presetScriptActionNotePlaceholder'),
+        'aria-label': t('settingsDetails.terminal.presetScriptActionNote'),
+      },
+    });
+    noteInput.value = action.note ?? '';
+    noteInput.addEventListener('input', () => {
+      action.note = noteInput.value;
+    });
   }
 
   private attachCommandSuggestions(
-    row: HTMLElement,
+    container: HTMLElement,
     valueInput: HTMLInputElement,
     action: PresetWorkflowAction
   ): void {
     if (action.type !== 'obsidian-command') return;
     if (this.obsidianCommandOptions.length === 0) return;
 
-    const dataListId = `obsidian-command-options-${action.id}`;
-    const dataList = row.createEl('datalist', { attr: { id: dataListId } });
-    valueInput.setAttribute('list', dataListId);
+    const listId = `obsidian-command-options-${action.id}`;
+    const suggestionPanel = container.createDiv({
+      cls: 'preset-command-suggestion-panel',
+      attr: { id: listId, role: 'listbox' },
+    });
+    let matches: ObsidianCommandOption[] = [];
+    let activeIndex = -1;
+    let blurTimer: number | null = null;
+    let pointerInsidePanel = false;
 
-    const refreshSuggestions = () => {
-      const matches = searchObsidianCommandOptions(
+    valueInput.removeAttribute('list');
+    valueInput.setAttribute('autocomplete', 'off');
+    valueInput.setAttribute('aria-autocomplete', 'list');
+    valueInput.setAttribute('aria-controls', listId);
+    valueInput.setAttribute('aria-expanded', 'false');
+
+    const clearBlurTimer = () => {
+      if (blurTimer !== null) {
+        window.clearTimeout(blurTimer);
+        blurTimer = null;
+      }
+    };
+
+    const closeSuggestionPanel = () => {
+      clearBlurTimer();
+      suggestionPanel.removeClass('is-open');
+      suggestionPanel.empty();
+      activeIndex = -1;
+      valueInput.setAttribute('aria-expanded', 'false');
+      valueInput.removeAttribute('aria-activedescendant');
+    };
+
+    const ensureActiveSuggestionVisible = () => {
+      if (activeIndex < 0) return;
+      const activeEl = suggestionPanel.children.item(activeIndex) as HTMLElement | null;
+      activeEl?.scrollIntoView({ block: 'nearest' });
+    };
+
+    const setActiveIndex = (nextIndex: number) => {
+      if (matches.length === 0) {
+        activeIndex = -1;
+        valueInput.removeAttribute('aria-activedescendant');
+        return;
+      }
+
+      const normalizedIndex = ((nextIndex % matches.length) + matches.length) % matches.length;
+      activeIndex = normalizedIndex;
+      Array.from(suggestionPanel.children).forEach((child, index) => {
+        const childEl = child as HTMLElement;
+        const isActive = index === normalizedIndex;
+        childEl.toggleClass('is-active', isActive);
+        childEl.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        if (isActive) {
+          valueInput.setAttribute('aria-activedescendant', childEl.id);
+        }
+      });
+      ensureActiveSuggestionVisible();
+    };
+
+    const selectSuggestion = (option: ObsidianCommandOption) => {
+      valueInput.value = option.id;
+      action.value = option.id;
+      closeSuggestionPanel();
+      valueInput.focus();
+      valueInput.setSelectionRange(option.id.length, option.id.length);
+    };
+
+    const renderSuggestionPanel = (nextMatches: ObsidianCommandOption[]) => {
+      matches = nextMatches;
+      suggestionPanel.empty();
+
+      if (matches.length === 0) {
+        closeSuggestionPanel();
+        return;
+      }
+
+      matches.forEach((option, index) => {
+        const optionEl = suggestionPanel.createDiv({
+          cls: 'preset-command-suggestion-item',
+          attr: {
+            id: `${listId}-option-${index}`,
+            role: 'option',
+            'aria-selected': 'false',
+          },
+        });
+        optionEl.createDiv({
+          cls: 'preset-command-suggestion-name',
+          text: option.name,
+        });
+        optionEl.createDiv({
+          cls: 'preset-command-suggestion-id',
+          text: option.id,
+        });
+        optionEl.addEventListener('mouseenter', () => {
+          setActiveIndex(index);
+        });
+        optionEl.addEventListener('mousedown', (event) => {
+          event.preventDefault();
+        });
+        optionEl.addEventListener('click', () => {
+          selectSuggestion(option);
+        });
+      });
+
+      suggestionPanel.addClass('is-open');
+      valueInput.setAttribute('aria-expanded', 'true');
+      setActiveIndex(activeIndex >= 0 && activeIndex < matches.length ? activeIndex : 0);
+    };
+
+    const refreshSuggestions = (preferredActiveIndex = 0) => {
+      const nextMatches = searchObsidianCommandOptions(
         this.obsidianCommandOptions,
         valueInput.value,
         COMMAND_SUGGESTION_LIMIT
       );
-      this.renderCommandSuggestionOptions(dataList, matches);
+      activeIndex = nextMatches.length === 0 ? -1 : Math.min(preferredActiveIndex, nextMatches.length - 1);
+      renderSuggestionPanel(nextMatches);
     };
 
-    valueInput.addEventListener('focus', refreshSuggestions);
-    valueInput.addEventListener('input', refreshSuggestions);
-    refreshSuggestions();
-  }
+    valueInput.addEventListener('focus', () => {
+      clearBlurTimer();
+      refreshSuggestions(activeIndex >= 0 ? activeIndex : 0);
+    });
 
-  private renderCommandSuggestionOptions(
-    dataList: HTMLDataListElement,
-    matches: readonly ObsidianCommandOption[]
-  ): void {
-    dataList.empty();
-    matches.forEach((option) => {
-      const optionEl = dataList.createEl('option', { value: option.id });
-      optionEl.label = option.name;
-      optionEl.textContent = `${option.name} (${option.id})`;
+    valueInput.addEventListener('input', () => {
+      action.value = valueInput.value;
+      refreshSuggestions(0);
+    });
+
+    valueInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        if (suggestionPanel.hasClass('is-open')) {
+          event.preventDefault();
+          closeSuggestionPanel();
+        }
+        return;
+      }
+
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (!suggestionPanel.hasClass('is-open')) {
+          refreshSuggestions(0);
+          return;
+        }
+        setActiveIndex(activeIndex + (event.key === 'ArrowDown' ? 1 : -1));
+        return;
+      }
+
+      if (event.key === 'Enter' && suggestionPanel.hasClass('is-open') && activeIndex >= 0 && matches[activeIndex]) {
+        event.preventDefault();
+        selectSuggestion(matches[activeIndex]);
+      }
+    });
+
+    valueInput.addEventListener('blur', () => {
+      clearBlurTimer();
+      blurTimer = window.setTimeout(() => {
+        if (pointerInsidePanel) {
+          return;
+        }
+        closeSuggestionPanel();
+      }, 120);
+    });
+
+    suggestionPanel.addEventListener('mouseenter', () => {
+      pointerInsidePanel = true;
+      clearBlurTimer();
+    });
+
+    suggestionPanel.addEventListener('mouseleave', () => {
+      pointerInsidePanel = false;
+      if (document.activeElement !== valueInput) {
+        closeSuggestionPanel();
+      }
     });
   }
 
   private renderActionDeleteButton(row: HTMLElement, action: PresetWorkflowAction): void {
-    const deleteBtn = row.createEl('button', { cls: 'clickable-icon', attr: { type: 'button' } });
+    const deleteBtn = row.createEl('button', {
+      cls: 'clickable-icon preset-workflow-action-delete',
+      attr: { type: 'button' },
+    });
     setIcon(deleteBtn, 'trash');
     deleteBtn.setAttribute('aria-label', t('common.delete'));
     deleteBtn.addEventListener('click', () => {
@@ -303,7 +620,10 @@ export class PresetScriptModal extends Modal {
   }
 
   private renderActionMoveUpButton(row: HTMLElement, index: number): void {
-    const moveUpBtn = row.createEl('button', { cls: 'clickable-icon', attr: { type: 'button' } });
+    const moveUpBtn = row.createEl('button', {
+      cls: 'clickable-icon preset-workflow-action-move-up',
+      attr: { type: 'button' },
+    });
     setIcon(moveUpBtn, 'arrow-up');
     moveUpBtn.disabled = index === 0;
     moveUpBtn.setAttribute('aria-label', t('settingsDetails.terminal.presetScriptsMoveUp'));
@@ -313,7 +633,10 @@ export class PresetScriptModal extends Modal {
   }
 
   private renderActionMoveDownButton(row: HTMLElement, index: number, total: number): void {
-    const moveDownBtn = row.createEl('button', { cls: 'clickable-icon', attr: { type: 'button' } });
+    const moveDownBtn = row.createEl('button', {
+      cls: 'clickable-icon preset-workflow-action-move-down',
+      attr: { type: 'button' },
+    });
     setIcon(moveDownBtn, 'arrow-down');
     moveDownBtn.disabled = index >= total - 1;
     moveDownBtn.setAttribute('aria-label', t('settingsDetails.terminal.presetScriptsMoveDown'));
@@ -358,6 +681,8 @@ export class PresetScriptModal extends Modal {
       id: this.createActionId(),
       type: 'terminal-command',
       value: '',
+      enabled: true,
+      note: '',
     };
   }
 
@@ -377,6 +702,8 @@ export class PresetScriptModal extends Modal {
         id: this.createActionId(),
         type: 'terminal-command',
         value: fallbackCommand,
+        enabled: true,
+        note: '',
       });
     }
     return {
@@ -390,7 +717,9 @@ export class PresetScriptModal extends Modal {
     const id = (action.id || '').trim() || this.createActionId();
     const type = this.parseActionType(action.type);
     const value = (action.value || '').trim();
-    return { id, type, value };
+    const enabled = action.enabled !== false;
+    const note = typeof action.note === 'string' ? action.note.trim() : '';
+    return { id, type, value, enabled, note };
   }
 
   private renderTextField(

@@ -291,8 +291,7 @@ try {
   
   console.log('');
   console.log('📊 Build Summary:');
-  console.log(`  ✅ ${SERVER_CONFIG.displayName}`);
-  console.log(`     Binary: ${result.binaryName}`);
+  console.log(`  ✅ ${result.binaryName}`);
   console.log(`     Size: ${result.sizeMB} MB`);
   console.log(`     SHA256: ${result.checksum.substring(0, 16)}...`);
   

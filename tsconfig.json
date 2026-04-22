@@ -10,6 +10,9 @@
     "isolatedModules": true,
     "strictNullChecks": true,
     "skipLibCheck": true,
+    "types": [
+      "node"
+    ],
     "lib": [
       "DOM",
       "ESNext"

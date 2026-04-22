@@ -8,6 +8,7 @@ import { Modal, Setting, Notice, Platform, ToggleComponent, setIcon } from 'obsi
 import type { RendererContext } from '../types';
 import type { PresetScript, ShellType } from '../settings';
 import { 
+  DEFAULT_PRESET_SCRIPTS,
   DEFAULT_SERVER_CONNECTION_SETTINGS,
   getCurrentPlatformShell, 
   setCurrentPlatformShell, 
@@ -33,15 +34,25 @@ const NEW_INSTANCE_BEHAVIORS = [
 ] as const;
 
 const CURSOR_STYLES = ['block', 'underline', 'bar'] as const;
+const BACKGROUND_IMAGE_SIZES = ['cover', 'contain', 'auto'] as const;
+const PREFERRED_RENDERERS = ['canvas', 'webgl'] as const;
 
 type NewInstanceBehavior = (typeof NEW_INSTANCE_BEHAVIORS)[number];
 type CursorStyle = (typeof CURSOR_STYLES)[number];
+type BackgroundImageSize = (typeof BACKGROUND_IMAGE_SIZES)[number];
+type PreferredRenderer = (typeof PREFERRED_RENDERERS)[number];
 
 const isNewInstanceBehavior = (value: string): value is NewInstanceBehavior =>
   NEW_INSTANCE_BEHAVIORS.includes(value as NewInstanceBehavior);
 
 const isCursorStyle = (value: string): value is CursorStyle =>
   CURSOR_STYLES.includes(value as CursorStyle);
+
+const isBackgroundImageSize = (value: string): value is BackgroundImageSize =>
+  BACKGROUND_IMAGE_SIZES.includes(value as BackgroundImageSize);
+
+const isPreferredRenderer = (value: string): value is PreferredRenderer =>
+  PREFERRED_RENDERERS.includes(value as PreferredRenderer);
 
 type TerminalInstanceLike = {
   updateOptions: (options: { scrollback?: number }) => void;
@@ -145,6 +156,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   private themePreviewEl: HTMLElement | null = null;
   private themePreviewContentEl: HTMLElement | null = null;
   private rendererStatusEl: HTMLElement | null = null;
+  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'gemini-cli']);
 
   /**
    * Render terminal settings
@@ -420,6 +432,8 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
                 id: this.createPresetActionId(),
                 type: 'terminal-command',
                 value: '',
+                enabled: true,
+                note: '',
               },
             ],
             terminalTitle: '',
@@ -449,6 +463,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
 
     scripts.forEach((script, index) => {
       const row = listEl.createDiv({ cls: 'preset-script-row' });
+      const isBuiltIn = this.isBuiltInPresetScript(script);
 
       const toggleWrap = row.createDiv({ cls: 'preset-script-toggle' });
       const showInStatusBar = script.showInStatusBar ?? true;
@@ -466,10 +481,17 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       renderPresetScriptIcon(iconEl, script.icon || 'terminal');
 
       const contentEl = row.createDiv({ cls: 'preset-script-content' });
-      contentEl.createDiv({
+      const nameRowEl = contentEl.createDiv({ cls: 'preset-script-name-row' });
+      nameRowEl.createDiv({
         cls: 'preset-script-name',
         text: script.name?.trim() || t('settingsDetails.terminal.presetScriptsUnnamed')
       });
+      if (isBuiltIn) {
+        nameRowEl.createDiv({
+          cls: 'preset-script-built-in-badge preset-script-row-built-in-badge',
+          text: t('common.builtIn'),
+        });
+      }
       contentEl.createDiv({
         cls: 'preset-script-command',
         text: this.getPresetScriptCommandPreview(script)
@@ -502,25 +524,43 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         this.openPresetScriptModal(this.clonePresetScript(script), false, listEl);
       });
 
-      const deleteBtn = actionsEl.createEl('button', { cls: 'clickable-icon preset-script-delete' });
-      setIcon(deleteBtn, 'trash');
-      deleteBtn.setAttribute('aria-label', t('common.delete'));
-      deleteBtn.addEventListener('click', () => {
-        const scriptName = script.name?.trim() || t('settingsDetails.terminal.presetScriptsUnnamed');
-        void this.confirmPresetScriptDelete(scriptName).then((confirmed) => {
-          if (!confirmed) return;
-
-          this.context.plugin.settings.presetScripts = scripts.filter(item => item.id !== script.id);
-          void this.saveSettings().then(() => {
-            this.renderPresetScriptsList(listEl);
+      if (isBuiltIn) {
+        const resetBtn = actionsEl.createEl('button', { cls: 'clickable-icon preset-script-reset' });
+        setIcon(resetBtn, 'reset');
+        resetBtn.setAttribute('aria-label', t('common.reset'));
+        resetBtn.addEventListener('click', () => {
+          const scriptName = script.name?.trim() || t('settingsDetails.terminal.presetScriptsUnnamed');
+          void this.confirmPresetScriptReset(scriptName).then((confirmed) => {
+            if (!confirmed) return;
+            void this.resetBuiltInPresetScript(listEl, script.id);
           });
         });
-      });
+      } else {
+        const deleteBtn = actionsEl.createEl('button', { cls: 'clickable-icon preset-script-delete' });
+        setIcon(deleteBtn, 'trash');
+        deleteBtn.setAttribute('aria-label', t('common.delete'));
+        deleteBtn.addEventListener('click', () => {
+          const scriptName = script.name?.trim() || t('settingsDetails.terminal.presetScriptsUnnamed');
+          void this.confirmPresetScriptDelete(scriptName).then((confirmed) => {
+            if (!confirmed) return;
+
+            this.context.plugin.settings.presetScripts = scripts.filter(item => item.id !== script.id);
+            void this.saveSettings().then(() => {
+              this.renderPresetScriptsList(listEl);
+            });
+          });
+        });
+      }
+
     });
   }
 
+  private isBuiltInPresetScript(script: PresetScript): boolean {
+    return this.builtInPresetIds.has(script.id);
+  }
+
   private openPresetScriptModal(script: PresetScript, isNew: boolean, listEl: HTMLElement): void {
-    const modal = new PresetScriptModal(this.context.app, script, (updatedScript) => {
+    const modal = new PresetScriptModal(this.context.app, this.context.plugin, script, (updatedScript) => {
       const scripts = this.context.plugin.settings.presetScripts ?? [];
       const index = scripts.findIndex(item => item.id === updatedScript.id);
 
@@ -562,6 +602,11 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     return `action-${Date.now()}-${random}`;
   }
 
+  private getDefaultBuiltInPresetScript(scriptId: string): PresetScript | null {
+    const script = DEFAULT_PRESET_SCRIPTS.find((item) => item.id === scriptId);
+    return script ? this.clonePresetScript(script) : null;
+  }
+
   private clonePresetScript(script: PresetScript): PresetScript {
     const actions = Array.isArray(script.actions)
       ? script.actions.map((action) => ({ ...action }))
@@ -572,8 +617,28 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     };
   }
 
+  private async resetBuiltInPresetScript(listEl: HTMLElement, scriptId: string): Promise<void> {
+    const defaultScript = this.getDefaultBuiltInPresetScript(scriptId);
+    if (!defaultScript) {
+      return;
+    }
+
+    const scripts = this.context.plugin.settings.presetScripts ?? [];
+    const index = scripts.findIndex((script) => script.id === scriptId);
+    if (index < 0) {
+      return;
+    }
+
+    const updatedScripts = [...scripts];
+    updatedScripts[index] = defaultScript;
+    this.context.plugin.settings.presetScripts = updatedScripts;
+    await this.saveSettings();
+    this.renderPresetScriptsList(listEl);
+  }
+
   private getPresetScriptCommandPreview(script: PresetScript): string {
     const actions = Array.isArray(script.actions) ? script.actions : [];
+    const enabledActions = actions.filter((action) => action.enabled !== false);
     if (actions.length === 0) {
       const trimmed = (script.command || '').trim();
       if (!trimmed) {
@@ -585,14 +650,18 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         : normalizedFallback;
     }
 
-    const first = actions[0];
+    if (enabledActions.length === 0) {
+      return t('settingsDetails.terminal.presetScriptsNoEnabledActions');
+    }
+
+    const first = enabledActions[0];
     const prefix = first.type === 'obsidian-command'
       ? 'Obsidian'
       : first.type === 'open-external'
         ? 'URL'
         : 'Terminal';
     const normalized = first.value.trim().replace(/\r?\n/g, ' \\n ');
-    const suffix = actions.length > 1 ? ` (+${actions.length - 1})` : '';
+    const suffix = enabledActions.length > 1 ? ` (+${enabledActions.length - 1})` : '';
     const preview = `${prefix}: ${normalized}${suffix}`;
     if (!normalized) {
       return t('settingsDetails.terminal.presetScriptsEmptyCommand');
@@ -778,7 +847,10 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         .addOption('contain', t('backgroundSizeOptions.contain'))
         .addOption('auto', t('backgroundSizeOptions.auto'))
         .setValue(this.context.plugin.settings.backgroundImageSize || 'cover')
-        .onChange((value: 'cover' | 'contain' | 'auto') => {
+        .onChange((value) => {
+          if (!isBackgroundImageSize(value)) {
+            return;
+          }
           void this.updateThemeSetting(() => {
             this.context.plugin.settings.backgroundImageSize = value;
           });
@@ -940,7 +1012,10 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         .addOption('canvas', t('rendererOptions.canvas'))
         .addOption('webgl', t('rendererOptions.webgl'))
         .setValue(this.context.plugin.settings.preferredRenderer)
-        .onChange((value: 'canvas' | 'webgl') => {
+        .onChange((value) => {
+          if (!isPreferredRenderer(value)) {
+            return;
+          }
           void this.updateThemeSetting(() => {
             this.context.plugin.settings.preferredRenderer = value;
           }).then(() => {
@@ -1240,6 +1315,13 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     return confirmAction(
       this.context.app,
       t('settingsDetails.terminal.presetScriptsDeleteConfirm', { name: scriptName })
+    );
+  }
+
+  private confirmPresetScriptReset(scriptName: string): Promise<boolean> {
+    return confirmAction(
+      this.context.app,
+      t('settingsDetails.terminal.presetScriptsResetConfirm', { name: scriptName })
     );
   }
 

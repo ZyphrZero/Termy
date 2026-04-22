@@ -118,6 +118,8 @@ export interface PresetWorkflowAction {
   id: string;
   type: PresetWorkflowActionType;
   value: string;
+  enabled: boolean;
+  note: string;
 }
 
 /**
@@ -146,6 +148,7 @@ export interface PresetScript {
 export interface ServerConnectionSettings {
   downloadAcceleratorUrl: string;
   offlineMode: boolean;
+  autoRegisterCodexCliMcp: boolean;
 }
 
 /**
@@ -154,6 +157,7 @@ export interface ServerConnectionSettings {
 export const DEFAULT_SERVER_CONNECTION_SETTINGS: ServerConnectionSettings = {
   downloadAcceleratorUrl: '',
   offlineMode: false,
+  autoRegisterCodexCliMcp: true,
 };
 
 /**
@@ -170,6 +174,8 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
         id: 'action-claude-code',
         type: 'terminal-command',
         value: 'claude',
+        enabled: true,
+        note: '',
       },
     ],
     terminalTitle: 'Claude Code',
@@ -184,9 +190,18 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
     command: 'codex',
     actions: [
       {
+        id: 'action-codex-install',
+        type: 'terminal-command',
+        value: 'npm install -g @openai/codex oh-my-codex',
+        enabled: false,
+        note: 'Install Codex CLI & oh-my-codex',
+      },
+      {
         id: 'action-codex',
         type: 'terminal-command',
         value: 'codex',
+        enabled: true,
+        note: '',
       },
     ],
     terminalTitle: 'Codex',
@@ -204,6 +219,8 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
         id: 'action-gemini-cli',
         type: 'terminal-command',
         value: 'gemini',
+        enabled: true,
+        note: '',
       },
     ],
     terminalTitle: 'Gemini CLI',

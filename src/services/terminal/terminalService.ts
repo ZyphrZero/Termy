@@ -41,6 +41,7 @@ export class TerminalService {
   private app: App;
   private settings: TerminalSettings;
   private serverManager: ServerManager;
+  private getTerminalEnvironment: () => Record<string, string>;
   
   // Terminal instance registry
   private terminals: Map<string, TerminalInstance> = new Map();
@@ -48,10 +49,16 @@ export class TerminalService {
   // Shutdown state flag
   private isShuttingDown = false;
 
-  constructor(app: App, settings: TerminalSettings, serverManager: ServerManager) {
+  constructor(
+    app: App,
+    settings: TerminalSettings,
+    serverManager: ServerManager,
+    getTerminalEnvironment: () => Record<string, string> = () => ({}),
+  ) {
     this.app = app;
     this.settings = settings;
     this.serverManager = serverManager;
+    this.getTerminalEnvironment = getTerminalEnvironment;
     
     // Listen for server events
     this.setupServerEventHandlers();
@@ -154,12 +161,14 @@ export class TerminalService {
       
       // Get shell startup arguments
       const shellArgs = this.settings.shellArgs.length > 0 ? this.settings.shellArgs : undefined;
+      const terminalEnv = this.getTerminalEnvironment();
       
       // Create the terminal instance with the current settings
       const terminal = new TerminalInstance({
         shellType: shellType,
         shellArgs: shellArgs,
         cwd: cwd,
+        env: Object.keys(terminalEnv).length > 0 ? terminalEnv : undefined,
         fontSize: this.settings.fontSize,
         fontFamily: this.settings.fontFamily,
         cursorStyle: this.settings.cursorStyle,

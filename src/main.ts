@@ -1,5 +1,6 @@
 import type { View, WorkspaceLeaf } from 'obsidian';
 import { addIcon, FileSystemAdapter, Notice, Plugin, normalizePath } from 'obsidian';
+import * as fs from 'fs';
 import type { PresetScript, PresetWorkflowAction, TerminalSettings } from './settings/settings';
 import { PresetScriptModal } from './ui/terminal/presetScriptModal';
 import { PRESET_SCRIPT_ICON_OPTIONS, renderPresetScriptIcon } from './ui/terminal/presetScriptIcons';
@@ -7,6 +8,8 @@ import { DEFAULT_SETTINGS } from './settings/settings';
 import { TerminalSettingTab } from './settings/settingsTab';
 import type { TerminalService } from './services/terminal/terminalService';
 import type { ServerManager } from './services/server/serverManager';
+import type { ClaudeCodeIdeBridge } from './services/claudeCode/ideBridge';
+import type { CodexCliContextBridge } from './services/codexCli/contextBridge';
 import { TERMINAL_VIEW_TYPE, TerminalView } from './ui/terminal/terminalView';
 import { i18n, t } from './i18n';
 import { debugLog, errorLog } from './utils/logger';
@@ -14,6 +17,7 @@ import { createTermyLogoSvg, createTermyLogoSvgMarkup, TERMY_RIBBON_ICON_ID } fr
 import { FeatureVisibilityManager } from './services/visibility';
 import { shell } from 'electron';
 import type { TerminalInstance } from './services/terminal/terminalInstance';
+import { ensureCodexCliMcpConfigured, removeCodexCliMcpConfigured } from './services/codexCli/mcpConfigurator';
 
 // Import terminal styles
 
@@ -21,12 +25,15 @@ import type { TerminalInstance } from './services/terminal/terminalInstance';
  * Main class for the Obsidian Terminal plugin
  */
 export default class TerminalPlugin extends Plugin {
-  settings: TerminalSettings;
-  featureVisibilityManager: FeatureVisibilityManager;
+  settings!: TerminalSettings;
+  featureVisibilityManager!: FeatureVisibilityManager;
   
   // Lazily initialized services
   private _serverManager: ServerManager | null = null;
   private _terminalService: TerminalService | null = null;
+  private _claudeCodeIdeBridge: ClaudeCodeIdeBridge | null = null;
+  private _codexCliContextBridge: CodexCliContextBridge | null = null;
+  private _codexCliMcpConfigPromise: Promise<void> | null = null;
   
   // Status bar elements
   private _statusBarItem: HTMLElement | null = null;
@@ -67,6 +74,10 @@ export default class TerminalPlugin extends Plugin {
    * Get the terminal service (lazy initialization)
    */
   async getTerminalService(): Promise<TerminalService> {
+    await this.initializeClaudeCodeIdeBridge();
+    await this.initializeCodexCliContextBridge();
+    await this.ensureCodexCliMcpConfigured();
+
     if (!this._terminalService) {
       debugLog('[TerminalPlugin] Initializing TerminalService...');
       
@@ -76,7 +87,12 @@ export default class TerminalPlugin extends Plugin {
       this._terminalService = new TerminalService(
         this.app,
         this.settings,
-        serverManager
+        serverManager,
+        () => ({
+          ...(this._claudeCodeIdeBridge?.getTerminalEnv() ?? {}),
+          ...(this._codexCliContextBridge?.getTerminalEnv() ?? {}),
+          ...this.getCodexCliBinaryEnv(),
+        })
       );
       
       debugLog('[TerminalPlugin] TerminalService initialized');
@@ -118,6 +134,16 @@ export default class TerminalPlugin extends Plugin {
 
     // Register all commands
     this.registerCommands();
+
+    void this.initializeClaudeCodeIdeBridge().catch((error) => {
+      errorLog('[TerminalPlugin] Failed to initialize Claude Code IDE bridge:', error);
+    });
+    void this.initializeCodexCliContextBridge().catch((error) => {
+      errorLog('[TerminalPlugin] Failed to initialize Codex CLI context bridge:', error);
+    });
+    void this.ensureCodexCliMcpConfigured().catch((error) => {
+      errorLog('[TerminalPlugin] Failed to auto-configure Codex MCP server:', error);
+    });
 
     // Delay UI initialization until the layout is ready whenever possible
     this.app.workspace.onLayoutReady(() => {
@@ -170,7 +196,127 @@ export default class TerminalPlugin extends Plugin {
       }
     }
 
+    if (this._claudeCodeIdeBridge) {
+      try {
+        debugLog('[TerminalPlugin] Shutting down Claude Code IDE bridge...');
+        await this._claudeCodeIdeBridge.stop();
+        debugLog('[TerminalPlugin] Claude Code IDE bridge stopped');
+      } catch (error) {
+        errorLog('[TerminalPlugin] Failed to stop Claude Code IDE bridge:', error);
+      }
+    }
+
+    if (this._codexCliContextBridge) {
+      try {
+        debugLog('[TerminalPlugin] Shutting down Codex CLI context bridge...');
+        await this._codexCliContextBridge.stop();
+        debugLog('[TerminalPlugin] Codex CLI context bridge stopped');
+      } catch (error) {
+        errorLog('[TerminalPlugin] Failed to stop Codex CLI context bridge:', error);
+      }
+    }
+
     debugLog(t('plugin.unloadedMessage'));
+  }
+
+  private async initializeClaudeCodeIdeBridge(): Promise<void> {
+    if (!this._claudeCodeIdeBridge) {
+      const { ClaudeCodeIdeBridge } = await import('./services/claudeCode/ideBridge');
+      this._claudeCodeIdeBridge = new ClaudeCodeIdeBridge(this.app, this.manifest.version);
+    }
+
+    await this._claudeCodeIdeBridge.start();
+  }
+
+  private async initializeCodexCliContextBridge(): Promise<void> {
+    if (!this._codexCliContextBridge) {
+      const { CodexCliContextBridge } = await import('./services/codexCli/contextBridge');
+      this._codexCliContextBridge = new CodexCliContextBridge(this.app);
+    }
+
+    await this._codexCliContextBridge.start();
+  }
+
+  private getCodexCliBinaryEnv(): Record<string, string> {
+    const binaryPath = this.getCodexCliMcpServerPath();
+    return binaryPath
+      ? {
+          TERMY_CODEX_MCP_SERVER: binaryPath,
+        }
+      : {};
+  }
+
+  private getCodexCliMcpServerPath(): string | null {
+    return this.getCodexCliMcpServerInfo().existingPath;
+  }
+
+  private getCodexCliMcpServerInfo(): { expectedPath: string; existingPath: string | null } {
+    const pluginDir = this.getPluginDir();
+    const ext = process.platform === 'win32' ? '.exe' : '';
+    const filename = `termy-server-${process.platform}-${process.arch}${ext}`;
+    const expectedPath = normalizePath(`${pluginDir}/binaries/${filename}`);
+
+    return {
+      expectedPath,
+      existingPath: fs.existsSync(expectedPath) ? expectedPath : null,
+    };
+  }
+
+  async ensureCodexCliMcpConfigured(): Promise<void> {
+    if (this._codexCliMcpConfigPromise) {
+      return this._codexCliMcpConfigPromise;
+    }
+
+    this._codexCliMcpConfigPromise = this.syncCodexCliMcpConfiguration();
+    try {
+      await this._codexCliMcpConfigPromise;
+    } finally {
+      this._codexCliMcpConfigPromise = null;
+    }
+  }
+
+  private async syncCodexCliMcpConfiguration(): Promise<void> {
+    await this.initializeCodexCliContextBridge();
+
+    if (!this.settings.serverConnection.autoRegisterCodexCliMcp) {
+      await removeCodexCliMcpConfigured();
+      return;
+    }
+
+    const binaryPath = this.getCodexCliMcpServerPath();
+    const snapshotFilePath = this._codexCliContextBridge?.getContextFilePath();
+    if (!binaryPath || !snapshotFilePath) {
+      return;
+    }
+
+    await ensureCodexCliMcpConfigured(binaryPath, snapshotFilePath);
+  }
+
+  async forceRegisterCodexCliMcp(): Promise<void> {
+    await this.initializeCodexCliContextBridge();
+
+    const { expectedPath, existingPath } = this.getCodexCliMcpServerInfo();
+    const binaryPath = existingPath;
+    const snapshotFilePath = this._codexCliContextBridge?.getContextFilePath();
+    if (!binaryPath && !snapshotFilePath) {
+      throw new Error(
+        `Codex MCP binary is missing at ${expectedPath} and snapshot path is unavailable`,
+      );
+    }
+
+    if (!binaryPath) {
+      throw new Error(`Codex MCP binary is missing at ${expectedPath}`);
+    }
+
+    if (!snapshotFilePath) {
+      throw new Error('Codex MCP snapshot path is unavailable');
+    }
+
+    await ensureCodexCliMcpConfigured(binaryPath, snapshotFilePath);
+  }
+
+  async removeCodexCliMcpRegistration(): Promise<void> {
+    await removeCodexCliMcpConfigured();
   }
 
   /**
@@ -178,9 +324,10 @@ export default class TerminalPlugin extends Plugin {
    */
   async loadSettings() {
     const loaded = await this.loadData();
-    const presetScripts = Array.isArray(loaded?.presetScripts)
+    const normalizedPresetScripts = Array.isArray(loaded?.presetScripts)
       ? loaded.presetScripts.map((script: PresetScript) => this.normalizePresetScript(script))
       : DEFAULT_SETTINGS.presetScripts;
+    const presetScripts = this.upgradeBuiltInPresetScripts(normalizedPresetScripts);
     this.settings = {
       ...DEFAULT_SETTINGS,
       ...loaded,
@@ -1004,10 +1151,50 @@ export default class TerminalPlugin extends Plugin {
           id: this.createWorkflowActionId(),
           type: 'terminal-command',
           value: fallbackCommand,
+          enabled: true,
+          note: '',
         },
       ],
       command: fallbackCommand,
     };
+  }
+
+  private upgradeBuiltInPresetScripts(scripts: PresetScript[]): PresetScript[] {
+    return scripts.map((script) => this.upgradeBuiltInPresetScript(script));
+  }
+
+  private upgradeBuiltInPresetScript(script: PresetScript): PresetScript {
+    if (script.id !== 'codex') {
+      return script;
+    }
+
+    const actions = Array.isArray(script.actions) ? script.actions : [];
+    if (!this.isLegacyCodexBuiltInPreset(actions)) {
+      return script;
+    }
+
+    const defaultCodexPreset = DEFAULT_SETTINGS.presetScripts.find((preset) => preset.id === 'codex');
+    if (!defaultCodexPreset) {
+      return script;
+    }
+
+    return {
+      ...script,
+      command: defaultCodexPreset.command,
+      actions: defaultCodexPreset.actions.map((action) => ({ ...action })),
+    };
+  }
+
+  private isLegacyCodexBuiltInPreset(actions: PresetWorkflowAction[]): boolean {
+    if (actions.length !== 1) {
+      return false;
+    }
+
+    const [action] = actions;
+    return action.type === 'terminal-command'
+      && action.value === 'codex'
+      && action.enabled === true
+      && action.note.length === 0;
   }
 
   private normalizeWorkflowAction(action: PresetWorkflowAction): PresetWorkflowAction {
@@ -1017,7 +1204,9 @@ export default class TerminalPlugin extends Plugin {
       : 'terminal-command';
     const value = (action?.value || '').trim();
     const id = (action?.id || '').trim() || this.createWorkflowActionId();
-    return { id, type, value };
+    const enabled = action?.enabled !== false;
+    const note = typeof action?.note === 'string' ? action.note.trim() : '';
+    return { id, type, value, enabled, note };
   }
 
   private openPresetScriptCreateModal(): void {
@@ -1036,6 +1225,8 @@ export default class TerminalPlugin extends Plugin {
           id: this.createWorkflowActionId(),
           type: 'terminal-command',
           value: '',
+          enabled: true,
+          note: '',
         },
       ],
       terminalTitle: '',
@@ -1043,7 +1234,7 @@ export default class TerminalPlugin extends Plugin {
       autoOpenTerminal: true,
       runInNewTerminal: false,
     };
-    const modal = new PresetScriptModal(this.app, newScript, (updatedScript) => {
+    const modal = new PresetScriptModal(this.app, this, newScript, (updatedScript: PresetScript) => {
       scripts.push(updatedScript);
       this.settings.presetScripts = scripts;
       void this.saveSettings();
@@ -1197,7 +1388,7 @@ export default class TerminalPlugin extends Plugin {
     }
 
     const normalizedScript = this.normalizePresetScript(script);
-    const actions = normalizedScript.actions;
+    const actions = normalizedScript.actions.filter((action) => action.enabled !== false);
     if (actions.length === 0) {
       new Notice(t('notices.presetScript.emptyCommand'));
       return;

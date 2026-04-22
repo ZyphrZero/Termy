@@ -1,8 +1,23 @@
 import type { WorkspaceLeaf, Menu } from 'obsidian';
-import { FileSystemAdapter, ItemView, MarkdownView, Notice, TFile, normalizePath, setIcon } from 'obsidian';
+import { FileSystemAdapter, ItemView, MarkdownView, Notice, TFile, setIcon } from 'obsidian';
 import { shell, webUtils } from 'electron';
 import type { TerminalService } from '../../services/terminal/terminalService';
 import type { TerminalInstance } from '../../services/terminal/terminalInstance';
+import {
+  collectFallbackDroppedTextPayload,
+  collectPreferredDroppedTextPayload,
+} from '../../services/terminal/dropTextPayload';
+import {
+  fileUriToPlatformPath,
+  getVaultRelativePathFromAbsolute,
+  isAbsoluteTerminalPath,
+  joinTerminalPaths,
+  normalizeDroppedEntryPath,
+  normalizeTerminalReferencePath,
+  normalizeTerminalToken,
+  normalizeVaultPath,
+  toPlatformPath,
+} from '../../services/terminal/terminalPathUtils';
 import type { TerminalSettings } from '../../settings/settings';
 import { debugLog, errorLog } from '../../utils/logger';
 import { clamp, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
@@ -23,7 +38,7 @@ export class TerminalView extends ItemView {
   private terminalContainer: HTMLElement | null = null;
   private dropHintEl: HTMLElement | null = null;
   private dragEnterDepth = 0;
-  private dropHandlersBound = false;
+  private removeDropHandlers: (() => void) | null = null;
   private searchContainer: HTMLElement | null = null;
   private searchInput: HTMLInputElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
@@ -93,9 +108,8 @@ export class TerminalView extends ItemView {
     this.terminalContainer = container.createDiv('terminal-container');
     this.ensureDropHint();
     this.hideDropHint();
-    if (!this.dropHandlersBound) {
-      this.setupDropHandlers();
-      this.dropHandlersBound = true;
+    if (!this.removeDropHandlers) {
+      this.removeDropHandlers = this.setupDropHandlers();
     }
 
     setTimeout(() => {
@@ -204,6 +218,8 @@ export class TerminalView extends ItemView {
     this.resizeObserver = null;
     this.fileReferenceLinkDisposable?.dispose();
     this.fileReferenceLinkDisposable = null;
+    this.removeDropHandlers?.();
+    this.removeDropHandlers = null;
     this.dragEnterDepth = 0;
     this.dropHintEl = null;
 
@@ -302,28 +318,42 @@ export class TerminalView extends ItemView {
     workspace.setActiveLeaf(newLeaf, { focus: true });
   }
 
-  private setupDropHandlers(): void {
+  private setupDropHandlers(): () => void {
     const container = this.contentEl;
+    const cleanup: Array<() => void> = [];
+    const capture = true;
+    const dragWindow = container.ownerDocument?.defaultView;
 
-    const onDragEnter = (event: DragEvent): void => {
+    const addListener = (
+      target: EventTarget,
+      type: string,
+      listener: EventListenerOrEventListenerObject
+    ): void => {
+      target.addEventListener(type, listener, capture);
+      cleanup.push(() => target.removeEventListener(type, listener, capture));
+    };
+
+    const claimDragEvent = (event: DragEvent): void => {
       event.preventDefault();
-      this.dragEnterDepth += 1;
-      this.showDropHint();
+      event.stopPropagation();
       if (event.dataTransfer) {
         event.dataTransfer.dropEffect = 'copy';
       }
+    };
+
+    const onDragEnter = (event: DragEvent): void => {
+      claimDragEvent(event);
+      this.dragEnterDepth += 1;
+      this.showDropHint();
     };
 
     const onDragOver = (event: DragEvent): void => {
-      event.preventDefault();
+      claimDragEvent(event);
       this.showDropHint();
-      if (event.dataTransfer) {
-        event.dataTransfer.dropEffect = 'copy';
-      }
     };
 
     const onDragLeave = (event: DragEvent): void => {
-      event.preventDefault();
+      claimDragEvent(event);
       this.dragEnterDepth = Math.max(0, this.dragEnterDepth - 1);
       const relatedTarget = event.relatedTarget as Node | null;
       const leftContainer = !relatedTarget || !container.contains(relatedTarget);
@@ -333,17 +363,49 @@ export class TerminalView extends ItemView {
       }
     };
 
-    const onDrop = (event: DragEvent): void => {
-      event.preventDefault();
-      this.dragEnterDepth = 0;
-      this.hideDropHint();
+    const onWindowDragOver = (event: DragEvent): void => {
+      if (!this.isDropEventInsideContainer(event, container)) {
+        if (this.dragEnterDepth > 0) {
+          this.resetDropHintState();
+        }
+        return;
+      }
+
+      claimDragEvent(event);
+      this.dragEnterDepth = Math.max(1, this.dragEnterDepth);
+      this.showDropHint();
+    };
+
+    const onWindowDrop = (event: DragEvent): void => {
+      if (!this.isDropEventInsideContainer(event, container)) {
+        this.resetDropHintState();
+        return;
+      }
+
+      claimDragEvent(event);
+      this.resetDropHintState();
       void this.handleDrop(event.dataTransfer);
     };
 
-    container.addEventListener('dragenter', onDragEnter, { capture: true });
-    container.addEventListener('dragover', onDragOver, { capture: true });
-    container.addEventListener('dragleave', onDragLeave, { capture: true });
-    container.addEventListener('drop', onDrop, { capture: true });
+    const onWindowDragEnd = (): void => {
+      this.resetDropHintState();
+    };
+
+    addListener(container, 'dragenter', onDragEnter);
+    addListener(container, 'dragover', onDragOver);
+    addListener(container, 'dragleave', onDragLeave);
+
+    if (dragWindow) {
+      addListener(dragWindow, 'dragover', onWindowDragOver);
+      addListener(dragWindow, 'drop', onWindowDrop);
+      addListener(dragWindow, 'dragend', onWindowDragEnd);
+    }
+
+    return () => {
+      for (const dispose of cleanup.splice(0)) {
+        dispose();
+      }
+    };
   }
 
   private ensureDropHint(): void {
@@ -376,12 +438,19 @@ export class TerminalView extends ItemView {
 
   private showDropHint(): void {
     this.ensureDropHint();
-    this.updateDropHintText();
+    if (!this.dropHintEl?.classList.contains('is-visible')) {
+      this.updateDropHintText();
+    }
     this.dropHintEl?.classList.add('is-visible');
   }
 
   private hideDropHint(): void {
     this.dropHintEl?.classList.remove('is-visible');
+  }
+
+  private resetDropHintState(): void {
+    this.dragEnterDepth = 0;
+    this.hideDropHint();
   }
 
   private async handleDrop(dataTransfer: DataTransfer | null): Promise<void> {
@@ -401,27 +470,52 @@ export class TerminalView extends ItemView {
     if (!dataTransfer) return null;
 
     const droppedItems = Array.from(dataTransfer.items);
-    const textPayload = await this.collectDroppedTextPayload(dataTransfer, droppedItems);
-    const paths = await this.extractDroppedPaths(dataTransfer, textPayload);
-    if (paths.length > 0) {
+    const nativePaths = this.extractDroppedNativePaths(dataTransfer);
+    if (nativePaths.length > 0) {
       return {
-        text: paths.map((path) => `"${path.replace(/"/g, '\\"')}"`).join(' '),
+        text: this.quoteDroppedPaths(nativePaths),
         usePaste: false,
       };
     }
 
-    const normalizedText = textPayload.trim();
-    if (!normalizedText) {
+    const primaryTextPayload = collectPreferredDroppedTextPayload(dataTransfer);
+    const primaryPaths = this.extractDroppedPathsFromTextPayload(primaryTextPayload);
+    if (primaryPaths.length > 0) {
+      return {
+        text: this.quoteDroppedPaths(primaryPaths),
+        usePaste: false,
+      };
+    }
+
+    const normalizedPrimaryText = primaryTextPayload.trim();
+    if (normalizedPrimaryText) {
+      return {
+        text: normalizedPrimaryText,
+        usePaste: true,
+      };
+    }
+
+    const fallbackTextPayload = await collectFallbackDroppedTextPayload(dataTransfer, droppedItems);
+    const fallbackPaths = this.extractDroppedPathsFromTextPayload(fallbackTextPayload);
+    if (fallbackPaths.length > 0) {
+      return {
+        text: this.quoteDroppedPaths(fallbackPaths),
+        usePaste: false,
+      };
+    }
+
+    const normalizedFallbackText = fallbackTextPayload.trim();
+    if (!normalizedFallbackText) {
       return null;
     }
 
     return {
-      text: normalizedText,
+      text: normalizedFallbackText,
       usePaste: true,
     };
   }
 
-  private async extractDroppedPaths(dataTransfer: DataTransfer | null, textPayload = ''): Promise<string[]> {
+  private extractDroppedNativePaths(dataTransfer: DataTransfer | null): string[] {
     if (!dataTransfer) return [];
 
     const paths: string[] = [];
@@ -455,52 +549,18 @@ export class TerminalView extends ItemView {
       }
     }
 
+    return this.uniquePaths(paths);
+  }
+
+  private extractDroppedPathsFromTextPayload(textPayload = ''): string[] {
+    const paths: string[] = [];
+
     for (const token of this.extractDropTokens(textPayload)) {
       const resolvedPath = this.resolveDroppedTokenToPath(token);
       if (resolvedPath) paths.push(resolvedPath);
     }
 
     return this.uniquePaths(paths);
-  }
-
-  private async collectDroppedTextPayload(dataTransfer: DataTransfer, droppedItems: DataTransferItem[]): Promise<string> {
-    const textPayloadParts = [
-      dataTransfer.getData('text/uri-list'),
-      dataTransfer.getData('text/plain'),
-      dataTransfer.getData('text/html'),
-    ];
-
-    for (const type of Array.from(dataTransfer.types)) {
-      if (type === 'Files' || type === 'text/uri-list' || type === 'text/plain' || type === 'text/html') {
-        continue;
-      }
-      textPayloadParts.push(dataTransfer.getData(type));
-    }
-
-    const stringPayloads = await this.extractStringItemPayloads(droppedItems);
-    textPayloadParts.push(...stringPayloads);
-
-    return textPayloadParts.filter((value) => value.length > 0).join('\n');
-  }
-
-  private async extractStringItemPayloads(items: DataTransferItem[]): Promise<string[]> {
-    const payloads: string[] = [];
-    const stringItems = items.filter((item) => item.kind === 'string');
-
-    await Promise.all(stringItems.map((item) => new Promise<void>((resolve) => {
-      try {
-        item.getAsString((value) => {
-          if (value && value.trim().length > 0) {
-            payloads.push(value);
-          }
-          resolve();
-        });
-      } catch {
-        resolve();
-      }
-    })));
-
-    return payloads;
   }
 
   private describeDropPayload(dataTransfer: DataTransfer | null): Record<string, unknown> {
@@ -533,13 +593,13 @@ export class TerminalView extends ItemView {
 
   private getDroppedFilePath(file: File & { path?: string }): string | null {
     if (typeof file.path === 'string' && file.path.trim().length > 0) {
-      return file.path.trim();
+      return toPlatformPath(file.path);
     }
 
     try {
       const resolvedPath = webUtils?.getPathForFile?.(file);
       if (typeof resolvedPath === 'string' && resolvedPath.trim().length > 0) {
-        return resolvedPath.trim();
+        return toPlatformPath(resolvedPath);
       }
     } catch (error) {
       debugLog('[Terminal DnD] webUtils.getPathForFile failed:', error);
@@ -552,18 +612,7 @@ export class TerminalView extends ItemView {
     const entry = item.webkitGetAsEntry();
     if (!entry) return null;
 
-    const fullPath = entry.fullPath?.trim();
-    if (!fullPath) return null;
-
-    if (/^[A-Za-z]:[\\/]/.test(fullPath) || fullPath.startsWith('\\\\')) {
-      return fullPath.replace(/\//g, '\\');
-    }
-
-    if (/^\/[A-Za-z]:[\\/]/.test(fullPath)) {
-      return fullPath.slice(1).replace(/\//g, '\\');
-    }
-
-    return null;
+    return normalizeDroppedEntryPath(entry.fullPath ?? '');
   }
 
   private extractDropTokens(text: string): string[] {
@@ -580,13 +629,13 @@ export class TerminalView extends ItemView {
   }
 
   private resolveDroppedTokenToPath(token: string): string | null {
-    const normalized = this.normalizeDroppedToken(token);
+    const normalized = normalizeTerminalToken(token);
     if (!normalized) return null;
 
     const obsidianPath = this.obsidianUriToAbsolutePath(normalized);
     if (obsidianPath) return obsidianPath;
 
-    const fileUriPath = this.fileUriToPath(normalized);
+    const fileUriPath = fileUriToPlatformPath(normalized);
     if (fileUriPath) return fileUriPath;
 
     const wikiMatch = normalized.match(/^\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]$/);
@@ -594,12 +643,34 @@ export class TerminalView extends ItemView {
       return this.resolveVaultPathToAbsolute(wikiMatch[1]);
     }
 
-    if (this.isAbsolutePath(normalized)) {
-      return normalized;
+    if (isAbsoluteTerminalPath(normalized)) {
+      return toPlatformPath(normalized);
     }
 
     return this.resolveVaultPathToAbsolute(normalized);
   }
+
+  private quoteDroppedPaths(paths: string[]): string {
+    return paths.map((path) => `"${path.replace(/"/g, '\\"')}"`).join(' ');
+  }
+
+  private isDropEventInsideContainer(event: DragEvent, container: HTMLElement): boolean {
+    const target = event.target;
+    if (target instanceof Node && container.contains(target)) {
+      return true;
+    }
+
+    const rect = container.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      return false;
+    }
+
+    return event.clientX >= rect.left
+      && event.clientX <= rect.right
+      && event.clientY >= rect.top
+      && event.clientY <= rect.bottom;
+  }
+
   private uniquePaths(paths: string[]): string[] {
     const result: string[] = [];
     const seen = new Set<string>();
@@ -616,21 +687,6 @@ export class TerminalView extends ItemView {
     return result;
   }
 
-  private normalizeDroppedToken(value: string): string {
-    let normalized = value.trim().replace(/^<|>$/g, '');
-    if ((normalized.startsWith('"') && normalized.endsWith('"')) || (normalized.startsWith('\'') && normalized.endsWith('\''))) {
-      normalized = normalized.slice(1, -1);
-    }
-
-    try {
-      normalized = decodeURIComponent(normalized);
-    } catch {
-      // ignore decode errors
-    }
-
-    return normalized.trim();
-  }
-
   private obsidianUriToAbsolutePath(uri: string): string | null {
     if (!uri.toLowerCase().startsWith('obsidian://')) return null;
 
@@ -644,36 +700,8 @@ export class TerminalView extends ItemView {
     }
   }
 
-  private fileUriToPath(uri: string): string | null {
-    if (!uri.toLowerCase().startsWith('file://')) return null;
-
-    try {
-      const url = new URL(uri);
-      if (url.protocol !== 'file:') return null;
-
-      let path = decodeURIComponent(url.pathname);
-
-      if (process.platform === 'win32') {
-        if (/^\/[A-Za-z]:/.test(path)) {
-          path = path.slice(1);
-        }
-        path = path.replace(/\//g, '\\');
-        if (url.host) {
-          const normalizedPath = path.startsWith('\\') ? path : `\\${path}`;
-          return `\\\\${url.host}${normalizedPath}`;
-        }
-      } else if (url.host) {
-        path = `//${url.host}${path}`;
-      }
-
-      return path;
-    } catch {
-      return null;
-    }
-  }
-
   private resolveVaultPathToAbsolute(pathLike: string): string | null {
-    const normalizedPath = normalizePath(this.normalizeDroppedToken(pathLike).replace(/^\/+/, ''));
+    const normalizedPath = normalizeVaultPath(pathLike);
     if (!normalizedPath) return null;
 
     const activePath = this.app.workspace.getActiveFile()?.path ?? '';
@@ -686,20 +714,7 @@ export class TerminalView extends ItemView {
       return file.path;
     }
 
-    const basePath = normalizePath(adapter.getBasePath());
-    const absolutePath = normalizePath(`${basePath}/${file.path}`);
-    return process.platform === 'win32' ? absolutePath.replace(/\//g, '\\') : absolutePath;
-  }
-
-  private isAbsolutePath(value: string): boolean {
-    const normalized = value.trim();
-    if (!normalized) return false;
-
-    if (process.platform === 'win32') {
-      return /^[A-Za-z]:[\\/]/.test(normalized) || normalized.startsWith('\\\\');
-    }
-
-    return normalized.startsWith('/');
+    return joinTerminalPaths(adapter.getBasePath(), file.path);
   }
 
   private async writeInputToTerminal(text: string, usePaste = false): Promise<void> {
@@ -767,12 +782,12 @@ export class TerminalView extends ItemView {
   }
 
   private resolveTerminalFileReference(pathLike: string): { file?: TFile; externalPath: string } | null {
-    const normalizedReference = this.normalizeAgentReferencePath(pathLike);
+    const normalizedReference = normalizeTerminalReferencePath(pathLike);
     if (!normalizedReference) {
       return null;
     }
 
-    if (this.isAbsolutePath(normalizedReference)) {
+    if (isAbsoluteTerminalPath(normalizedReference)) {
       const fileFromAbsolutePath = this.absolutePathToVaultFile(normalizedReference);
       if (fileFromAbsolutePath) {
         return {
@@ -797,7 +812,7 @@ export class TerminalView extends ItemView {
       return null;
     }
 
-    const absolutePath = this.joinPathSegments(cwd, normalizedReference);
+    const absolutePath = joinTerminalPaths(cwd, normalizedReference);
     const fileFromCwd = this.absolutePathToVaultFile(absolutePath);
     if (fileFromCwd) {
       return {
@@ -809,19 +824,8 @@ export class TerminalView extends ItemView {
     return { externalPath: absolutePath };
   }
 
-  private normalizeAgentReferencePath(pathLike: string): string {
-    const normalized = this.normalizeDroppedToken(pathLike)
-      .replace(/^[ab][\\/](?=.+\.[A-Za-z0-9]+$)/, '');
-
-    if (process.platform === 'win32') {
-      return normalized.replace(/\//g, '\\');
-    }
-
-    return normalized.replace(/\\/g, '/');
-  }
-
   private resolveVaultReference(pathLike: string): TFile | null {
-    const normalizedPath = normalizePath(pathLike.replace(/\\/g, '/').replace(/^\/+/, ''));
+    const normalizedPath = normalizeVaultPath(pathLike);
     if (!normalizedPath) {
       return null;
     }
@@ -839,23 +843,13 @@ export class TerminalView extends ItemView {
       return null;
     }
 
-    const normalizedBasePath = normalizePath(adapter.getBasePath());
-    const normalizedAbsolutePath = normalizePath(absolutePath.replace(/\\/g, '/'));
-    if (!normalizedAbsolutePath.startsWith(normalizedBasePath)) {
+    const relativePath = getVaultRelativePathFromAbsolute(absolutePath, adapter.getBasePath());
+    if (relativePath === null) {
       return null;
     }
 
-    const relativePath = normalizedAbsolutePath
-      .slice(normalizedBasePath.length)
-      .replace(/^\/+/, '');
-
     const file = this.app.vault.getAbstractFileByPath(relativePath);
     return file instanceof TFile ? file : null;
-  }
-
-  private joinPathSegments(basePath: string, relativePath: string): string {
-    const joined = normalizePath(`${basePath.replace(/\\/g, '/')}/${relativePath.replace(/\\/g, '/')}`);
-    return process.platform === 'win32' ? joined.replace(/\//g, '\\') : joined;
   }
 
   private async openVaultFileReference(file: TFile, line: number | null, column: number | null): Promise<void> {

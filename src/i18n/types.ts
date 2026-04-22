@@ -25,6 +25,7 @@ export interface TranslationKeys {
     error: string;
     warning: string;
     info: string;
+    builtIn: string;
   };
 
   // Plugin information
@@ -146,6 +147,10 @@ export interface TranslationKeys {
       debugLogDisabled: string;
       scrollbackRangeError: string;
       heightRangeError: string;
+      codexCliMcpRegistered: string;
+      codexCliMcpRemoved: string;
+      codexCliMcpRegisterFailed: string;
+      codexCliMcpRemoveFailed: string;
     };
     presetScript: {
       notFound: string;
@@ -252,7 +257,9 @@ export interface TranslationKeys {
       presetScriptsEmpty: string;
       presetScriptsUnnamed: string;
       presetScriptsEmptyCommand: string;
+      presetScriptsNoEnabledActions: string;
       presetScriptsDeleteConfirm: string;
+      presetScriptsResetConfirm: string;
       presetScriptsMoveUp: string;
       presetScriptsMoveDown: string;
       presetScriptName: string;
@@ -261,6 +268,9 @@ export interface TranslationKeys {
       presetScriptIconPlaceholder: string;
       presetScriptCommand: string;
       presetScriptCommandPlaceholder: string;
+      presetScriptActionEnabled: string;
+      presetScriptActionNote: string;
+      presetScriptActionNotePlaceholder: string;
       presetScriptTerminalTitle: string;
       presetScriptTerminalTitlePlaceholder: string;
       presetScriptShowInStatusBar: string;
@@ -276,6 +286,19 @@ export interface TranslationKeys {
       debugModeDesc: string;
       serverConnection: string;
       serverConnectionDesc: string;
+      contextAwareness: string;
+      claudeCodeIntegration: string;
+      codexCliIntegration: string;
+      claudeCodeContext: string;
+      claudeCodeContextDesc: string;
+      codexCliMcp: string;
+      codexCliMcpDesc: string;
+      codexCliMcpAutoRegister: string;
+      codexCliMcpAutoRegisterDesc: string;
+      codexCliMcpReregister: string;
+      codexCliMcpReregisterDesc: string;
+      codexCliMcpRemove: string;
+      codexCliMcpRemoveDesc: string;
       offlineMode: string;
       offlineModeDesc: string;
       downloadAccelerator: string;
