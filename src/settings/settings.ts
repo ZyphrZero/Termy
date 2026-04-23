@@ -167,7 +167,7 @@ export const DEFAULT_SERVER_CONNECTION_SETTINGS: ServerConnectionSettings = {
 export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
   {
     id: 'claude-code',
-    name: 'Claude Code Open',
+    name: 'Claude Code',
     icon: 'claude',
     actions: [
       {
@@ -185,7 +185,7 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
   },
   {
     id: 'codex',
-    name: 'Codex Open',
+    name: 'Codex CLI',
     icon: 'openai',
     actions: [
       {
@@ -210,7 +210,7 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
   },
   {
     id: 'gemini-cli',
-    name: 'Gemini Open',
+    name: 'Gemini CLI',
     icon: 'google',
     actions: [
       {
