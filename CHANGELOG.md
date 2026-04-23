@@ -5,24 +5,32 @@ All notable changes to Termy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.0] - 2026-04-23
+## [1.3.1] - 2026-04-23
 
 ### Added
-- Added `Shift+Enter` terminal input handling to insert a literal newline for multi-line commands without falling back to xterm's default Enter path.
+- Added terminal keyboard handling for multi-line `Shift+Enter`, using text insertion by default and Windows `win32-input-mode` when requested by the shell.
+- Added Windows `win32-input-mode` keyboard encoding for printable keys, modifiers, navigation keys, function keys, lock-key state, and key release events.
 - Added command palette actions to send the current editor selection, note content, or file path into the active terminal.
 - Added clickable file references in terminal output so agent responses can open matching files directly from Obsidian.
 - Added Claude Code context awareness so sessions launched from Termy can read the active Obsidian file and selection.
 - Added Codex CLI context integration with optional auto-registration for the bundled `termy-context` MCP server.
+- Added a server settings control to switch native binary downloads between GitHub Release and the built-in Cloudflare R2 mirror, plus a manual binary download trigger for on-demand checks and recovery.
 
 ### Changed
+- Improved Windows terminal keyboard routing so PowerShell and other ConPTY-aware shells can opt into Win32 key event input instead of relying only on xterm-style input sequences.
 - Reworked preset scripts into preset workflows with configurable action lists, including terminal commands, Obsidian command search, and external link actions.
 - Standardized internal source comments to English across the TypeScript, CSS, and Rust codebases for easier maintenance.
 - Streamlined agent handoffs by routing send and paste flows through terminal-owned APIs and focusing the receiving terminal after handoff.
 - Expanded preset workflow controls with per-action enable toggles, notes, and built-in Claude Code and Codex CLI integration settings.
+- Bundled the changelog into the plugin build so release notes can open reliably across BRAT and packaged installs, and moved the changelog shortcut beside the Termy title in settings.
+- Added a dedicated Cloudflare R2 upload script and release workflow step so published binary artifacts are mirrored outside GitHub Releases.
 
 ### Fixed
 - Merged community fix from [#3](https://github.com/ZyphrZero/Termy/pull/3) to bump the esbuild target to ES2021, preserving xterm's `requestMode()` handling and preventing TUI sessions such as Claude Code from freezing on DECRQM output, and added a bundle smoke check to catch regressions before packaging.
+- Fixed a Windows keyboard handling crash while reading modifier and lock-key state for `win32-input-mode` events.
 - Improved terminal drag-and-drop handling so dropped text and file paths resolve more reliably for agent and workflow launches.
+- Fixed nested vault folder drags that could collapse into basename-only text such as `15040` instead of inserting the full absolute path into the terminal.
+- Updated the TypeScript project configuration away from deprecated compiler options and expanded binary download diagnostics to make update failures easier to troubleshoot.
 
 ## [1.2.3] - 2026-02-26
 

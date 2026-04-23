@@ -56,10 +56,10 @@ export class TerminalSettingTab extends PluginSettingTab {
   private renderHeader(containerEl: HTMLElement): void {
     const headerEl = containerEl.createDiv({ cls: 'terminal-settings-header settings-header' });
 
-    // Title row (includes the icon, title, and reload button)
+    // Title row (includes the icon, title, changelog button, and reload button)
     const titleRow = headerEl.createDiv({ cls: 'settings-title-row' });
 
-    // Left side: logo + title
+    // Left side: logo + title + changelog button
     const titleGroup = titleRow.createDiv({ cls: 'settings-title-group' });
     
     // Add the Termy logo
@@ -67,6 +67,16 @@ export class TerminalSettingTab extends PluginSettingTab {
     iconContainer.appendChild(createTermyLogoSvg(32));
 
     titleGroup.createDiv({ cls: 'settings-title', text: t('settings.header.title') });
+
+    const changelogBtn = titleGroup.createEl('button', {
+      cls: 'settings-header-button settings-title-changelog-button',
+    });
+    changelogBtn.setAttribute('type', 'button');
+    setIcon(changelogBtn, 'scroll-text');
+    changelogBtn.createSpan({ text: t('settings.header.changelog') });
+    changelogBtn.addEventListener('click', () => {
+      this.plugin.showChangelog();
+    });
 
     // Right side: feedback link + reload button
     const actionsGroup = titleRow.createDiv({ cls: 'settings-actions-group' });
@@ -76,14 +86,6 @@ export class TerminalSettingTab extends PluginSettingTab {
     feedbackContainer.createEl('a', {
       text: t('settings.header.feedbackLink'),
       href: 'https://github.com/ZyphrZero/Termy'
-    });
-
-    const changelogBtn = actionsGroup.createEl('button', { cls: 'settings-header-button' });
-    changelogBtn.setAttribute('type', 'button');
-    setIcon(changelogBtn, 'scroll-text');
-    changelogBtn.createSpan({ text: t('settings.header.changelog') });
-    changelogBtn.addEventListener('click', () => {
-      this.plugin.showChangelog();
     });
 
     const reloadBtn = actionsGroup.createEl('button', { cls: 'clickable-icon' });

@@ -184,6 +184,8 @@ export class TerminalInstance {
   private activeCommandStart: number | null = null;
   private promptMarkers: IMarker[] = [];
   private commandMarkers: TerminalCommandMarker[] = [];
+  private win32InputModeEnabled = false;
+  private pendingControlSequenceText = '';
 
   constructor(options: TerminalOptions = {}) {
     this.id = `terminal-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -400,6 +402,7 @@ export class TerminalInstance {
     this.outputUnsubscribe = this.ptyClient.onSessionOutput(this.sessionId, (data: Uint8Array) => {
       const text = new TextDecoder().decode(data);
       this.extractCwdFromOutput(text);
+      this.updateWin32InputMode(text);
       this.xterm.write(data);
     });
     
@@ -449,7 +452,9 @@ export class TerminalInstance {
       onError: (message, error) => {
         errorLog(`[Terminal] ${message}:`, error);
       },
-    });
+    }, () => ({
+      shiftEnterMode: this.win32InputModeEnabled ? 'win32-input-mode' : 'newline',
+    }));
 
     this.xterm.onData((data) => {
       keyboardProtocol.handleData(data);
@@ -488,6 +493,21 @@ export class TerminalInstance {
     if (this.ptyClient && this.sessionId) {
       this.ptyClient.write(this.sessionId, merged);
     }
+  }
+
+  private updateWin32InputMode(data: string): void {
+    if (platform() !== 'win32') {
+      return;
+    }
+
+    const buffer = `${this.pendingControlSequenceText}${data}`;
+    const modeRegex = /\x1b\[\?9001([hl])/g;
+    let match: RegExpExecArray | null = null;
+    while ((match = modeRegex.exec(buffer)) !== null) {
+      this.win32InputModeEnabled = match[1] === 'h';
+    }
+
+    this.pendingControlSequenceText = buffer.slice(-32);
   }
 
   /**

@@ -6,6 +6,7 @@ import {
   collectPreferredDroppedTextPayload,
   joinUniqueDroppedTextPayloadParts,
   normalizeDroppedTextPayloadPart,
+  resolveDroppedTextInput,
 } from './dropTextPayload.ts';
 
 test('joinUniqueDroppedTextPayloadParts deduplicates repeated plain-text drag payloads', () => {
@@ -84,4 +85,18 @@ test('collectFallbackDroppedTextPayload keeps fallback types and async string it
 
   assert.equal(payload, '<p>html payload</p>\ncustom payload\nstring item payload');
   assert.deepEqual(requestedTypes, ['text/html', 'application/x-custom']);
+});
+
+test('resolveDroppedTextInput prefers fallback paths over basename-only primary text payloads', () => {
+  const input = resolveDroppedTextInput(
+    'demo',
+    'obsidian://open?file=005-AI%2Fdemo',
+    (payload) => payload.includes('005-AI%2Fdemo') ? ['F:\\obsidian-changqiu\\005-AI\\demo'] : [],
+    (paths) => paths.join(' ')
+  );
+
+  assert.deepEqual(input, {
+    text: 'F:\\obsidian-changqiu\\005-AI\\demo',
+    usePaste: false,
+  });
 });

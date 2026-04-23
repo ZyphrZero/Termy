@@ -314,7 +314,7 @@ async function main() {
   const requiredFiles = [
     'main.js',
     'manifest.json',
-    'CHANGELOG.md',
+    'styles.css',
     `binaries/${binaryName}`
   ];
 
@@ -347,7 +347,7 @@ async function main() {
 
   log('Installing...', 'cyan');
 
-  const coreFiles = ['main.js', 'manifest.json', 'styles.css', 'CHANGELOG.md'];
+  const coreFiles = ['main.js', 'manifest.json', 'styles.css'];
   for (const file of coreFiles) {
     const src = path.join(ROOT_DIR, file);
     const dest = path.join(targetDir, file);

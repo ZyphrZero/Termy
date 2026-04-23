@@ -137,6 +137,9 @@ export const en: TranslationKeys = {
       codexCliMcpRemoved: 'Codex CLI MCP registration removed',
       codexCliMcpRegisterFailed: 'Failed to update Codex CLI MCP registration: {{message}}',
       codexCliMcpRemoveFailed: 'Failed to remove Codex CLI MCP registration: {{message}}',
+      binaryAlreadyUpToDate: 'Terminal server binary is already up to date',
+      binaryDownloadSkippedOffline: 'Offline mode is enabled, so manual binary download was skipped',
+      binaryDownloadFailed: 'Failed to download terminal server binary: {{message}}',
     },
     presetScript: {
       notFound: 'Preset workflow not found or removed',
@@ -286,8 +289,13 @@ export const en: TranslationKeys = {
       codexCliMcpRemoveDesc: 'Remove the "termy-context" MCP registration from Codex CLI.',
       offlineMode: 'Offline mode',
       offlineModeDesc: 'When enabled, skip binary version checks and automatic downloads',
-      downloadAccelerator: 'Download accelerator',
-      downloadAcceleratorDesc: 'Accelerate GitHub Release downloads; leave empty for direct access',
+      binaryDownloadSource: 'Binary download source',
+      binaryDownloadSourceDesc: 'Choose whether Termy downloads native binaries from GitHub Release or Cloudflare R2',
+      binaryDownloadSourceGithubRelease: 'GitHub Release',
+      binaryDownloadSourceCloudflareR2: 'Cloudflare R2',
+      binaryDownloadNow: 'Download binary now',
+      binaryDownloadNowDesc: 'Manually check and download or update the terminal server binary immediately',
+      binaryDownloadNowRunning: 'Checking...',
       resetToDefaults: 'Reset to defaults',
       resetToDefaultsDesc: 'Reset server connection settings to default values',
       customServerPort: 'Custom server port',
@@ -298,7 +306,7 @@ export const en: TranslationKeys = {
 
   modals: {
     changelog: {
-      title: 'What\'s New',
+      title: 'Changelog',
       subtitle: 'Updated in Termy {{version}}',
       loading: 'Loading changelog...',
       unavailable: 'Unable to load the changelog for this version right now.',

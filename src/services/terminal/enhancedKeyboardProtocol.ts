@@ -1,22 +1,36 @@
+import {
+  encodeWin32InputModeKeyEvent,
+  type Win32InputModeKeyboardEventLike,
+} from './win32InputModeEncoder.ts';
+
 export interface KeyboardEventLike {
   type: string;
   key: string;
+  code?: string;
   ctrlKey: boolean;
   shiftKey: boolean;
   altKey: boolean;
   metaKey: boolean;
+  location?: number;
+  repeat?: boolean;
+  getModifierState?: (key: string) => boolean;
   preventDefault?: () => void;
 }
 
 export interface KeyboardDecisionContext {
   hasSelection: boolean;
+  shiftEnterMode?: 'newline' | 'win32-input-mode';
 }
 
 export type KeyboardDecision =
   | { type: 'allow-default' }
   | { type: 'copy-selection' }
   | { type: 'paste-from-clipboard' }
-  | { type: 'send-input'; data: string };
+  | { type: 'block-default' }
+  | { type: 'send-input'; data: string }
+  | { type: 'write-text'; text: string };
+
+export { WIN32_SHIFT_ENTER_SEQUENCE } from './win32InputModeEncoder.ts';
 
 export interface EnhancedKeyboardProtocolHandlers {
   queueInput: (data: string) => void;
@@ -47,6 +61,27 @@ export function evaluateKeyboardDecision(
   event: KeyboardEventLike,
   context: KeyboardDecisionContext
 ): KeyboardDecision {
+  if (context.shiftEnterMode === 'win32-input-mode') {
+    if (event.type === 'keypress') {
+      return { type: 'block-default' };
+    }
+
+    if (event.type === 'keydown' && event.ctrlKey && event.key === 'c' && context.hasSelection) {
+      return { type: 'copy-selection' };
+    }
+
+    if (event.type === 'keydown' && event.ctrlKey && event.key === 'v') {
+      return { type: 'paste-from-clipboard' };
+    }
+
+    const encoded = encodeWin32InputModeKeyEvent(event as Win32InputModeKeyboardEventLike);
+    if (encoded) {
+      return { type: 'send-input', data: encoded };
+    }
+
+    return { type: 'allow-default' };
+  }
+
   if (event.type !== 'keydown') {
     return { type: 'allow-default' };
   }
@@ -64,7 +99,9 @@ export function evaluateKeyboardDecision(
   }
 
   if (event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey && event.key === 'Enter') {
-    return { type: 'send-input', data: '\n' };
+    // Use the text insertion path so shells with bracketed paste support
+    // treat Shift+Enter as a multiline edit instead of a raw Enter keypress.
+    return { type: 'write-text', text: '\n' };
   }
 
   return { type: 'allow-default' };
@@ -80,9 +117,16 @@ export function decodeBinaryInput(data: string): Uint8Array {
 
 export class EnhancedKeyboardProtocol {
   private readonly handlers: EnhancedKeyboardProtocolHandlers;
+  private readonly getDecisionContext: () => Partial<KeyboardDecisionContext>;
+  private suppressWin32ShortcutEvents = false;
 
-  constructor(handlers: EnhancedKeyboardProtocolHandlers) {
+  constructor(
+    handlers: EnhancedKeyboardProtocolHandlers,
+    decisionContext: Partial<KeyboardDecisionContext> | (() => Partial<KeyboardDecisionContext>) = {}
+  ) {
     this.handlers = handlers;
+    this.getDecisionContext =
+      typeof decisionContext === 'function' ? decisionContext : () => decisionContext;
   }
 
   handleData(data: string): void {
@@ -95,24 +139,44 @@ export class EnhancedKeyboardProtocol {
   }
 
   handleKeyboardEvent(event: KeyboardEventLike): boolean {
+    const decisionContext = this.getDecisionContext();
+    if (this.shouldSuppressWin32ShortcutEvent(event, decisionContext)) {
+      event.preventDefault?.();
+      return false;
+    }
+
     const decision = evaluateKeyboardDecision(event, {
       hasSelection: this.handlers.hasSelection(),
+      shiftEnterMode: decisionContext.shiftEnterMode ?? 'newline',
     });
 
     switch (decision.type) {
       case 'allow-default':
         return true;
       case 'copy-selection':
+        if (decisionContext.shiftEnterMode === 'win32-input-mode') {
+          this.suppressWin32ShortcutEvents = true;
+        }
         event.preventDefault?.();
         this.copySelection();
         return false;
       case 'paste-from-clipboard':
+        if (decisionContext.shiftEnterMode === 'win32-input-mode') {
+          this.suppressWin32ShortcutEvents = true;
+        }
         event.preventDefault?.();
         this.pasteClipboard();
+        return false;
+      case 'block-default':
+        event.preventDefault?.();
         return false;
       case 'send-input':
         event.preventDefault?.();
         this.handlers.queueInput(decision.data);
+        return false;
+      case 'write-text':
+        event.preventDefault?.();
+        this.handlers.writeText(decision.text);
         return false;
     }
   }
@@ -139,5 +203,23 @@ export class EnhancedKeyboardProtocol {
       .catch((error) => {
         this.handlers.onError?.('Paste failed', error);
       });
+  }
+
+  private shouldSuppressWin32ShortcutEvent(
+    event: KeyboardEventLike,
+    decisionContext: Partial<KeyboardDecisionContext>
+  ): boolean {
+    if (
+      decisionContext.shiftEnterMode !== 'win32-input-mode'
+      || !this.suppressWin32ShortcutEvents
+    ) {
+      return false;
+    }
+
+    if (event.type === 'keyup' && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
+      this.suppressWin32ShortcutEvents = false;
+    }
+
+    return true;
   }
 }

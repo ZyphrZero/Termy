@@ -24,10 +24,13 @@ import { shell } from 'electron';
 import type { TerminalInstance } from './services/terminal/terminalInstance';
 import { ensureCodexCliMcpConfigured, removeCodexCliMcpConfigured } from './services/codexCli/mcpConfigurator';
 import { resolveChangelogSection } from './utils/changelog';
+import embeddedChangelogContent from '../CHANGELOG.md';
 
 // Import terminal styles
 
 const REPOSITORY_URL = 'https://github.com/ZyphrZero/Termy';
+const CHANGELOG_URL = `${REPOSITORY_URL}/blob/master/CHANGELOG.md`;
+const EMBEDDED_CHANGELOG_SOURCE_PATH = 'CHANGELOG.md';
 
 type ChangelogDetails = {
   requestedVersion: string;
@@ -74,13 +77,15 @@ export default class TerminalPlugin extends Plugin {
       
       const pluginDir = this.getPluginDir();
       const version = this.manifest.version;
-      const downloadAcceleratorUrl = this.settings.serverConnection?.downloadAcceleratorUrl ?? '';
+      const binaryDownloadConfig = {
+        source: this.settings.serverConnection?.binaryDownloadSource ?? 'cloudflare-r2',
+      };
       const offlineMode = this.settings.serverConnection?.offlineMode ?? false;
       
       this._serverManager = new ServerManager(
         pluginDir,
         version,
-        downloadAcceleratorUrl,
+        binaryDownloadConfig,
         this.settings.enableDebugLog,
         offlineMode
       );
@@ -96,7 +101,7 @@ export default class TerminalPlugin extends Plugin {
   async getTerminalService(): Promise<TerminalService> {
     await this.initializeClaudeCodeIdeBridge();
     await this.initializeCodexCliContextBridge();
-    await this.ensureCodexCliMcpConfigured();
+    await this.ensureCodexCliMcpConfiguredBestEffort();
 
     if (!this._terminalService) {
       debugLog('[TerminalPlugin] Initializing TerminalService...');
@@ -160,7 +165,7 @@ export default class TerminalPlugin extends Plugin {
     void this.initializeCodexCliContextBridge().catch((error) => {
       errorLog('[TerminalPlugin] Failed to initialize Codex CLI context bridge:', error);
     });
-    void this.ensureCodexCliMcpConfigured().catch((error) => {
+    void this.ensureCodexCliMcpConfiguredBestEffort().catch((error) => {
       errorLog('[TerminalPlugin] Failed to auto-configure Codex MCP server:', error);
     });
 
@@ -276,11 +281,19 @@ export default class TerminalPlugin extends Plugin {
   }
 
   async ensureCodexCliMcpConfigured(): Promise<void> {
+    return this.ensureCodexCliMcpConfiguredWithOptions();
+  }
+
+  private async ensureCodexCliMcpConfiguredBestEffort(): Promise<void> {
+    return this.ensureCodexCliMcpConfiguredWithOptions({ allowMissingCli: true });
+  }
+
+  private async ensureCodexCliMcpConfiguredWithOptions(options?: { allowMissingCli?: boolean }): Promise<void> {
     if (this._codexCliMcpConfigPromise) {
       return this._codexCliMcpConfigPromise;
     }
 
-    this._codexCliMcpConfigPromise = this.syncCodexCliMcpConfiguration();
+    this._codexCliMcpConfigPromise = this.syncCodexCliMcpConfiguration(options);
     try {
       await this._codexCliMcpConfigPromise;
     } finally {
@@ -288,11 +301,11 @@ export default class TerminalPlugin extends Plugin {
     }
   }
 
-  private async syncCodexCliMcpConfiguration(): Promise<void> {
+  private async syncCodexCliMcpConfiguration(options?: { allowMissingCli?: boolean }): Promise<void> {
     await this.initializeCodexCliContextBridge();
 
     if (!this.settings.serverConnection.autoRegisterCodexCliMcp) {
-      await removeCodexCliMcpConfigured();
+      await removeCodexCliMcpConfigured(options);
       return;
     }
 
@@ -302,7 +315,7 @@ export default class TerminalPlugin extends Plugin {
       return;
     }
 
-    await ensureCodexCliMcpConfigured(binaryPath, snapshotFilePath);
+    await ensureCodexCliMcpConfigured(binaryPath, snapshotFilePath, options);
   }
 
   async forceRegisterCodexCliMcp(): Promise<void> {
@@ -356,8 +369,8 @@ export default class TerminalPlugin extends Plugin {
       releaseUrl: resolvedSection.resolvedVersion !== 'Unreleased'
         ? `${REPOSITORY_URL}/releases/tag/${resolvedSection.resolvedVersion}`
         : null,
-      fullChangelogUrl: `${REPOSITORY_URL}/blob/master/CHANGELOG.md`,
-      sourcePath: this.getChangelogSourcePath(),
+      fullChangelogUrl: CHANGELOG_URL,
+      sourcePath: EMBEDDED_CHANGELOG_SOURCE_PATH,
       exactMatch: resolvedSection.exactMatch,
     };
 
@@ -388,21 +401,9 @@ export default class TerminalPlugin extends Plugin {
       return this._changelogContentCache;
     }
 
-    const changelogPath = this.getChangelogFilePath();
-    this._changelogContentCache = await fs.promises.readFile(changelogPath, 'utf8');
+    // Always read the bundled changelog so every install path behaves the same.
+    this._changelogContentCache = embeddedChangelogContent;
     return this._changelogContentCache;
-  }
-
-  private getChangelogFilePath(): string {
-    return normalizePath(`${this.getPluginDir()}/CHANGELOG.md`);
-  }
-
-  private getChangelogSourcePath(): string {
-    if (this.manifest.dir) {
-      return normalizePath(`${this.manifest.dir}/CHANGELOG.md`);
-    }
-
-    return normalizePath(`${this.app.vault.configDir}/plugins/${this.manifest.id}/CHANGELOG.md`);
   }
 
   /**
@@ -422,10 +423,7 @@ export default class TerminalPlugin extends Plugin {
         ...loaded?.visibility,
       },
       // Ensure the serverConnection config exists
-      serverConnection: {
-        ...DEFAULT_TERMINAL_SETTINGS.serverConnection,
-        ...loaded?.serverConnection,
-      },
+      serverConnection: this.normalizeServerConnectionSettings(loaded?.serverConnection),
       // Ensure the presetScripts config exists
       presetScripts: normalizedPresetScripts,
     };
@@ -437,6 +435,7 @@ export default class TerminalPlugin extends Plugin {
   async saveSettings() {
     this.settings.presetScripts = (this.settings.presetScripts ?? [])
       .map((script) => this.normalizePresetScript(script));
+    this.settings.serverConnection = this.normalizeServerConnectionSettings(this.settings.serverConnection);
     await this.saveData(this.settings);
     
     // Update debug mode
@@ -447,7 +446,9 @@ export default class TerminalPlugin extends Plugin {
     if (this._serverManager) {
       this._serverManager.updateDebugMode(this.settings.enableDebugLog);
       this._serverManager.updateOfflineMode(this.settings.serverConnection.offlineMode);
-      this._serverManager.updateDownloadAcceleratorUrl(this.settings.serverConnection.downloadAcceleratorUrl);
+      this._serverManager.updateBinaryDownloadConfig({
+        source: this.settings.serverConnection.binaryDownloadSource,
+      });
     }
 
     // Update terminal service settings
@@ -457,6 +458,20 @@ export default class TerminalPlugin extends Plugin {
 
     // Register newly added preset script commands
     this.registerPresetScriptCommands();
+  }
+
+  private normalizeServerConnectionSettings(
+    serverConnection: Partial<TerminalSettings['serverConnection']> | null | undefined
+  ): TerminalSettings['serverConnection'] {
+    return {
+      ...DEFAULT_TERMINAL_SETTINGS.serverConnection,
+      ...serverConnection,
+      binaryDownloadSource: serverConnection?.binaryDownloadSource === 'github-release'
+        ? 'github-release'
+        : 'cloudflare-r2',
+      offlineMode: Boolean(serverConnection?.offlineMode),
+      autoRegisterCodexCliMcp: serverConnection?.autoRegisterCodexCliMcp !== false,
+    };
   }
 
   /**

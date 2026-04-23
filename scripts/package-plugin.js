@@ -50,14 +50,13 @@ const coreFiles = [
   'manifest.json',
   'styles.css'
 ];
-const documentationFiles = ['CHANGELOG.md'];
-const packageFiles = [...coreFiles, ...documentationFiles];
+const packageFiles = [...coreFiles];
 
 for (const file of packageFiles) {
   const filePath = path.join(ROOT_DIR, file);
   if (!fs.existsSync(filePath)) {
     console.error(`❌ Error: Missing required file ${file}`);
-    console.error('Please run pnpm build first and ensure release documentation files are present');
+    console.error('Please run pnpm build first and ensure the plugin bundle files are present');
     process.exit(1);
   }
 }

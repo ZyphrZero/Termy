@@ -152,6 +152,9 @@ export interface TranslationKeys {
       codexCliMcpRemoved: string;
       codexCliMcpRegisterFailed: string;
       codexCliMcpRemoveFailed: string;
+      binaryAlreadyUpToDate: string;
+      binaryDownloadSkippedOffline: string;
+      binaryDownloadFailed: string;
     };
     presetScript: {
       notFound: string;
@@ -303,8 +306,13 @@ export interface TranslationKeys {
       codexCliMcpRemoveDesc: string;
       offlineMode: string;
       offlineModeDesc: string;
-      downloadAccelerator: string;
-      downloadAcceleratorDesc: string;
+      binaryDownloadSource: string;
+      binaryDownloadSourceDesc: string;
+      binaryDownloadSourceGithubRelease: string;
+      binaryDownloadSourceCloudflareR2: string;
+      binaryDownloadNow: string;
+      binaryDownloadNowDesc: string;
+      binaryDownloadNowRunning: string;
       resetToDefaults: string;
       resetToDefaultsDesc: string;
       customServerPort: string;

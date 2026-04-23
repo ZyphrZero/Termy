@@ -26,6 +26,9 @@ import {
 } from './types';
 import { PtyClient } from './ptyClient';
 import { BinaryDownloader } from './binaryDownloader';
+import type { BinaryDownloadConfig } from './binaryDownloadUrls';
+
+type BinaryUpdateResult = 'skipped-offline' | 'already-ready' | 'downloaded' | 'updated';
 
 /**
  * Event listener type
@@ -103,7 +106,7 @@ export class ServerManager {
   private wsConnectPromise: Promise<void> | null = null;
 
   /** Binary update Promise */
-  private binaryUpdatePromise: Promise<void> | null = null;
+  private binaryUpdatePromise: Promise<BinaryUpdateResult> | null = null;
   
   /** Event listeners */
   private eventListeners: Map<keyof ServerEvents, Set<EventListener<keyof ServerEvents>>> = new Map();
@@ -114,7 +117,7 @@ export class ServerManager {
   constructor(
     pluginDir: string,
     version: string = '0.0.0',
-    downloadAcceleratorUrl: string = '',
+    downloadConfig: BinaryDownloadConfig,
     debugMode: boolean = false,
     offlineMode: boolean = false
   ) {
@@ -122,7 +125,7 @@ export class ServerManager {
     this.version = version;
     this.debugMode = debugMode;
     this.offlineMode = offlineMode;
-    this.binaryDownloader = new BinaryDownloader(pluginDir, version, downloadAcceleratorUrl);
+    this.binaryDownloader = new BinaryDownloader(pluginDir, version, downloadConfig);
   }
 
   // ============================================================================
@@ -153,12 +156,12 @@ export class ServerManager {
   /**
    * Ensure the binary has been updated (without starting the server)
    */
-  async ensureBinaryUpdated(): Promise<void> {
+  async ensureBinaryUpdated(): Promise<BinaryUpdateResult> {
     if (this.offlineMode) {
       debugLog('[ServerManager] 离线模式已开启，跳过二进制版本检查与下载');
-      return;
+      return 'skipped-offline';
     }
-    await this.ensureBinaryReady();
+    return this.ensureBinaryReady();
   }
 
   /**
@@ -375,7 +378,7 @@ export class ServerManager {
     return path.join(this.pluginDir, 'binaries', filename);
   }
 
-  private async ensureBinaryReady(): Promise<void> {
+  private async ensureBinaryReady(): Promise<BinaryUpdateResult> {
     if (this.offlineMode) {
       const binaryPath = this.getBinaryPath();
       if (!fs.existsSync(binaryPath)) {
@@ -384,7 +387,7 @@ export class ServerManager {
           '离线模式已开启，未进行版本检查与下载，请确保服务器二进制已存在'
         );
       }
-      return;
+      return 'skipped-offline';
     }
     
     if (this.binaryUpdatePromise) {
@@ -394,19 +397,31 @@ export class ServerManager {
     this.binaryUpdatePromise = this.performBinaryUpdate();
 
     try {
-      await this.binaryUpdatePromise;
+      return await this.binaryUpdatePromise;
     } finally {
       this.binaryUpdatePromise = null;
     }
   }
 
-  private async performBinaryUpdate(): Promise<void> {
+  private async performBinaryUpdate(): Promise<BinaryUpdateResult> {
     const skipVersionCheck = this.offlineMode;
     const needsDownload = !this.binaryDownloader.binaryExists(skipVersionCheck);
     const needsUpdate = this.binaryDownloader.needsUpdate(skipVersionCheck);
+    const binaryPath = this.getBinaryPath();
+    const downloadConfig = this.binaryDownloader.getDownloadConfig();
+
+    debugLog('[ServerManager] Binary readiness check:', {
+      binaryPath,
+      needsDownload,
+      needsUpdate,
+      offlineMode: this.offlineMode,
+      downloadSource: downloadConfig.source,
+      serverRunning: this.isServerRunning(),
+    });
 
     if (!needsDownload && !needsUpdate) {
-      return;
+      debugLog('[ServerManager] 二进制文件已是最新，无需下载');
+      return 'already-ready';
     }
 
     const shouldRestart = needsUpdate && this.isServerRunning();
@@ -443,6 +458,7 @@ export class ServerManager {
       const completeMessage = needsUpdate ? '服务器组件更新完成' : '服务器组件下载完成';
       new Notice(t(completeKey) || completeMessage, 3000);
       updateSucceeded = true;
+      return needsUpdate ? 'updated' : 'downloaded';
 
     } catch (downloadError) {
       notice.hide();
@@ -949,12 +965,19 @@ export class ServerManager {
     debugLog('[ServerManager] 更新离线模式:', this.offlineMode);
   }
 
-  updateDownloadAcceleratorUrl(downloadAcceleratorUrl: string): void {
-    const nextUrl = downloadAcceleratorUrl || '';
-    if (this.binaryDownloader?.getDownloadAcceleratorUrl?.() === nextUrl) {
+  updateBinaryDownloadConfig(downloadConfig: BinaryDownloadConfig): void {
+    const currentConfig = this.binaryDownloader?.getDownloadConfig?.();
+    const nextConfig: BinaryDownloadConfig = {
+      source: downloadConfig.source,
+    };
+
+    if (
+      currentConfig
+      && currentConfig.source === nextConfig.source
+    ) {
       return;
     }
-    this.binaryDownloader = new BinaryDownloader(this.pluginDir, this.version, downloadAcceleratorUrl);
-    debugLog('[ServerManager] 更新下载加速源:', downloadAcceleratorUrl || '(empty)');
+    this.binaryDownloader = new BinaryDownloader(this.pluginDir, this.version, nextConfig);
+    debugLog('[ServerManager] 更新二进制下载配置:', nextConfig);
   }
 }

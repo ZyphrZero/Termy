@@ -6,7 +6,7 @@
 import type { App, ColorComponent, TextComponent } from 'obsidian';
 import { Modal, Setting, Notice, Platform, ToggleComponent, setIcon } from 'obsidian';
 import type { RendererContext } from '../types';
-import type { PresetScript, ShellType } from '../settings';
+import type { BinaryDownloadSource, PresetScript, ShellType } from '../settings';
 import { 
   DEFAULT_PRESET_SCRIPTS,
   DEFAULT_SERVER_CONNECTION_SETTINGS,
@@ -1424,6 +1424,65 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   private renderServerConnectionContent(containerEl: HTMLElement): void {
     const settings = this.context.plugin.settings;
 
+    // Binary download source
+    new Setting(containerEl)
+      .setName(t('settingsDetails.advanced.binaryDownloadSource'))
+      .setDesc(t('settingsDetails.advanced.binaryDownloadSourceDesc'))
+      .addDropdown((dropdown) => {
+        dropdown.addOption(
+          'github-release',
+          t('settingsDetails.advanced.binaryDownloadSourceGithubRelease')
+        );
+        dropdown.addOption(
+          'cloudflare-r2',
+          t('settingsDetails.advanced.binaryDownloadSourceCloudflareR2')
+        );
+        dropdown
+          .setValue(settings.serverConnection.binaryDownloadSource)
+          .onChange((value) => {
+            settings.serverConnection.binaryDownloadSource = value as BinaryDownloadSource;
+            void this.saveSettings();
+
+            void this.context.plugin.getServerManager()
+              .then((serverManager) => {
+                serverManager.updateBinaryDownloadConfig({
+                  source: settings.serverConnection.binaryDownloadSource,
+                });
+              })
+              .catch(() => {
+                // ServerManager may not be initialized yet
+              });
+          });
+      })
+      .addButton((button) => {
+        button
+          .setButtonText(t('settingsDetails.advanced.binaryDownloadNow'))
+          .onClick(async () => {
+            button.setDisabled(true);
+            button.setButtonText(t('settingsDetails.advanced.binaryDownloadNowRunning'));
+
+            try {
+              const serverManager = await this.context.plugin.getServerManager();
+              serverManager.updateBinaryDownloadConfig({
+                source: settings.serverConnection.binaryDownloadSource,
+              });
+
+              const result = await serverManager.ensureBinaryUpdated();
+              if (result === 'already-ready') {
+                new Notice(t('notices.settings.binaryAlreadyUpToDate'));
+              } else if (result === 'skipped-offline') {
+                new Notice(t('notices.settings.binaryDownloadSkippedOffline'));
+              }
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              new Notice(t('notices.settings.binaryDownloadFailed', { message }), 5000);
+            } finally {
+              button.setButtonText(t('settingsDetails.advanced.binaryDownloadNow'));
+              button.setDisabled(false);
+            }
+          });
+      });
+
     // Offline mode
     new Setting(containerEl)
       .setName(t('settingsDetails.advanced.offlineMode'))
@@ -1443,26 +1502,6 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
             });
         }));
 
-    // Download accelerator source
-    new Setting(containerEl)
-      .setName(t('settingsDetails.advanced.downloadAccelerator'))
-      .setDesc(t('settingsDetails.advanced.downloadAcceleratorDesc'))
-      .addText(text => text
-        .setPlaceholder('https://ghfast.top/')
-        .setValue(settings.serverConnection.downloadAcceleratorUrl || '')
-        .onChange((value) => {
-          settings.serverConnection.downloadAcceleratorUrl = value.trim();
-          void this.saveSettings();
-
-          void this.context.plugin.getServerManager()
-            .then((serverManager) => {
-              serverManager.updateDownloadAcceleratorUrl(settings.serverConnection.downloadAcceleratorUrl);
-            })
-            .catch(() => {
-              // ServerManager may not be initialized yet
-            });
-        }));
-
     // Reset button
     new Setting(containerEl)
       .setName(t('settingsDetails.advanced.resetToDefaults'))
@@ -1476,7 +1515,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           void this.context.plugin.getServerManager()
             .then((serverManager) => {
               serverManager.updateOfflineMode(this.context.plugin.settings.serverConnection.offlineMode);
-              serverManager.updateDownloadAcceleratorUrl(this.context.plugin.settings.serverConnection.downloadAcceleratorUrl);
+              serverManager.updateBinaryDownloadConfig({
+                source: this.context.plugin.settings.serverConnection.binaryDownloadSource,
+              });
             })
             .catch(() => {
               // ServerManager may not be initialized yet

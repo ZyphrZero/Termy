@@ -1,0 +1,11 @@
+{
+  // Minimal Wrangler config for managing the project's R2 bucket.
+  "name": "termy-r2",
+  "compatibility_date": "2026-04-23",
+  "r2_buckets": [
+    {
+      "binding": "termy_binaries",
+      "bucket_name": "termy-binaries-apac"
+    }
+  ]
+}

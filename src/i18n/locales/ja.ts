@@ -137,6 +137,9 @@ export const ja: TranslationKeys = {
       codexCliMcpRemoved: 'Codex CLI MCP 登録を削除しました',
       codexCliMcpRegisterFailed: 'Codex CLI MCP 登録の更新に失敗しました: {{message}}',
       codexCliMcpRemoveFailed: 'Codex CLI MCP 登録の削除に失敗しました: {{message}}',
+      binaryAlreadyUpToDate: 'ターミナルサーバーバイナリはすでに最新です',
+      binaryDownloadSkippedOffline: 'オフラインモードが有効なため、手動バイナリダウンロードをスキップしました',
+      binaryDownloadFailed: 'ターミナルサーバーバイナリのダウンロードに失敗しました: {{message}}',
     },
     presetScript: {
       notFound: 'プリセットスクリプトが見つからないか削除されています',
@@ -286,8 +289,13 @@ export const ja: TranslationKeys = {
       codexCliMcpRemoveDesc: 'Codex CLI から "termy-context" MCP 登録を削除します。',
       offlineMode: 'オフラインモード',
       offlineModeDesc: '有効にするとバイナリのバージョン確認と自動ダウンロードをスキップ',
-      downloadAccelerator: 'ダウンロードアクセラレータ',
-      downloadAcceleratorDesc: 'GitHub Release のダウンロードを高速化。空欄で直接アクセス',
+      binaryDownloadSource: 'バイナリのダウンロード元',
+      binaryDownloadSourceDesc: 'Termy のネイティブバイナリを GitHub Release または Cloudflare R2 のどちらからダウンロードするか選択します',
+      binaryDownloadSourceGithubRelease: 'GitHub Release',
+      binaryDownloadSourceCloudflareR2: 'Cloudflare R2',
+      binaryDownloadNow: '今すぐバイナリをダウンロード',
+      binaryDownloadNowDesc: 'ターミナルサーバーバイナリを今すぐ手動で確認してダウンロードまたは更新します',
+      binaryDownloadNowRunning: '確認中...',
       resetToDefaults: '既定に戻す',
       resetToDefaultsDesc: 'サーバー接続設定を既定値に戻す',
       customServerPort: 'カスタムサーバーポート',
@@ -298,7 +306,7 @@ export const ja: TranslationKeys = {
 
   modals: {
     changelog: {
-      title: '新機能',
+      title: '更新ログ',
       subtitle: 'Termy {{version}} の更新内容',
       loading: '更新ログを読み込み中...',
       unavailable: 'このバージョンの更新ログを読み込めませんでした。',

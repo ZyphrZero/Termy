@@ -8,6 +8,7 @@ import {
   isAbsoluteTerminalPath,
   joinTerminalPaths,
   normalizeDroppedEntryPath,
+  normalizeDroppedEntryReference,
   normalizeTerminalReferencePath,
   normalizeTerminalToken,
   normalizeVaultPath,
@@ -109,5 +110,22 @@ test('normalizeDroppedEntryPath normalizes POSIX drop paths without forcing Wind
   assert.equal(
     normalizeDroppedEntryPath('/home/test/vault//nested/file.ts', 'linux'),
     '/home/test/vault/nested/file.ts'
+  );
+});
+
+test('normalizeDroppedEntryReference preserves vault-relative directory entry paths on Windows', () => {
+  assert.deepEqual(
+    normalizeDroppedEntryReference('/考试/15040', 'win32'),
+    {
+      absolutePath: null,
+      vaultPath: '考试/15040',
+    }
+  );
+  assert.deepEqual(
+    normalizeDroppedEntryReference('F:\\obsidian-changqiu\\考试\\15040', 'win32'),
+    {
+      absolutePath: 'F:\\obsidian-changqiu\\考试\\15040',
+      vaultPath: null,
+    }
   );
 });

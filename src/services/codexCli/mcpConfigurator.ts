@@ -5,7 +5,8 @@ import {
   codexMcpConfigMatches,
   type CodexMcpGetJson,
 } from '../context/agentContext';
-import { debugLog, debugWarn } from '@/utils/logger';
+import { debugLog, debugWarn } from '../../utils/logger';
+import { isCodexCliUnavailableResult } from './commandAvailability';
 
 type CommandResult = {
   code: number | null;
@@ -14,14 +15,42 @@ type CommandResult = {
   error?: Error;
 };
 
+type EnsureCodexCliMcpOptions = {
+  allowMissingCli?: boolean;
+};
+
+type CurrentMcpConfigResult =
+  | {
+      availability: 'available';
+      config: CodexMcpGetJson | null;
+    }
+  | {
+      availability: 'unavailable';
+      config: null;
+    };
+
+const CODEX_CLI_UNAVAILABLE_MESSAGE = 'Codex CLI is not installed or not available on PATH';
+
+class CodexCliUnavailableError extends Error {
+  constructor() {
+    super(CODEX_CLI_UNAVAILABLE_MESSAGE);
+    this.name = 'CodexCliUnavailableError';
+  }
+}
+
 export async function ensureCodexCliMcpConfigured(
   binaryPath: string,
   snapshotFilePath: string,
+  options: EnsureCodexCliMcpOptions = {},
 ): Promise<void> {
   const desiredArgs = buildCodexCliDesiredArgs(snapshotFilePath);
 
-  const currentConfig = await getCurrentMcpConfig();
-  if (currentConfig && codexMcpConfigMatches(currentConfig, binaryPath, desiredArgs)) {
+  const currentConfigResult = await getCurrentMcpConfig(options);
+  if (currentConfigResult.availability === 'unavailable') {
+    return;
+  }
+
+  if (currentConfigResult.config && codexMcpConfigMatches(currentConfigResult.config, binaryPath, desiredArgs)) {
     debugLog('[CodexCliMcpConfigurator] Codex MCP server already configured');
     return;
   }
@@ -34,6 +63,10 @@ export async function ensureCodexCliMcpConfigured(
     binaryPath,
     ...desiredArgs,
   ]);
+
+  if (handleCodexCliUnavailable(addResult, options)) {
+    return;
+  }
 
   if (addResult.error) {
     throw addResult.error;
@@ -48,14 +81,24 @@ export async function ensureCodexCliMcpConfigured(
   debugLog('[CodexCliMcpConfigurator] Codex MCP server configured successfully');
 }
 
-export async function removeCodexCliMcpConfigured(): Promise<void> {
-  const currentConfig = await getCurrentMcpConfig();
-  if (!currentConfig) {
+export async function removeCodexCliMcpConfigured(
+  options: EnsureCodexCliMcpOptions = {},
+): Promise<void> {
+  const currentConfigResult = await getCurrentMcpConfig(options);
+  if (currentConfigResult.availability === 'unavailable') {
+    return;
+  }
+
+  if (!currentConfigResult.config) {
     debugLog('[CodexCliMcpConfigurator] Codex MCP server not configured; nothing to remove');
     return;
   }
 
   const removeResult = await runCodexCommand(['mcp', 'remove', CODEX_MCP_SERVER_NAME]);
+
+  if (handleCodexCliUnavailable(removeResult, options)) {
+    return;
+  }
 
   if (removeResult.error) {
     throw removeResult.error;
@@ -70,26 +113,57 @@ export async function removeCodexCliMcpConfigured(): Promise<void> {
   debugLog('[CodexCliMcpConfigurator] Codex MCP server removed successfully');
 }
 
-async function getCurrentMcpConfig(): Promise<CodexMcpGetJson | null> {
+async function getCurrentMcpConfig(
+  options: EnsureCodexCliMcpOptions,
+): Promise<CurrentMcpConfigResult> {
   const result = await runCodexCommand(['mcp', 'get', CODEX_MCP_SERVER_NAME, '--json']);
+
+  if (handleCodexCliUnavailable(result, options)) {
+    return {
+      availability: 'unavailable',
+      config: null,
+    };
+  }
+
   if (result.error) {
-    if (result.error.message.includes('ENOENT')) {
-      debugWarn('[CodexCliMcpConfigurator] Codex CLI not found on PATH; skipping MCP auto-registration');
-      return null;
-    }
     throw result.error;
   }
 
   if (result.code !== 0) {
-    return null;
+    return {
+      availability: 'available',
+      config: null,
+    };
   }
 
   try {
-    return JSON.parse(result.stdout) as CodexMcpGetJson;
+    return {
+      availability: 'available',
+      config: JSON.parse(result.stdout) as CodexMcpGetJson,
+    };
   } catch (error) {
     debugWarn('[CodexCliMcpConfigurator] Failed to parse codex mcp get JSON:', error);
-    return null;
+    return {
+      availability: 'available',
+      config: null,
+    };
   }
+}
+
+function handleCodexCliUnavailable(
+  result: CommandResult,
+  options: EnsureCodexCliMcpOptions,
+): boolean {
+  if (!isCodexCliUnavailableResult(result)) {
+    return false;
+  }
+
+  if (options.allowMissingCli) {
+    debugWarn('[CodexCliMcpConfigurator] Codex CLI not found on PATH; skipping MCP auto-registration');
+    return true;
+  }
+
+  throw new CodexCliUnavailableError();
 }
 
 async function runCodexCommand(args: string[]): Promise<CommandResult> {

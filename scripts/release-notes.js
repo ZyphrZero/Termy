@@ -77,7 +77,7 @@ export function renderReleaseBody({ version, changelogSection, repository = DEFA
     '### Manual Installation',
     '',
     '**Option 1: Complete Package (All Platforms)**',
-    '1. Download `termy.zip` (includes all platform binaries and `CHANGELOG.md`)',
+    '1. Download `termy.zip` (includes plugin files and all platform binaries)',
     '2. Extract to `.obsidian/plugins/` directory',
     '3. Restart Obsidian and enable the plugin',
     '',

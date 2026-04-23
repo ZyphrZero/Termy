@@ -137,6 +137,9 @@ export const ru: TranslationKeys = {
       codexCliMcpRemoved: 'Регистрация MCP Codex CLI удалена',
       codexCliMcpRegisterFailed: 'Не удалось обновить регистрацию MCP Codex CLI: {{message}}',
       codexCliMcpRemoveFailed: 'Не удалось удалить регистрацию MCP Codex CLI: {{message}}',
+      binaryAlreadyUpToDate: 'Бинарник сервера терминала уже обновлён',
+      binaryDownloadSkippedOffline: 'Офлайн-режим включён, поэтому ручная загрузка бинарника была пропущена',
+      binaryDownloadFailed: 'Не удалось загрузить бинарник сервера терминала: {{message}}',
     },
     presetScript: {
       notFound: 'Предустановленный скрипт не найден или удалён',
@@ -286,8 +289,13 @@ export const ru: TranslationKeys = {
       codexCliMcpRemoveDesc: 'Удалить регистрацию MCP "termy-context" из Codex CLI.',
       offlineMode: 'Офлайн-режим',
       offlineModeDesc: 'При включении пропускает проверку версии бинарника и автозагрузку',
-      downloadAccelerator: 'Ускоритель загрузки',
-      downloadAcceleratorDesc: 'Ускоряет загрузки GitHub Release; оставьте пустым для прямого доступа',
+      binaryDownloadSource: 'Источник загрузки бинарника',
+      binaryDownloadSourceDesc: 'Выберите, откуда Termy загружает нативный бинарник: из GitHub Release или Cloudflare R2',
+      binaryDownloadSourceGithubRelease: 'GitHub Release',
+      binaryDownloadSourceCloudflareR2: 'Cloudflare R2',
+      binaryDownloadNow: 'Скачать бинарник сейчас',
+      binaryDownloadNowDesc: 'Вручную проверить и сразу скачать или обновить бинарник сервера терминала',
+      binaryDownloadNowRunning: 'Проверка...',
       resetToDefaults: 'Сбросить настройки',
       resetToDefaultsDesc: 'Сбросить настройки подключения к серверу до значений по умолчанию',
       customServerPort: 'Пользовательский порт сервера',
@@ -298,7 +306,7 @@ export const ru: TranslationKeys = {
 
   modals: {
     changelog: {
-      title: 'Что нового',
+      title: 'Список изменений',
       subtitle: 'Обновления в Termy {{version}}',
       loading: 'Загрузка списка изменений...',
       unavailable: 'Не удалось загрузить список изменений для этой версии.',

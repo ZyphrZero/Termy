@@ -6,6 +6,7 @@ import {
   EnhancedKeyboardProtocol,
   evaluateKeyboardDecision,
   formatPastedTerminalText,
+  WIN32_SHIFT_ENTER_SEQUENCE,
   type EnhancedKeyboardProtocolHandlers,
   type KeyboardEventLike,
 } from './enhancedKeyboardProtocol.ts';
@@ -16,6 +17,7 @@ function createKeyboardEvent(
 ): KeyboardEventLike & { prevented: boolean } {
   const event: KeyboardEventLike & { prevented: boolean } = {
     type: 'keydown',
+    code: key.length === 1 ? `Key${key.toUpperCase()}` : key,
     key,
     ctrlKey: false,
     shiftKey: false,
@@ -86,16 +88,57 @@ function createProtocolHarness(overrides: Partial<EnhancedKeyboardProtocolHandle
   };
 }
 
+function createWin32ProtocolHarness() {
+  const harness = createProtocolHarness();
+  const protocol = new EnhancedKeyboardProtocol(
+    {
+      queueInput(data) {
+        harness.queuedInput.push(data);
+      },
+      flushPendingInput() {},
+      writeBinary(data) {
+        harness.binaryWrites.push(data);
+      },
+      hasSelection() {
+        return false;
+      },
+      getSelection() {
+        return '';
+      },
+      clearSelection() {},
+      async readClipboardText() {
+        return 'clipboard text';
+      },
+      async writeClipboardText() {},
+      writeText(text) {
+        harness.textWrites.push(text);
+      },
+    },
+    () => ({ shiftEnterMode: 'win32-input-mode' })
+  );
+
+  return { harness, protocol };
+}
+
 test('evaluateKeyboardDecision keeps Ctrl+C without selection on the xterm default path', () => {
   const event = createKeyboardEvent('c', { ctrlKey: true });
   const decision = evaluateKeyboardDecision(event, { hasSelection: false });
   assert.deepEqual(decision, { type: 'allow-default' });
 });
 
-test('evaluateKeyboardDecision converts Shift+Enter into an explicit newline input', () => {
+test('evaluateKeyboardDecision routes Shift+Enter through text insertion', () => {
   const event = createKeyboardEvent('Enter', { shiftKey: true });
   const decision = evaluateKeyboardDecision(event, { hasSelection: false });
-  assert.deepEqual(decision, { type: 'send-input', data: '\n' });
+  assert.deepEqual(decision, { type: 'write-text', text: '\n' });
+});
+
+test('evaluateKeyboardDecision maps Shift+Enter to win32-input-mode when requested', () => {
+  const event = createKeyboardEvent('Enter', { shiftKey: true });
+  const decision = evaluateKeyboardDecision(event, {
+    hasSelection: false,
+    shiftEnterMode: 'win32-input-mode',
+  });
+  assert.deepEqual(decision, { type: 'send-input', data: WIN32_SHIFT_ENTER_SEQUENCE });
 });
 
 test('handleKeyboardEvent copies the current selection and blocks xterm default handling', async () => {
@@ -123,7 +166,7 @@ test('handleKeyboardEvent pastes clipboard text through the terminal write path'
   assert.deepEqual(harness.textWrites, ['clipboard text']);
 });
 
-test('handleKeyboardEvent queues a newline for Shift+Enter and bypasses xterm enter handling', () => {
+test('handleKeyboardEvent inserts a newline for Shift+Enter without queueing raw input', () => {
   const harness = createProtocolHarness();
   const event = createKeyboardEvent('Enter', { shiftKey: true });
 
@@ -131,7 +174,72 @@ test('handleKeyboardEvent queues a newline for Shift+Enter and bypasses xterm en
 
   assert.equal(allowed, false);
   assert.equal(event.prevented, true);
-  assert.deepEqual(harness.queuedInput, ['\n']);
+  assert.deepEqual(harness.textWrites, ['\n']);
+  assert.deepEqual(harness.queuedInput, []);
+});
+
+test('handleKeyboardEvent queues the win32-input-mode Shift+Enter sequence when configured', () => {
+  const { harness, protocol } = createWin32ProtocolHarness();
+  const event = createKeyboardEvent('Enter', { shiftKey: true });
+
+  const allowed = protocol.handleKeyboardEvent(event);
+
+  assert.equal(allowed, false);
+  assert.equal(event.prevented, true);
+  assert.deepEqual(harness.queuedInput, [WIN32_SHIFT_ENTER_SEQUENCE]);
+  assert.deepEqual(harness.textWrites, []);
+});
+
+test('handleKeyboardEvent queues win32-input-mode keyup events when configured', () => {
+  const { harness, protocol } = createWin32ProtocolHarness();
+  const event = createKeyboardEvent('a', { code: 'KeyA', type: 'keyup' });
+
+  const allowed = protocol.handleKeyboardEvent(event);
+
+  assert.equal(allowed, false);
+  assert.equal(event.prevented, true);
+  assert.deepEqual(harness.queuedInput, ['\x1b[65;30;97;0;0;1_']);
+});
+
+test('handleKeyboardEvent blocks keypress default handling in win32-input-mode', () => {
+  const { harness, protocol } = createWin32ProtocolHarness();
+  const event = createKeyboardEvent('a', { code: 'KeyA', type: 'keypress' });
+
+  const allowed = protocol.handleKeyboardEvent(event);
+
+  assert.equal(allowed, false);
+  assert.equal(event.prevented, true);
+  assert.deepEqual(harness.queuedInput, []);
+  assert.deepEqual(harness.textWrites, []);
+});
+
+test('handleKeyboardEvent suppresses follow-up win32 shortcut events after local paste handling', async () => {
+  const { harness, protocol } = createWin32ProtocolHarness();
+
+  const pasteKeydown = createKeyboardEvent('v', { code: 'KeyV', ctrlKey: true });
+  const pasteKeyup = createKeyboardEvent('v', { code: 'KeyV', ctrlKey: true, type: 'keyup' });
+  const ctrlKeyup = createKeyboardEvent('Control', {
+    code: 'ControlLeft',
+    ctrlKey: false,
+    type: 'keyup',
+  });
+  const nextKeydown = createKeyboardEvent('a', { code: 'KeyA' });
+
+  assert.equal(protocol.handleKeyboardEvent(pasteKeydown), false);
+  await Promise.resolve();
+  assert.deepEqual(harness.textWrites, ['clipboard text']);
+  assert.deepEqual(harness.queuedInput, []);
+
+  assert.equal(protocol.handleKeyboardEvent(pasteKeyup), false);
+  assert.equal(pasteKeyup.prevented, true);
+  assert.deepEqual(harness.queuedInput, []);
+
+  assert.equal(protocol.handleKeyboardEvent(ctrlKeyup), false);
+  assert.equal(ctrlKeyup.prevented, true);
+  assert.deepEqual(harness.queuedInput, []);
+
+  assert.equal(protocol.handleKeyboardEvent(nextKeydown), false);
+  assert.deepEqual(harness.queuedInput, ['\x1b[65;30;97;1;0;1_']);
 });
 
 test('handleData and handleBinary use the extracted input pipeline callbacks', () => {

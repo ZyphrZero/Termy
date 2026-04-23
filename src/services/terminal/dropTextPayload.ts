@@ -42,6 +42,11 @@ export interface DropStringItemLike {
   getAsString?: ((callback: (value: string) => void) => void) | undefined;
 }
 
+export interface ResolvedDroppedTextInput {
+  text: string;
+  usePaste: boolean;
+}
+
 const PRIMARY_DROP_TEXT_TYPES = ['text/uri-list', 'text/plain'] as const;
 const FALLBACK_IGNORED_DROP_TEXT_TYPES = new Set<string>([
   'Files',
@@ -73,6 +78,47 @@ export async function collectFallbackDroppedTextPayload(
   payloadParts.push(...stringPayloads);
 
   return joinUniqueDroppedTextPayloadParts(payloadParts);
+}
+
+export function resolveDroppedTextInput(
+  primaryTextPayload: string,
+  fallbackTextPayload: string,
+  resolvePaths: (payload: string) => string[],
+  quotePaths: (paths: string[]) => string
+): ResolvedDroppedTextInput | null {
+  const primaryPaths = resolvePaths(primaryTextPayload);
+  if (primaryPaths.length > 0) {
+    return {
+      text: quotePaths(primaryPaths),
+      usePaste: false,
+    };
+  }
+
+  const fallbackPaths = resolvePaths(fallbackTextPayload);
+  if (fallbackPaths.length > 0) {
+    return {
+      text: quotePaths(fallbackPaths),
+      usePaste: false,
+    };
+  }
+
+  const normalizedPrimaryText = primaryTextPayload.trim();
+  if (normalizedPrimaryText) {
+    return {
+      text: normalizedPrimaryText,
+      usePaste: true,
+    };
+  }
+
+  const normalizedFallbackText = fallbackTextPayload.trim();
+  if (!normalizedFallbackText) {
+    return null;
+  }
+
+  return {
+    text: normalizedFallbackText,
+    usePaste: true,
+  };
 }
 
 async function extractStringItemPayloads(items: Iterable<DropStringItemLike>): Promise<string[]> {

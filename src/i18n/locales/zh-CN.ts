@@ -137,6 +137,9 @@ export const zhCN: TranslationKeys = {
       codexCliMcpRemoved: 'Codex CLI MCP 注册已移除',
       codexCliMcpRegisterFailed: '更新 Codex CLI MCP 注册失败：{{message}}',
       codexCliMcpRemoveFailed: '移除 Codex CLI MCP 注册失败：{{message}}',
+      binaryAlreadyUpToDate: '终端服务器二进制已是最新版本',
+      binaryDownloadSkippedOffline: '当前已启用离线模式，已跳过手动二进制下载',
+      binaryDownloadFailed: '下载终端服务器二进制失败：{{message}}',
     },
     presetScript: {
       notFound: '预设工作流不存在或已被删除',
@@ -286,8 +289,13 @@ export const zhCN: TranslationKeys = {
       codexCliMcpRemoveDesc: '从 Codex CLI 中移除“termy-context” MCP 注册。',
       offlineMode: '离线模式',
       offlineModeDesc: '启用后，跳过二进制版本检查与自动下载',
-      downloadAccelerator: '下载加速源',
-      downloadAcceleratorDesc: '用于加速 GitHub Release 下载，留空则直连',
+      binaryDownloadSource: '二进制下载来源',
+      binaryDownloadSourceDesc: '选择 Termy 原生二进制从 GitHub Release 还是 Cloudflare R2 下载',
+      binaryDownloadSourceGithubRelease: 'GitHub Release',
+      binaryDownloadSourceCloudflareR2: 'Cloudflare R2',
+      binaryDownloadNow: '立即下载二进制',
+      binaryDownloadNowDesc: '立即手动检查并下载或更新终端服务器二进制',
+      binaryDownloadNowRunning: '检查中...',
       resetToDefaults: '重置为默认值',
       resetToDefaultsDesc: '将服务器连接设置恢复为默认值',
       customServerPort: '自定义服务器端口',
@@ -298,7 +306,7 @@ export const zhCN: TranslationKeys = {
 
   modals: {
     changelog: {
-      title: '新内容',
+      title: '更新日志',
       subtitle: 'Termy {{version}} 更新内容',
       loading: '正在加载更新日志...',
       unavailable: '暂时无法加载当前版本的更新日志。',

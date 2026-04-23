@@ -94,6 +94,28 @@ export function normalizeDroppedEntryPath(
   return isAbsoluteTerminalPath(normalized, platform) ? normalized : null;
 }
 
+export function normalizeDroppedEntryReference(
+  value: string,
+  platform: TerminalPlatform = process.platform
+): { absolutePath: string | null; vaultPath: string | null } {
+  const rawNormalized = normalizeTerminalToken(value);
+  const absolutePath = isWindowsPlatform(platform) && /^\/(?![A-Za-z]:[\\/])/.test(rawNormalized)
+    ? null
+    : normalizeDroppedEntryPath(value, platform);
+  if (absolutePath) {
+    return {
+      absolutePath,
+      vaultPath: null,
+    };
+  }
+
+  const vaultPath = normalizeVaultPath(value);
+  return {
+    absolutePath: null,
+    vaultPath: vaultPath || null,
+  };
+}
+
 export function normalizeTerminalReferencePath(
   pathLike: string,
   platform: TerminalPlatform = process.platform

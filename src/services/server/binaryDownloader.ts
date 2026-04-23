@@ -3,7 +3,7 @@
  * 
  * Responsibilities:
  * 1. Detect the current platform
- * 2. Download the matching binary from GitHub Releases
+ * 2. Download the matching binary from GitHub Releases or Cloudflare R2
  * 3. Verify SHA256
  * 4. Track download progress
  */
@@ -16,6 +16,8 @@ import * as http from 'http';
 import * as https from 'https';
 import { debugLog, debugWarn, errorLog } from '@/utils/logger';
 import { t } from '@/i18n';
+import { resolveBinaryAssetUrls } from './binaryDownloadUrls';
+import type { BinaryDownloadConfig } from './binaryDownloadUrls';
 
 /** Download progress callback */
 export type DownloadProgressCallback = (progress: DownloadProgress) => void;
@@ -44,20 +46,15 @@ interface BinaryInfo {
   checksumUrl: string;
 }
 
-
-
 export class BinaryDownloader {
-  /** GitHub repository */
-  private readonly repo = 'ZyphrZero/Termy';
-  
   /** Plugin directory */
   private pluginDir: string;
   
   /** Current plugin version */
   private version: string;
   
-  /** Download accelerator URL */
-  private downloadAcceleratorUrl: string;
+  /** Binary download configuration */
+  private downloadConfig: BinaryDownloadConfig;
   
   /** Installed version cache (avoids repeated process invocations) */
   private installedVersionCache: string | null | undefined = undefined;
@@ -65,14 +62,16 @@ export class BinaryDownloader {
   /** Version cache filename */
   private readonly versionCacheFileName = '.termy-server.version.json';
 
-  constructor(pluginDir: string, version: string, downloadAcceleratorUrl: string = '') {
+  constructor(pluginDir: string, version: string, downloadConfig: BinaryDownloadConfig) {
     this.pluginDir = pluginDir;
     this.version = version;
-    this.downloadAcceleratorUrl = downloadAcceleratorUrl;
+    this.downloadConfig = {
+      source: downloadConfig.source,
+    };
   }
 
-  getDownloadAcceleratorUrl(): string {
-    return this.downloadAcceleratorUrl;
+  getDownloadConfig(): BinaryDownloadConfig {
+    return { ...this.downloadConfig };
   }
 
   /**
@@ -202,6 +201,12 @@ export class BinaryDownloader {
     const tempPath = this.getTempBinaryPath(binaryPath);
 
     try {
+      debugLog('[BinaryDownloader] 准备下载二进制:', {
+        version: this.version,
+        source: this.downloadConfig.source,
+        binaryPath,
+        tempPath,
+      });
       notify({ stage: 'checking', percent: 0 });
       
       // Get binary info
@@ -233,14 +238,11 @@ export class BinaryDownloader {
         const errorMsg = downloadError instanceof Error ? downloadError.message : String(downloadError);
         debugWarn('[BinaryDownloader] 下载失败:', errorMsg);
         
-        // If this is a 404 error, the version may not exist, so try the latest version
-        if (errorMsg.includes('404')) {
-          debugLog('[BinaryDownloader] 尝试下载最新版本...');
-          const latestBaseUrl = `https://github.com/${this.repo}/releases/latest/download`;
-          const latestUrl = this.applyDownloadAccelerator(`${latestBaseUrl}/${binaryInfo.filename}`);
-          const latestChecksumUrl = this.applyDownloadAccelerator(`${latestBaseUrl}/${binaryInfo.filename}.sha256`);
-          
-          await this.downloadFile(latestUrl, tempPath, (percent, downloadedBytes, totalBytes) => {
+        if (errorMsg.includes('404') && this.downloadConfig.source === 'github-release') {
+          debugLog('[BinaryDownloader] 指定版本不存在，尝试下载 GitHub latest...');
+          const latestBinaryInfo = this.getBinaryInfo('latest');
+
+          await this.downloadFile(latestBinaryInfo.url, tempPath, (percent, downloadedBytes, totalBytes) => {
             notify({
               stage: 'downloading',
               percent: 10 + percent * 0.7,
@@ -248,9 +250,8 @@ export class BinaryDownloader {
               totalBytes,
             });
           });
-          
-          // Update the checksum URL
-          binaryInfo.checksumUrl = latestChecksumUrl;
+
+          binaryInfo.checksumUrl = latestBinaryInfo.checksumUrl;
         } else {
           throw downloadError;
         }
@@ -261,10 +262,16 @@ export class BinaryDownloader {
       // Download and verify the checksum
       if (binaryInfo.checksumUrl) {
         try {
+          debugLog('[BinaryDownloader] 拉取校验和:', binaryInfo.checksumUrl);
           const checksumContent = await this.fetchText(binaryInfo.checksumUrl);
           const expectedHash = checksumContent.split(/\s+/)[0].toLowerCase();
           
           const actualHash = await this.calculateSHA256(tempPath);
+          debugLog('[BinaryDownloader] 校验和对比:', {
+            expectedHash,
+            actualHash,
+            file: tempPath,
+          });
           
           if (actualHash !== expectedHash) {
             // Delete the corrupted file
@@ -312,28 +319,22 @@ export class BinaryDownloader {
 
   /**
    * Get binary info
-   * Build the GitHub Release download URL directly to bypass API rate limits
+   * Build the download URL for the current version
    */
-  private getBinaryInfo(): BinaryInfo {
-    const platform = process.platform;
-    const arch = process.arch;
-    const ext = platform === 'win32' ? '.exe' : '';
-    const filename = `termy-server-${platform}-${arch}${ext}`;
+  private getBinaryInfo(releaseChannel: 'version' | 'latest' = 'version'): BinaryInfo {
+    const binaryInfo = resolveBinaryAssetUrls({
+      version: this.version,
+      source: this.downloadConfig.source,
+      releaseChannel,
+    });
 
-    // Build the GitHub Release download URL directly
-    // Format: https://github.com/{owner}/{repo}/releases/download/{tag}/{filename}
-    const baseUrl = `https://github.com/${this.repo}/releases/download/${this.version}`;
-    
-    const downloadUrl = this.applyDownloadAccelerator(`${baseUrl}/${filename}`);
-    const checksumUrl = this.applyDownloadAccelerator(`${baseUrl}/${filename}.sha256`);
-    
-    debugLog('[BinaryDownloader] 使用直接下载 URL:', downloadUrl);
-    
-    return {
-      filename,
-      url: downloadUrl,
-      checksumUrl,
-    };
+    debugLog(
+      '[BinaryDownloader] 使用二进制下载 URL:',
+      binaryInfo.url,
+      `(source: ${this.downloadConfig.source}, channel: ${releaseChannel})`
+    );
+
+    return binaryInfo;
   }
 
   /**
@@ -344,7 +345,7 @@ export class BinaryDownloader {
     destPath: string,
     onProgress?: (percent: number, downloadedBytes: number, totalBytes: number) => void
   ): Promise<void> {
-    debugLog('[BinaryDownloader] 开始下载:', url);
+    debugLog('[BinaryDownloader] 开始下载:', { url, destPath });
     await this.downloadFileWithRedirect(url, destPath, onProgress, 5);
     debugLog('[BinaryDownloader] 文件已保存:', destPath);
   }
@@ -377,6 +378,12 @@ export class BinaryDownloader {
               return;
             }
             const nextUrl = new URL(redirectLocation, urlObj).toString();
+            debugLog('[BinaryDownloader] 跟随重定向:', {
+              from: urlObj.toString(),
+              to: nextUrl,
+              statusCode,
+              remainingRedirects,
+            });
             resolve(this.downloadFileWithRedirect(nextUrl, destPath, onProgress, remainingRedirects - 1));
             return;
           }
@@ -388,6 +395,11 @@ export class BinaryDownloader {
           }
 
           const totalBytes = Number(response.headers['content-length'] || 0);
+          debugLog('[BinaryDownloader] 下载响应已开始:', {
+            url: urlObj.toString(),
+            statusCode,
+            totalBytes,
+          });
           let downloadedBytes = 0;
           let finished = false;
 
@@ -430,21 +442,6 @@ export class BinaryDownloader {
     });
   }
 
-  private applyDownloadAccelerator(url: string): string {
-    const base = this.downloadAcceleratorUrl.trim();
-    if (!base) {
-      return url;
-    }
-
-    if (!/^https?:\/\//i.test(base)) {
-      debugWarn('[BinaryDownloader] 下载加速源格式无效，已忽略:', base);
-      return url;
-    }
-
-    const normalizedBase = base.endsWith('/') ? base : `${base}/`;
-    return `${normalizedBase}${url}`;
-  }
-  
   private getVersionCachePath(): string {
     return path.join(this.pluginDir, 'binaries', this.versionCacheFileName);
   }
@@ -571,6 +568,11 @@ export class BinaryDownloader {
           if (statusCode >= 300 && statusCode < 400 && redirectLocation) {
             response.resume();
             const nextUrl = new URL(redirectLocation, urlObj).toString();
+            debugLog('[BinaryDownloader] 文本请求重定向:', {
+              from: urlObj.toString(),
+              to: nextUrl,
+              statusCode,
+            });
             resolve(this.fetchText(nextUrl));
             return;
           }
@@ -587,6 +589,10 @@ export class BinaryDownloader {
           });
 
           response.on('end', () => {
+            debugLog('[BinaryDownloader] 文本请求完成:', {
+              url: urlObj.toString(),
+              length: data.length,
+            });
             resolve(data);
           });
 

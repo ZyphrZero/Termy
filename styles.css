@@ -26,6 +26,7 @@
   align-items: center;
   gap: 6px;
   flex: 1;
+  flex-wrap: wrap;
 }
 
 .settings-title-icon {
@@ -101,6 +102,10 @@
 .settings-header-button svg {
   width: 14px;
   height: 14px;
+}
+
+.settings-title-changelog-button {
+  margin-left: 6px;
 }
 
 .terminal-settings-content {

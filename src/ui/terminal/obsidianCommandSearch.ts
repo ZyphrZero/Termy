@@ -49,11 +49,15 @@ export function searchObsidianCommandOptions(
 }
 
 function resolveCommandList(manager: CommandManagerLike): Command[] {
-  if (typeof manager.listCommands === 'function') {
-    return manager.listCommands();
-  }
   if (manager.commands && typeof manager.commands === 'object') {
     return Object.values(manager.commands);
+  }
+  if (typeof manager.listCommands === 'function') {
+    try {
+      return manager.listCommands();
+    } catch {
+      return [];
+    }
   }
   return [];
 }

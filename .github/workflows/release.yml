@@ -134,11 +134,21 @@ jobs:
           
           # 创建完整包（所有平台，供手动安装）
           mkdir -p termy/binaries
-          cp main.js manifest.json styles.css CHANGELOG.md termy/
+          cp main.js manifest.json styles.css termy/
           cp binaries/termy-server-* termy/binaries/
           chmod +x termy/binaries/termy-server-darwin-* || true
           chmod +x termy/binaries/termy-server-linux-* || true
           zip -r termy.zip termy
+
+      - name: Upload binaries to R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node scripts/upload-r2-assets.js \
+            --bucket termy-binaries-apac \
+            --version "${{ github.ref_name }}" \
+            --config wrangler.jsonc
 
       - name: Release
         uses: softprops/action-gh-release@v2

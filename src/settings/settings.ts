@@ -114,6 +114,8 @@ export interface TerminalSettings {
  */
 export type PresetWorkflowActionType = 'terminal-command' | 'obsidian-command' | 'open-external';
 
+export type BinaryDownloadSource = 'github-release' | 'cloudflare-r2';
+
 /**
  * Workflow action definition
  */
@@ -145,7 +147,7 @@ export interface PresetScript {
  * Server connection settings
  */
 export interface ServerConnectionSettings {
-  downloadAcceleratorUrl: string;
+  binaryDownloadSource: BinaryDownloadSource;
   offlineMode: boolean;
   autoRegisterCodexCliMcp: boolean;
 }
@@ -154,7 +156,7 @@ export interface ServerConnectionSettings {
  * Default server connection settings
  */
 export const DEFAULT_SERVER_CONNECTION_SETTINGS: ServerConnectionSettings = {
-  downloadAcceleratorUrl: '',
+  binaryDownloadSource: 'cloudflare-r2',
   offlineMode: false,
   autoRegisterCodexCliMcp: true,
 };
