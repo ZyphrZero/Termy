@@ -2,6 +2,19 @@
 
 ## 工作流文件
 
+### ci.yml - 插件 CI
+
+**触发条件:**
+- 推送到 `main` / `develop` 分支
+- Pull Request
+- 手动触发
+
+**功能:**
+- 安装依赖并校验 lockfile
+- 构建 TypeScript 插件
+- 运行终端层 Node 测试
+- 运行发布脚本级测试（例如 R2 上传前置检查）
+
 ### build-rust.yml - CI 构建
 
 **触发条件:**
@@ -12,6 +25,7 @@
 **功能:**
 - 构建 5 个平台的 `termy-server` 二进制
 - 测试二进制启动和端口输出
+- 使用 `Swatinem/rust-cache` 做 Rust 缓存
 
 **平台:**
 - Windows x64
@@ -52,6 +66,7 @@ termy.zip
 
 **R2 同步:**
 - `release.yml` 会调用 `scripts/upload-r2-assets.js`
+- Release job 运行在 Node 20 上，并使用 `wrangler@4`
 - 需要配置 GitHub Actions secrets:
   - `CLOUDFLARE_API_TOKEN`
   - `CLOUDFLARE_ACCOUNT_ID`

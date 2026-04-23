@@ -7,7 +7,7 @@
 - `pnpm dev` builds the plugin in development mode.
 - `pnpm build` runs TypeScript checks, bundles the plugin, and smoke-checks the generated bundle.
 - `pnpm build:rust` builds the current-platform `termy-server` into `binaries/`.
-- `pnpm test:terminal-keyboard` compiles the test TS config and runs the terminal-layer Node tests.
+- `pnpm test:terminal` compiles the test TS config and runs the terminal-layer Node tests.
 - `cargo test --manifest-path rust-servers/Cargo.toml` runs Rust unit tests.
 - `pnpm install:dev <vault-path>` builds both layers and installs the plugin into an Obsidian vault for manual verification.
 

@@ -18,6 +18,8 @@ const ROOT_DIR = path.join(__dirname, '..');
 const DEFAULT_BUCKET = 'termy-binaries-apac';
 const DEFAULT_BINARIES_DIR = path.join(ROOT_DIR, 'binaries');
 const DEFAULT_WRANGLER_CONFIG = path.join(ROOT_DIR, 'wrangler.jsonc');
+const DEFAULT_WRANGLER_PACKAGE = 'wrangler@4';
+const MINIMUM_NODE_MAJOR = 20;
 
 function parseArgs(argv) {
   const options = {
@@ -57,6 +59,24 @@ function parseArgs(argv) {
   }
 
   return options;
+}
+
+export function parseNodeMajorVersion(nodeVersion = process.versions.node) {
+  const [majorSegment] = String(nodeVersion).split('.');
+  const major = Number.parseInt(majorSegment, 10);
+  return Number.isFinite(major) ? major : null;
+}
+
+export function assertSupportedNodeVersion(nodeVersion = process.versions.node) {
+  const major = parseNodeMajorVersion(nodeVersion);
+  if (major !== null && major >= MINIMUM_NODE_MAJOR) {
+    return;
+  }
+
+  throw new Error(
+    `upload-r2-assets requires Node.js v${MINIMUM_NODE_MAJOR}+ because Wrangler no longer supports ${nodeVersion}. ` +
+    'Update the runtime or CI setup-node version before uploading to Cloudflare R2.'
+  );
 }
 
 function getCurrentVersion() {
@@ -110,7 +130,7 @@ function spawnPnpm(args) {
 function uploadObject({ bucket, config, filePath, version }) {
   const fileName = path.basename(filePath);
   const objectPath = `${bucket}/${version}/${fileName}`;
-  const args = ['dlx', 'wrangler', 'r2', 'object', 'put', objectPath, '--file', filePath, '--remote'];
+  const args = ['dlx', DEFAULT_WRANGLER_PACKAGE, 'r2', 'object', 'put', objectPath, '--file', filePath, '--remote'];
 
   if (config) {
     args.push('--config', config);
@@ -130,6 +150,8 @@ function uploadObject({ bucket, config, filePath, version }) {
 }
 
 function main() {
+  assertSupportedNodeVersion();
+
   const options = parseArgs(process.argv.slice(2));
   const version = options.version || getCurrentVersion();
 
@@ -156,10 +178,12 @@ function main() {
   console.log('R2 upload complete');
 }
 
-try {
-  main();
-} catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`upload-r2-assets failed: ${message}`);
-  process.exit(1);
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  try {
+    main();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`upload-r2-assets failed: ${message}`);
+    process.exit(1);
+  }
 }

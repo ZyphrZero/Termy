@@ -11,10 +11,18 @@ on:
       - 'rust-servers/**'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build ${{ matrix.platform }}-${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     
     strategy:
       fail-fast: false
@@ -47,7 +55,7 @@ jobs:
             ext: ''
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -55,15 +63,10 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Cache Rust
-        uses: actions/cache@v3
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            rust-servers/target/
-          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ matrix.target }}-${{ hashFiles('rust-servers/Cargo.lock') }}
+          workspaces: rust-servers -> target
+          key: ${{ matrix.target }}
 
       - name: Build
         working-directory: rust-servers
@@ -86,6 +89,7 @@ jobs:
     name: Test ${{ matrix.platform }}-${{ matrix.arch }}
     needs: build
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     
     strategy:
       fail-fast: false

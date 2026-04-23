@@ -13,7 +13,7 @@
     "package": "node scripts/package-plugin.js",
     "package:zip": "node scripts/package-plugin.js --zip",
     "upload:r2": "node scripts/upload-r2-assets.js --bucket termy-binaries-apac",
-    "test:terminal-keyboard": "tsc -p tsconfig.test.json --pretty false && node --experimental-strip-types --experimental-specifier-resolution=node --test src/services/terminal/*.test.ts",
+    "test:terminal": "tsc -p tsconfig.test.json --pretty false && node --experimental-strip-types --experimental-specifier-resolution=node --test src/services/terminal/*.test.ts",
     "verify:bundle": "node scripts/verify-build.js",
     "release": "pnpm build && pnpm build:rust && pnpm package:zip",
     "install:dev": "pnpm build && pnpm build:rust && node scripts/install-dev.js"
