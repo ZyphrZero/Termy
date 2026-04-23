@@ -518,7 +518,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
 
       const editBtn = actionsEl.createEl('button', { cls: 'clickable-icon' });
       setIcon(editBtn, 'pencil');
-      editBtn.setAttribute('aria-label', t('common.save'));
+      editBtn.setAttribute('aria-label', t('modals.presetScript.titleEdit'));
       editBtn.addEventListener('click', () => {
         this.openPresetScriptModal(this.clonePresetScript(script), false, listEl);
       });

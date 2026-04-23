@@ -82,6 +82,29 @@ export function isAbsoluteTerminalPath(
   return getPathModule(platform).isAbsolute(normalized);
 }
 
+export function isBasenameOnlyTerminalToken(
+  value: string,
+  platform: TerminalPlatform = process.platform
+): boolean {
+  const normalized = normalizeTerminalToken(value);
+  if (!normalized || normalized.includes('\n')) {
+    return false;
+  }
+
+  if (
+    (normalized.startsWith('[[') && normalized.endsWith(']]'))
+    || /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(normalized)
+  ) {
+    return false;
+  }
+
+  if (isAbsoluteTerminalPath(normalized, platform)) {
+    return false;
+  }
+
+  return !normalized.includes('/') && !normalized.includes('\\');
+}
+
 export function normalizeDroppedEntryPath(
   value: string,
   platform: TerminalPlatform = process.platform

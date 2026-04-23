@@ -1,3 +1,5 @@
+import { isBasenameOnlyTerminalToken } from './terminalPathUtils.ts';
+
 export function normalizeDroppedTextPayloadPart(value: string | null | undefined): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -86,7 +88,17 @@ export function resolveDroppedTextInput(
   resolvePaths: (payload: string) => string[],
   quotePaths: (paths: string[]) => string
 ): ResolvedDroppedTextInput | null {
+  const normalizedPrimaryText = primaryTextPayload.trim();
   const primaryPaths = resolvePaths(primaryTextPayload);
+  const fallbackPaths = resolvePaths(fallbackTextPayload);
+
+  if (fallbackPaths.length > 0 && isBasenameOnlyTerminalToken(normalizedPrimaryText)) {
+    return {
+      text: quotePaths(fallbackPaths),
+      usePaste: false,
+    };
+  }
+
   if (primaryPaths.length > 0) {
     return {
       text: quotePaths(primaryPaths),
@@ -94,7 +106,6 @@ export function resolveDroppedTextInput(
     };
   }
 
-  const fallbackPaths = resolvePaths(fallbackTextPayload);
   if (fallbackPaths.length > 0) {
     return {
       text: quotePaths(fallbackPaths),
@@ -102,7 +113,6 @@ export function resolveDroppedTextInput(
     };
   }
 
-  const normalizedPrimaryText = primaryTextPayload.trim();
   if (normalizedPrimaryText) {
     return {
       text: normalizedPrimaryText,

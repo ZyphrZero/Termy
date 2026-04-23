@@ -14,6 +14,7 @@ import {
   collectTerminalReferenceCandidatePaths,
   fileUriToPlatformPath,
   getVaultRelativePathFromAbsolute,
+  isBasenameOnlyTerminalToken,
   isAbsoluteTerminalPath,
   joinTerminalPaths,
   normalizeDroppedEntryReference,
@@ -613,6 +614,13 @@ export class TerminalView extends ItemView {
       return toPlatformPath(normalized);
     }
 
+    if (isBasenameOnlyTerminalToken(normalized)) {
+      const basenamePath = this.resolveUniqueVaultBasenameToAbsolute(normalized);
+      if (basenamePath) {
+        return basenamePath;
+      }
+    }
+
     return this.resolveVaultReferenceToAbsolute(normalized, true);
   }
 
@@ -671,16 +679,17 @@ export class TerminalView extends ItemView {
     if (!normalizedPath) return null;
 
     const activePath = this.app.workspace.getActiveFile()?.path ?? '';
-    const file = this.app.metadataCache.getFirstLinkpathDest(normalizedPath, activePath)
-      ?? this.app.vault.getAbstractFileByPath(normalizedPath);
-    if (!file) return null;
+    // Prefer an exact vault entry so folder drops are not shadowed by folder notes.
+    const entry = this.app.vault.getAbstractFileByPath(normalizedPath)
+      ?? this.app.metadataCache.getFirstLinkpathDest(normalizedPath, activePath);
+    if (!entry) return null;
 
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
-      return file.path;
+      return entry.path;
     }
 
-    return joinTerminalPaths(adapter.getBasePath(), file.path);
+    return joinTerminalPaths(adapter.getBasePath(), entry.path);
   }
 
   private resolveVaultReferenceToAbsolute(pathLike: string, allowBasenameFallback = false): string | null {

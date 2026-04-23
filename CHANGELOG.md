@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a Windows keyboard handling crash while reading modifier and lock-key state for `win32-input-mode` events.
 - Improved terminal drag-and-drop handling so dropped text and file paths resolve more reliably for agent and workflow launches.
 - Fixed nested vault folder drags that could collapse into basename-only text such as `15040` instead of inserting the full absolute path into the terminal.
+- Fixed same-name folder drags on Windows so dropped directories no longer resolve to folder-note markdown files instead of the dropped directory path.
 - Updated the TypeScript project configuration away from deprecated compiler options and expanded binary download diagnostics to make update failures easier to troubleshoot.
 
 ## [1.2.3] - 2026-02-26
@@ -143,6 +144,7 @@ If you're upgrading from version 1.1.1 or earlier:
 
 ---
 
+[1.3.1]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.1
 [1.3.0]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.0
 [1.2.3]: https://github.com/ZyphrZero/Termy/releases/tag/1.2.3
 [1.2.2]: https://github.com/ZyphrZero/Termy/releases/tag/1.2.2
