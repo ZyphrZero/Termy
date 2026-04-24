@@ -33,4 +33,7 @@ test('renderReleaseBody describes the package without requiring CHANGELOG.md as 
 
   assert.match(body, /Download `termy\.zip` \(includes plugin files and all platform binaries\)/);
   assert.doesNotMatch(body, /includes all platform binaries and `CHANGELOG\.md`/);
+  assert.match(body, /\[Telegram Group\]\(https:\/\/t\.me\/\+t6oRqhaw8c1jNzE1\)/);
+  assert.doesNotMatch(body, /\[Discussions\]\(/);
+  assert.ok(body.startsWith('## Changelog (1.3.0)\n\n### Added\n- Embedded changelog support.\n\n## Installation'));
 });

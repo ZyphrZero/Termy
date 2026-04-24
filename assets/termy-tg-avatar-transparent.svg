@@ -1,0 +1,33 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="frame-stroke" x1="178" y1="164" x2="812" y2="792" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1d3f59"/>
+      <stop offset="0.5" stop-color="#112b41"/>
+      <stop offset="1" stop-color="#0a1a2b"/>
+    </linearGradient>
+    <linearGradient id="screen-stroke" x1="256" y1="250" x2="768" y2="700" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4f7190"/>
+      <stop offset="1" stop-color="#1d3953"/>
+    </linearGradient>
+    <linearGradient id="accent-stroke" x1="354" y1="352" x2="670" y2="626" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2ce7b0"/>
+      <stop offset="0.54" stop-color="#1fdfb7"/>
+      <stop offset="1" stop-color="#11c5ff"/>
+    </linearGradient>
+    <filter id="core-shadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#000000" flood-opacity="0.08"/>
+      <feDropShadow dx="0" dy="30" stdDeviation="36" flood-color="#000000" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <g transform="translate(142 170) scale(1.32)">
+    <rect x="25" y="45" width="510" height="422" rx="45" fill="none" filter="url(#core-shadow)"
+      stroke="url(#frame-stroke)" stroke-width="35"/>
+    <path d="M95 385 V125 A15 15 0 0 1 110 110 H450 A15 15 0 0 1 465 125 V385"
+      fill="none" stroke="url(#screen-stroke)" stroke-width="29" stroke-linecap="round"/>
+    <g stroke="url(#accent-stroke)" stroke-width="36" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M210 190 L270 245 L210 300" fill="none"/>
+      <line x1="295" y1="300" x2="365" y2="300"/>
+    </g>
+  </g>
+</svg>

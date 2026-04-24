@@ -2,7 +2,7 @@
 
 # Termy
 
-<img src="assets/termy.svg" width="150" alt="Termy logo" />
+<img src="assets\termy-tg-avatar-transparent.svg" width="150" alt="Termy logo" />
 
 *A desktop-only terminal workspace for Obsidian*
 
@@ -256,4 +256,4 @@ GPL-3.0. See [LICENSE](LICENSE).
 ## Support
 
 - Issues: [GitHub Issues](https://github.com/ZyphrZero/Termy/issues)
-- Discussions: [GitHub Discussions](https://github.com/ZyphrZero/Termy/discussions)
+- Telegram Group: [Join the TG group](https://t.me/+t6oRqhaw8c1jNzE1)

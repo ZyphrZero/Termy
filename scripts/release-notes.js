@@ -64,12 +64,13 @@ export function renderReleaseBody({ version, changelogSection, repository = DEFA
   const repoUrl = `https://github.com/${repository}`;
 
   return [
+    `## Changelog (${version})`,
+    '',
+    changelogSection,
+    '',
     '## Installation',
     '',
-    '### Community Plugin (Recommended - Coming Soon)',
-    "Once approved, install directly from Obsidian's Community Plugins browser.",
-    '',
-    '### BRAT (Beta Testing)',
+    '### BRAT (Recommended)',
     `1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat) plugin`,
     `2. Add this repository: \`${repository}\``,
     '3. BRAT will automatically download the correct binary for your platform',
@@ -93,10 +94,6 @@ export function renderReleaseBody({ version, changelogSection, repository = DEFA
     '4. Place core files in `termy/` and binary in `binaries/`',
     '5. Restart Obsidian and enable the plugin',
     '',
-    `## Changelog (${version})`,
-    '',
-    changelogSection,
-    '',
     '## Full Changelog',
     '',
     `See [CHANGELOG.md](${repoUrl}/blob/master/CHANGELOG.md) for the complete history.`,
@@ -104,7 +101,7 @@ export function renderReleaseBody({ version, changelogSection, repository = DEFA
     '## Support',
     '',
     `- [Report Issues](${repoUrl}/issues)`,
-    `- [Discussions](${repoUrl}/discussions)`,
+    '- [Telegram Group](https://t.me/+t6oRqhaw8c1jNzE1)',
   ].join('\n');
 }
 

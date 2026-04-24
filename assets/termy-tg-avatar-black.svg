@@ -1,0 +1,32 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="frame-stroke" x1="178" y1="164" x2="812" y2="792" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.56" stop-color="#eef5ff"/>
+      <stop offset="1" stop-color="#d6e2f2"/>
+    </linearGradient>
+    <linearGradient id="screen-stroke" x1="256" y1="250" x2="768" y2="700" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b8c8db"/>
+      <stop offset="1" stop-color="#88a1bd"/>
+    </linearGradient>
+    <linearGradient id="accent-stroke" x1="354" y1="352" x2="670" y2="626" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#35eeb5"/>
+      <stop offset="0.54" stop-color="#25dfb4"/>
+      <stop offset="1" stop-color="#13c9ff"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="#000000"/>
+
+  <g transform="translate(142 170) scale(1.32)">
+    <rect x="95" y="110" width="370" height="275" rx="18" fill="#000000"/>
+    <rect x="25" y="45" width="510" height="422" rx="45" fill="none"
+      stroke="url(#frame-stroke)" stroke-width="35"/>
+    <path d="M95 385 V125 A15 15 0 0 1 110 110 H450 A15 15 0 0 1 465 125 V385"
+      fill="none" stroke="url(#screen-stroke)" stroke-width="29" stroke-linecap="round"/>
+    <g stroke="url(#accent-stroke)" stroke-width="36" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M210 190 L270 245 L210 300" fill="none"/>
+      <line x1="295" y1="300" x2="365" y2="300"/>
+    </g>
+  </g>
+</svg>

@@ -2,7 +2,7 @@
 
 # Termy
 
-<img src="assets/termy.svg" width="150" alt="Termy logo" />
+<img src="assets\termy-tg-avatar-transparent.svg" width="150" alt="Termy logo" />
 
 *面向 Obsidian 桌面端的终端工作区插件*
 
@@ -265,4 +265,4 @@ GPL-3.0。详见 [LICENSE](LICENSE)。
 ## 支持
 
 - 问题反馈：[GitHub Issues](https://github.com/ZyphrZero/Termy/issues)
-- 讨论区：[GitHub Discussions](https://github.com/ZyphrZero/Termy/discussions)
+- TG 群组：[加入 Telegram 群组](https://t.me/+t6oRqhaw8c1jNzE1)
