@@ -64,7 +64,7 @@ export function renderReleaseBody({ version, changelogSection, repository = DEFA
   const repoUrl = `https://github.com/${repository}`;
 
   return [
-    `## Changelog (${version})`,
+    `## Changelog`,
     '',
     changelogSection,
     '',
