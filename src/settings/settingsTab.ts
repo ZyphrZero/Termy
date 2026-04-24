@@ -87,6 +87,11 @@ export class TerminalSettingTab extends PluginSettingTab {
       text: t('settings.header.feedbackLink'),
       href: 'https://github.com/ZyphrZero/Termy'
     });
+    feedbackContainer.createSpan({ cls: 'settings-feedback-separator', text: ' · ' });
+    feedbackContainer.createEl('a', {
+      text: t('settings.header.communityLink'),
+      href: 'https://t.me/+t6oRqhaw8c1jNzE1'
+    });
 
     const reloadBtn = actionsGroup.createEl('button', { cls: 'clickable-icon' });
     setIcon(reloadBtn, 'refresh-cw');
@@ -106,3 +111,4 @@ export class TerminalSettingTab extends PluginSettingTab {
     this.app.setting.openTabById(pluginId);
   }
 }
+

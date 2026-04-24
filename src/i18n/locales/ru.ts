@@ -158,6 +158,7 @@ export const ru: TranslationKeys = {
       title: 'Termy',
       feedbackText: 'Спасибо за использование! Обратная связь: ',
       feedbackLink: 'GitHub',
+      communityLink: 'Telegram',
       changelog: 'Список изменений',
       reload: 'Перезагрузить плагин',
     },
@@ -432,3 +433,4 @@ export const ru: TranslationKeys = {
     webgl: 'WebGL',
   },
 };
+

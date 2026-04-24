@@ -158,6 +158,7 @@ export const en: TranslationKeys = {
       title: 'Termy',
       feedbackText: 'Thanks for using! Feedback welcome: ',
       feedbackLink: 'GitHub',
+      communityLink: 'Telegram',
       changelog: 'Changelog',
       reload: 'Reload plugin',
     },
@@ -432,5 +433,4 @@ export const en: TranslationKeys = {
     webgl: 'WebGL',
   },
 };
-
 

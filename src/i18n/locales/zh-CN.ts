@@ -158,6 +158,7 @@ export const zhCN: TranslationKeys = {
       title: 'Termy',
       feedbackText: '感谢使用！欢迎反馈：',
       feedbackLink: 'GitHub',
+      communityLink: 'Telegram 群组',
       changelog: '更新日志',
       reload: '重载插件',
     },
@@ -432,5 +433,4 @@ export const zhCN: TranslationKeys = {
     webgl: 'WebGL',
   },
 };
-
 

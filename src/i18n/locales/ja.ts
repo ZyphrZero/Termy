@@ -158,6 +158,7 @@ export const ja: TranslationKeys = {
       title: 'Termy',
       feedbackText: 'ご利用ありがとうございます。フィードバックはこちら: ',
       feedbackLink: 'GitHub',
+      communityLink: 'Telegram',
       changelog: '更新ログ',
       reload: 'プラグインを再読み込み',
     },
@@ -432,3 +433,4 @@ export const ja: TranslationKeys = {
     webgl: 'WebGL',
   },
 };
+

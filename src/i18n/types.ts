@@ -174,6 +174,7 @@ export interface TranslationKeys {
       title: string;
       feedbackText: string;
       feedbackLink: string;
+      communityLink: string;
       changelog: string;
       reload: string;
     };
@@ -464,3 +465,4 @@ export interface TranslationKeys {
     webgl: string;
   };
 }
+

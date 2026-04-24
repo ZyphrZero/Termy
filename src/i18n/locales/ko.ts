@@ -158,6 +158,7 @@ export const ko: TranslationKeys = {
       title: 'Termy',
       feedbackText: '사용해 주셔서 감사합니다! 피드백: ',
       feedbackLink: 'GitHub',
+      communityLink: 'Telegram',
       changelog: '변경 로그',
       reload: '플러그인 다시 로드',
     },
@@ -432,3 +433,4 @@ export const ko: TranslationKeys = {
     webgl: 'WebGL',
   },
 };
+
