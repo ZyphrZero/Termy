@@ -2,10 +2,10 @@
 
 # Termy
 
-<img src="https://socialify.git.ci/ZyphrZero/Termy/image?description=1&font=Inter&forks=1&logo=https%3A%2F%2Fcdn.pixelpunk.cc%2Ff%2F213692a8183744fa%2Ftermy-tg-avatar-transparent.svg&name=1&owner=1&pattern=Charlie+Brown&stargazers=1&theme=Light" alt="Termy" width="640" height="320" />
-
+<img src="assets\termy-tg-avatar-transparent.svg" width="150" alt="Termy logo" />
 
 *A desktop-only terminal workspace for Obsidian*
+
 Full terminal emulation for Obsidian with a native Rust PTY backend, split panes, reusable workflows, file-aware drag and drop, and AI CLI integrations.
 
 [![Version](https://img.shields.io/badge/version-1.3.1-7c3aed?style=for-the-badge)](./manifest.json)
