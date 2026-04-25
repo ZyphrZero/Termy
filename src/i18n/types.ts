@@ -416,6 +416,7 @@ export interface TranslationKeys {
     gitbash: string;
     bash: string;
     zsh: string;
+    tmux: string;
     custom: string;
   };
 

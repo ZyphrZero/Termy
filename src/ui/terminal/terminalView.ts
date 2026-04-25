@@ -3,6 +3,7 @@ import * as path from 'path';
 import type { WorkspaceLeaf, Menu } from 'obsidian';
 import { FileSystemAdapter, ItemView, Notice, TFile, TFolder, setIcon } from 'obsidian';
 import { shell, webUtils } from 'electron';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import type { TerminalService } from '../../services/terminal/terminalService';
 import type { TerminalInstance } from '../../services/terminal/terminalInstance';
 import {
@@ -10,6 +11,7 @@ import {
   collectPreferredDroppedTextPayload,
   resolveDroppedTextInput,
 } from '../../services/terminal/dropTextPayload';
+import { formatClaudeCodePathReferences } from '../../services/terminal/claudeCodePathReferences';
 import {
   collectTerminalReferenceCandidatePaths,
   fileUriToPlatformPath,
@@ -19,11 +21,14 @@ import {
   isAbsoluteTerminalPath,
   joinTerminalPaths,
   normalizeDroppedEntryReference,
+  normalizeTerminalRawToken,
   normalizeTerminalReferencePath,
   normalizeTerminalToken,
   normalizeVaultPath,
+  obsidianUriToVaultPath,
   toPlatformPath,
 } from '../../services/terminal/terminalPathUtils';
+import { TERMINAL_FILE_URI_REGEX } from '../../services/terminal/terminalFileLinks';
 import type { TerminalSettings } from '../../settings/settings';
 import { debugLog, errorLog } from '../../utils/logger';
 import { clamp, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
@@ -46,6 +51,7 @@ export class TerminalView extends ItemView {
   private searchContainer: HTMLElement | null = null;
   private searchInput: HTMLInputElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private fileUriLinkAddon: WebLinksAddon | null = null;
   private initPromise: Promise<TerminalInstance> | null = null;
   private initResolve: ((terminal: TerminalInstance) => void) | null = null;
   private initReject: ((error: Error) => void) | null = null;
@@ -219,6 +225,8 @@ export class TerminalView extends ItemView {
   async onClose(): Promise<void> {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.fileUriLinkAddon?.dispose();
+    this.fileUriLinkAddon = null;
     this.removeDropHandlers?.();
     this.removeDropHandlers = null;
     this.dragEnterDepth = 0;
@@ -455,7 +463,7 @@ export class TerminalView extends ItemView {
     const nativePaths = this.extractDroppedNativePaths(dataTransfer);
     if (nativePaths.length > 0) {
       return {
-        text: this.quoteDroppedPaths(nativePaths),
+        text: this.formatDroppedPaths(nativePaths),
         usePaste: false,
       };
     }
@@ -466,7 +474,7 @@ export class TerminalView extends ItemView {
       primaryTextPayload,
       fallbackTextPayload,
       (payload) => this.extractDroppedPathsFromTextPayload(payload),
-      (paths) => this.quoteDroppedPaths(paths)
+      (paths) => this.formatDroppedPaths(paths)
     );
   }
 
@@ -567,13 +575,22 @@ export class TerminalView extends ItemView {
     const entry = item.webkitGetAsEntry();
     if (!entry) return null;
 
-    const normalizedEntry = normalizeDroppedEntryReference(entry.fullPath ?? '');
-    if (normalizedEntry.absolutePath) {
+    const entryPath = entry.fullPath ?? '';
+    const normalizedEntry = normalizeDroppedEntryReference(entryPath);
+    if (normalizedEntry.absolutePath && fs.existsSync(normalizedEntry.absolutePath)) {
       return normalizedEntry.absolutePath;
     }
 
-    if (normalizedEntry.vaultPath) {
-      return this.resolveVaultReferenceToAbsolute(normalizedEntry.vaultPath);
+    const vaultPath = normalizedEntry.vaultPath ?? normalizeVaultPath(entryPath);
+    if (vaultPath) {
+      const absoluteVaultPath = this.resolveVaultReferenceToAbsolute(vaultPath);
+      if (absoluteVaultPath) {
+        return absoluteVaultPath;
+      }
+    }
+
+    if (normalizedEntry.absolutePath) {
+      return normalizedEntry.absolutePath;
     }
 
     return null;
@@ -593,14 +610,17 @@ export class TerminalView extends ItemView {
   }
 
   private resolveDroppedTokenToPath(token: string): string | null {
-    const normalized = normalizeTerminalToken(token);
-    if (!normalized) return null;
+    const rawToken = normalizeTerminalRawToken(token);
+    if (!rawToken) return null;
 
-    const obsidianPath = this.obsidianUriToAbsolutePath(normalized);
+    const obsidianPath = this.obsidianUriToAbsolutePath(rawToken);
     if (obsidianPath) return obsidianPath;
 
-    const fileUriPath = fileUriToPlatformPath(normalized);
+    const fileUriPath = fileUriToPlatformPath(rawToken);
     if (fileUriPath) return fileUriPath;
+
+    const normalized = normalizeTerminalToken(token);
+    if (!normalized) return null;
 
     const wikiMatch = normalized.match(/^\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]$/);
     if (wikiMatch) {
@@ -623,6 +643,35 @@ export class TerminalView extends ItemView {
 
   private quoteDroppedPaths(paths: string[]): string {
     return paths.map((path) => `"${path.replace(/"/g, '\\"')}"`).join(' ');
+  }
+
+  private formatDroppedPaths(paths: string[]): string {
+    if (!this.shouldFormatDroppedPathsAsClaudeCodeReferences()) {
+      return this.quoteDroppedPaths(paths);
+    }
+
+    return formatClaudeCodePathReferences(paths, {
+      cwd: this.terminalInstance?.getCwd(),
+      isDirectory: (path) => this.isDroppedDirectoryPath(path),
+      pathExists: (path) => fs.existsSync(path),
+    });
+  }
+
+  private shouldFormatDroppedPathsAsClaudeCodeReferences(): boolean {
+    const terminal = this.terminalInstance;
+    if (!terminal) {
+      return false;
+    }
+
+    return terminal.isClaudeCodeSession();
+  }
+
+  private isDroppedDirectoryPath(path: string): boolean {
+    try {
+      return fs.statSync(path).isDirectory();
+    } catch {
+      return false;
+    }
   }
 
   private isDropEventInsideContainer(event: DragEvent, container: HTMLElement): boolean {
@@ -659,16 +708,8 @@ export class TerminalView extends ItemView {
   }
 
   private obsidianUriToAbsolutePath(uri: string): string | null {
-    if (!uri.toLowerCase().startsWith('obsidian://')) return null;
-
-    try {
-      const url = new URL(uri);
-      const file = url.searchParams.get('file') ?? url.searchParams.get('path') ?? url.searchParams.get('linkpath');
-      if (!file) return null;
-      return this.resolveVaultPathToAbsolute(file);
-    } catch {
-      return null;
-    }
+    const vaultPath = obsidianUriToVaultPath(uri);
+    return vaultPath ? this.resolveVaultPathToAbsolute(vaultPath) : null;
   }
 
   private resolveVaultPathToAbsolute(pathLike: string): string | null {
@@ -733,6 +774,15 @@ export class TerminalView extends ItemView {
         void this.openTerminalHyperlinkTarget(target);
       },
     };
+
+    this.fileUriLinkAddon?.dispose();
+    this.fileUriLinkAddon = new WebLinksAddon((event, uri) => {
+      event.preventDefault();
+      void this.openTerminalHyperlinkTarget(uri);
+    }, {
+      urlRegex: TERMINAL_FILE_URI_REGEX,
+    });
+    xterm.loadAddon(this.fileUriLinkAddon);
   }
 
   private async openTerminalHyperlinkTarget(target: string): Promise<void> {

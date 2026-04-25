@@ -145,6 +145,17 @@ pub fn get_shell_by_type(shell_type: Option<&str>) -> CommandBuilder {
         }
         Some("bash") => CommandBuilder::new("bash"),
         Some("zsh") => CommandBuilder::new("zsh"),
+        Some("tmux") => command_from_path_or_candidates(
+            "tmux",
+            &[
+                "/opt/homebrew/bin/tmux",
+                "/usr/local/bin/tmux",
+                "/usr/bin/tmux",
+                "/bin/tmux",
+                "C:\\msys64\\usr\\bin\\tmux.exe",
+                "C:\\Program Files\\Git\\usr\\bin\\tmux.exe",
+            ],
+        ),
         Some(custom) if custom.starts_with("custom:") => {
             // Custom shell path in the format "custom:/path/to/shell"
             let path = &custom[7..]; // Remove the "custom:" prefix
@@ -157,6 +168,20 @@ pub fn get_shell_by_type(shell_type: Option<&str>) -> CommandBuilder {
 /// Get the default shell command
 pub fn get_default_shell() -> CommandBuilder {
     CommandBuilder::new(detect_default_shell())
+}
+
+fn command_from_path_or_candidates(command: &str, candidates: &[&str]) -> CommandBuilder {
+    if let Ok(path) = which(command) {
+        return CommandBuilder::new(path.to_string_lossy().into_owned());
+    }
+
+    for candidate in candidates {
+        if Path::new(candidate).exists() {
+            return CommandBuilder::new(*candidate);
+        }
+    }
+
+    CommandBuilder::new(command)
 }
 
 #[cfg(windows)]
@@ -261,7 +286,13 @@ mod tests {
         let _cmd = get_shell_by_type(Some("zsh"));
         // Verify that it does not panic
     }
-    
+
+    #[test]
+    fn test_get_shell_by_type_tmux() {
+        let _cmd = get_shell_by_type(Some("tmux"));
+        // Verify that it does not panic
+    }
+
     #[test]
     fn test_get_shell_by_type_custom() {
         let _cmd = get_shell_by_type(Some("custom:/bin/sh"));

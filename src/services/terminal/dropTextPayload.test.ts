@@ -90,13 +90,13 @@ test('collectFallbackDroppedTextPayload keeps fallback types and async string it
 test('resolveDroppedTextInput prefers fallback paths over basename-only primary text payloads', () => {
   const input = resolveDroppedTextInput(
     'demo',
-    'obsidian://open?file=005-AI%2Fdemo',
-    (payload) => payload.includes('005-AI%2Fdemo') ? ['F:\\obsidian-changqiu\\005-AI\\demo'] : [],
+    'obsidian://open?file=notes%2Fdemo',
+    (payload) => payload.includes('notes%2Fdemo') ? ['F:\\example-vault\\notes\\demo'] : [],
     (paths) => paths.join(' ')
   );
 
   assert.deepEqual(input, {
-    text: 'F:\\obsidian-changqiu\\005-AI\\demo',
+    text: 'F:\\example-vault\\notes\\demo',
     usePaste: false,
   });
 });

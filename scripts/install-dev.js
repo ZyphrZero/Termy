@@ -50,6 +50,15 @@ function log(message, color = 'reset') {
   console.log(`${colors[color]}${message}${colors.reset}`);
 }
 
+function execIgnore(command, options = {}) {
+  try {
+    execSync(command, { stdio: 'ignore', ...options });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 // Load/save configuration
 function loadConfig() {
   try {
@@ -100,36 +109,41 @@ function getObsidianPath() {
 // Kill Obsidian process
 function killObsidian() {
   const platform = getPlatform();
-  try {
-    if (platform === 'windows') {
-      execSync('taskkill /F /IM Obsidian.exe 2>nul', { stdio: 'ignore' });
-    } else {
-      execSync('pkill -f Obsidian 2>/dev/null || true', { stdio: 'ignore' });
-    }
+  const didKill = platform === 'windows'
+    ? execIgnore('taskkill /F /IM Obsidian.exe 2>nul')
+    : execIgnore('pkill -f Obsidian 2>/dev/null || true');
+
+  if (didKill) {
     log('  Closed Obsidian', 'green');
-    return true;
-  } catch (e) {
-    return false;
   }
+
+  return didKill;
 }
 
-// Kill termy server process
-function killTerminalServer() {
-  const platform = getPlatform();
-  const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+function getWindowsTermyImageNames() {
+  return [
+    'termy-server-win32-x64.exe',
+    'termy-server-win32-arm64.exe',
+    'termy-server.exe',
+  ];
+}
 
-  try {
-    if (platform === 'windows') {
-      execSync(`taskkill /F /IM termy-server-win32-${arch}.exe 2>nul`, { stdio: 'ignore' });
-    } else if (platform === 'macos') {
-      execSync('pkill -f termy-server-darwin 2>/dev/null || true', { stdio: 'ignore' });
-    } else {
-      execSync('pkill -f termy-server-linux 2>/dev/null || true', { stdio: 'ignore' });
+// Kill all Termy server processes that may lock plugin binaries during install
+function killTermyProcesses() {
+  const platform = getPlatform();
+  let killedAny = false;
+
+  if (platform === 'windows') {
+    for (const imageName of getWindowsTermyImageNames()) {
+      killedAny = execIgnore(`taskkill /F /T /IM ${imageName} 2>nul`) || killedAny;
     }
-    return true;
-  } catch (e) {
-    return false;
+  } else if (platform === 'macos') {
+    killedAny = execIgnore(`pkill -f ${SERVER_CONFIG.name}-darwin 2>/dev/null || true`) || killedAny;
+  } else {
+    killedAny = execIgnore(`pkill -f ${SERVER_CONFIG.name}-linux 2>/dev/null || true`) || killedAny;
   }
+
+  return killedAny;
 }
 
 // Start Obsidian
@@ -219,13 +233,16 @@ function getBinaryName() {
 }
 
 // Copy file with retry
-async function copyFileWithRetry(srcPath, destPath, maxRetries = 3) {
+async function copyFileWithRetry(srcPath, destPath, maxRetries = 3, onBusy = null) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       fs.copyFileSync(srcPath, destPath);
       return true;
     } catch (error) {
       if ((error.code === 'EBUSY' || error.code === 'EPERM') && attempt < maxRetries) {
+        if (onBusy) {
+          await onBusy(error, attempt);
+        }
         await sleep(1000);
         continue;
       }
@@ -330,14 +347,24 @@ async function main() {
   }
   log('');
 
-  // 4. Kill Obsidian
+  // 4. Stop running processes that may lock the installed plugin files
   if (KILL_OBSIDIAN) {
     log('Closing Obsidian...', 'cyan');
     killObsidian();
-    killTerminalServer();
     await sleep(1000);
     log('');
   }
+
+  log('Stopping Termy processes...', 'cyan');
+  const stoppedTermy = killTermyProcesses();
+  log(
+    stoppedTermy ? '  Stopped running Termy processes' : '  No running Termy processes found',
+    stoppedTermy ? 'green' : 'yellow'
+  );
+  if (stoppedTermy) {
+    await sleep(500);
+  }
+  log('');
 
   // 5. Copy files
   const targetDir = path.join(pluginsDir, 'termy');
@@ -362,7 +389,13 @@ async function main() {
 
   const srcBinary = path.join(ROOT_DIR, 'binaries', binaryName);
   const destBinary = path.join(binariesDir, binaryName);
-  await copyFileWithRetry(srcBinary, destBinary);
+  await copyFileWithRetry(srcBinary, destBinary, 3, async () => {
+    const killedBusyProcesses = killTermyProcesses();
+    if (killedBusyProcesses) {
+      log('  Retrying after stopping Termy processes holding the binary lock', 'yellow');
+      await sleep(500);
+    }
+  });
   log(`  binaries/${binaryName}`, 'green');
   log('');
 

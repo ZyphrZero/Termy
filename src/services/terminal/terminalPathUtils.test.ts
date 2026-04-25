@@ -14,6 +14,7 @@ import {
   normalizeTerminalReferencePath,
   normalizeTerminalToken,
   normalizeVaultPath,
+  obsidianUriToVaultPath,
 } from './terminalPathUtils.ts';
 
 test('normalizeTerminalToken strips wrappers and decodes escaped drag payload text', () => {
@@ -43,6 +44,10 @@ test('normalizeTerminalReferencePath removes diff prefixes and matches the targe
 
 test('fileUriToPlatformPath converts file URIs into local platform paths', () => {
   assert.equal(
+    fileUriToPlatformPath('file:///Users/example/Documents/Notes/%E7%A4%BA%E4%BE%8B%E7%AC%94%E8%AE%B0.md', 'darwin'),
+    '/Users/example/Documents/Notes/示例笔记.md'
+  );
+  assert.equal(
     fileUriToPlatformPath('file:///C:/Users/test/Documents/Note%20One.md', 'win32'),
     'C:\\Users\\test\\Documents\\Note One.md'
   );
@@ -65,6 +70,18 @@ test('fileUriToPlatformPath converts file URIs into local platform paths', () =>
   assert.equal(fileUriToPlatformPath('obsidian://open?file=Folder%2FNote.md', 'win32'), null);
   assert.equal(fileUriToPlatformPath('vscode://file/C:/repo/src/main.ts', 'win32'), null);
   assert.equal(fileUriToPlatformPath('C:\\repo\\src\\main.ts', 'win32'), null);
+});
+
+test('obsidianUriToVaultPath preserves encoded separators and ampersands inside file query values', () => {
+  assert.equal(
+    obsidianUriToVaultPath('obsidian://open?vault=example-vault&file=notes%2FResearch%26Search%20Result.md'),
+    'notes/Research&Search Result.md'
+  );
+  assert.equal(
+    obsidianUriToVaultPath('obsidian://open?path=folders%2FTopic%26Details'),
+    'folders/Topic&Details'
+  );
+  assert.equal(obsidianUriToVaultPath('file:///Users/example/Documents/Notes/Example.md'), null);
 });
 
 test('joinTerminalPaths and getVaultRelativePathFromAbsolute share one canonical path shape', () => {
@@ -131,16 +148,16 @@ test('normalizeDroppedEntryPath normalizes POSIX drop paths without forcing Wind
 
 test('normalizeDroppedEntryReference preserves vault-relative directory entry paths on Windows', () => {
   assert.deepEqual(
-    normalizeDroppedEntryReference('/考试/15040', 'win32'),
+    normalizeDroppedEntryReference('/examples/12345', 'win32'),
     {
       absolutePath: null,
-      vaultPath: '考试/15040',
+      vaultPath: 'examples/12345',
     }
   );
   assert.deepEqual(
-    normalizeDroppedEntryReference('F:\\obsidian-changqiu\\考试\\15040', 'win32'),
+    normalizeDroppedEntryReference('F:\\example-vault\\examples\\12345', 'win32'),
     {
-      absolutePath: 'F:\\obsidian-changqiu\\考试\\15040',
+      absolutePath: 'F:\\example-vault\\examples\\12345',
       vaultPath: null,
     }
   );

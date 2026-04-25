@@ -10,8 +10,15 @@ import { debugLog, debugWarn, errorLog } from '@/utils/logger';
 import { t } from '@/i18n';
 import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
-import type { ShellEvent, ShellEventSource } from '@/services/server/types';
+import type { PtyConfig, ShellEvent, ShellEventSource } from '@/services/server/types';
 import { EnhancedKeyboardProtocol, formatPastedTerminalText } from './enhancedKeyboardProtocol';
+import {
+  buildClaudeCodeTuiEnv,
+  decodeOsc52Clipboard,
+  decodeTmuxPassthroughOsc52Clipboard,
+  type ClaudeCodeExtendedKeyboardMode,
+  XTVERSION_RESPONSE,
+} from './claudeCodeTuiSupport';
 import { shell } from 'electron';
 
 // xterm.js CSS (static import handled by esbuild)
@@ -24,6 +31,7 @@ type SearchAddon = import('@xterm/addon-search').SearchAddon;
 type CanvasAddon = import('@xterm/addon-canvas').CanvasAddon;
 type WebglAddon = import('@xterm/addon-webgl').WebglAddon;
 type IMarker = import('@xterm/xterm').IMarker;
+type IDisposable = import('@xterm/xterm').IDisposable;
 
 // xterm.js module cache
 let xtermModules: {
@@ -185,7 +193,13 @@ export class TerminalInstance {
   private promptMarkers: IMarker[] = [];
   private commandMarkers: TerminalCommandMarker[] = [];
   private win32InputModeEnabled = false;
+  private modifyOtherKeysEnabled = false;
+  private claudeCodeTuiSignalObserved = false;
+  private webSocketDisconnected = false;
+  private sessionRecoveryNeeded = false;
+  private sessionRecoveryInProgress = false;
   private pendingControlSequenceText = '';
+  private parserDisposables: IDisposable[] = [];
 
   constructor(options: TerminalOptions = {}) {
     this.id = `terminal-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -213,6 +227,8 @@ export class TerminalInstance {
         allowTransparency: !!this.options.backgroundImage,
         convertEol: false,
         rightClickSelectsWord: true,
+        macOptionClickForcesSelection: true,
+        rescaleOverlappingGlyphs: true,
         allowProposedApi: true,
       });
 
@@ -233,6 +249,7 @@ export class TerminalInstance {
         }
       });
       this.xterm.loadAddon(webLinksAddon);
+      this.setupClaudeCodeTuiHandlers();
       
       debugLog('[Terminal] xterm.js 实例初始化完成');
     } catch (error) {
@@ -359,26 +376,8 @@ export class TerminalInstance {
       // Ensure the server is running
       await serverManager.ensureServer();
       
-      // Get the PtyClient
-      this.ptyClient = serverManager.pty();
-      
-      // Initialize the PTY session and get the session_id
-      this.sessionId = await this.ptyClient.init({
-        shell_type: this.shellType === 'default' ? undefined : this.shellType,
-        shell_args: this.options.shellArgs,
-        cwd: this.options.cwd,
-        env: {
-          TERM: process.env.TERM || 'xterm-256color',
-          ...this.options.env,
-          // Claude Code's @anthropic/ink checks LC_TERMINAL for OSC 8 support.
-          LC_TERMINAL: this.options.env?.LC_TERMINAL ?? process.env.LC_TERMINAL ?? 'iTerm2',
-        }
-      });
-      
-      debugLog('[Terminal] 获取到 session_id:', this.sessionId);
-      
-      // Set up session-level event handlers
-      this.setupPtyClientHandlers();
+      await this.initializePtySession(serverManager, this.options.cwd);
+      if (this.isDestroyed) return;
       
       this.setupXtermHandlers();
       this.isInitialized = true;
@@ -426,6 +425,56 @@ export class TerminalInstance {
     });
   }
 
+  private buildPtyConfig(cwd: string | undefined): PtyConfig {
+    const terminalEnv = buildClaudeCodeTuiEnv(
+      process.env,
+      this.options.env,
+    );
+
+    return {
+      shell_type: this.shellType === 'default' ? undefined : this.shellType,
+      shell_args: this.options.shellArgs,
+      cwd,
+      env: terminalEnv,
+      cols: this.xterm.cols,
+      rows: this.xterm.rows,
+    };
+  }
+
+  private async initializePtySession(serverManager: ServerManager, cwd: string | undefined): Promise<void> {
+    const ptyClient = serverManager.pty();
+    this.resetSessionProtocolState();
+    const sessionId = await ptyClient.init(this.buildPtyConfig(cwd));
+    if (this.isDestroyed) {
+      ptyClient.destroySession(sessionId);
+      return;
+    }
+
+    this.ptyClient = ptyClient;
+    this.sessionId = sessionId;
+    debugLog('[Terminal] 获取到 session_id:', this.sessionId);
+    this.setupPtyClientHandlers();
+  }
+
+  private resetSessionProtocolState(): void {
+    this.win32InputModeEnabled = false;
+    this.modifyOtherKeysEnabled = false;
+    this.claudeCodeTuiSignalObserved = false;
+    this.pendingControlSequenceText = '';
+  }
+
+  private disposePtyClientHandlers(): void {
+    this.outputUnsubscribe?.();
+    this.exitUnsubscribe?.();
+    this.errorUnsubscribe?.();
+    this.shellEventUnsubscribe?.();
+
+    this.outputUnsubscribe = null;
+    this.exitUnsubscribe = null;
+    this.errorUnsubscribe = null;
+    this.shellEventUnsubscribe = null;
+  }
+
   private setupXtermHandlers(): void {
     const keyboardProtocol = new EnhancedKeyboardProtocol({
       queueInput: (data) => {
@@ -461,6 +510,7 @@ export class TerminalInstance {
       },
     }, () => ({
       shiftEnterMode: this.win32InputModeEnabled ? 'win32-input-mode' : 'newline',
+      extendedKeyboardMode: this.getClaudeCodeExtendedKeyboardMode(),
     }));
 
     this.xterm.onData((data) => {
@@ -476,6 +526,71 @@ export class TerminalInstance {
     });
   }
 
+  private setupClaudeCodeTuiHandlers(): void {
+    this.parserDisposables.push(
+      this.xterm.parser.registerCsiHandler({ prefix: '>', final: 'q' }, (params) => {
+        if (!this.isXtversionQuery(params)) {
+          return false;
+        }
+
+        this.claudeCodeTuiSignalObserved = true;
+        this.write(XTVERSION_RESPONSE);
+        return true;
+      }),
+      this.xterm.parser.registerOscHandler(52, (data) => {
+        return this.handleOsc52ClipboardData(data, 'OSC 52');
+      }),
+      this.xterm.parser.registerCsiHandler({ prefix: '>', final: 'm' }, (params) => {
+        if (params[0] !== 4) {
+          return false;
+        }
+
+        this.claudeCodeTuiSignalObserved = true;
+        this.modifyOtherKeysEnabled = params[1] === 2;
+        return true;
+      }),
+      this.xterm.parser.registerDcsHandler({ final: 't' }, (data) => {
+        const text = decodeTmuxPassthroughOsc52Clipboard(data);
+        if (text !== null) {
+          this.writeClipboardFromTerminal(text, 'tmux OSC 52 passthrough');
+          return true;
+        }
+
+        return false;
+      }),
+    );
+  }
+
+  private getClaudeCodeExtendedKeyboardMode(): ClaudeCodeExtendedKeyboardMode {
+    return this.modifyOtherKeysEnabled ? 'modifyOtherKeys' : 'none';
+  }
+
+  private isXtversionQuery(params: (number | number[])[]): boolean {
+    const firstParam = params[0];
+    return firstParam === undefined || firstParam === 0;
+  }
+
+  private handleOsc52ClipboardData(data: string, source: string): boolean {
+    const text = decodeOsc52Clipboard(data);
+    if (text === null) {
+      return false;
+    }
+
+    this.writeClipboardFromTerminal(text, source);
+    return true;
+  }
+
+  private writeClipboardFromTerminal(text: string, source: string): void {
+    if (!navigator.clipboard?.writeText) {
+      debugWarn(`[Terminal] ${source} clipboard write is unavailable`);
+      return;
+    }
+
+    void navigator.clipboard.writeText(text).catch((error) => {
+      errorLog(`[Terminal] ${source} clipboard write failed:`, error);
+    });
+  }
+
   private queueInput(data: string): void {
     if (this.isDestroyed) return;
     this.pendingInput.push(data);
@@ -485,6 +600,14 @@ export class TerminalInstance {
         this.flushPendingInput();
       }, this.inputBatchIntervalMs);
     }
+  }
+
+  private clearPendingInput(): void {
+    if (this.inputFlushTimer !== null) {
+      window.clearTimeout(this.inputFlushTimer);
+      this.inputFlushTimer = null;
+    }
+    this.pendingInput = [];
   }
 
   private flushPendingInput(): void {
@@ -544,32 +667,82 @@ export class TerminalInstance {
   handleServerCrash(): void {
     if (this.isDestroyed) return;
 
+    this.webSocketDisconnected = false;
+    this.sessionRecoveryNeeded = true;
+    this.clearPendingInput();
     this.xterm.write('\r\n\x1b[1;31m[服务器已崩溃]\x1b[0m\r\n');
     this.xterm.write('\x1b[33m正在尝试重启服务器...\x1b[0m\r\n');
+  }
+
+  handleWebSocketDisconnected(): void {
+    if (this.isDestroyed) return;
+
+    this.sessionRecoveryNeeded = true;
+    this.clearPendingInput();
+    if (this.webSocketDisconnected) return;
+    this.webSocketDisconnected = true;
+    this.xterm.write('\r\n\x1b[33m[WebSocket 连接已断开，正在重连...]\x1b[0m\r\n');
+  }
+
+  async handleWebSocketConnected(serverManager: ServerManager): Promise<void> {
+    if (
+      this.isDestroyed
+      || this.sessionRecoveryInProgress
+      || !this.sessionRecoveryNeeded
+    ) {
+      return;
+    }
+
+    this.sessionRecoveryInProgress = true;
+    this.xterm.write('\x1b[32m[连接已恢复，正在恢复终端会话...]\x1b[0m\r\n');
+
+    try {
+      this.disposePtyClientHandlers();
+      this.sessionId = null;
+      this.clearPendingInput();
+
+      const reconnectCwd = this.currentCwd ?? this.options.cwd;
+      try {
+        await this.initializePtySession(serverManager, reconnectCwd);
+      } catch (error) {
+        if (!this.currentCwd || this.currentCwd === this.options.cwd) {
+          throw error;
+        }
+
+        debugWarn('[Terminal] 使用当前目录恢复会话失败，回退到初始目录:', error);
+        await this.initializePtySession(serverManager, this.options.cwd);
+      }
+      if (this.isDestroyed) return;
+
+      this.sessionRecoveryNeeded = false;
+      this.webSocketDisconnected = false;
+      this.xterm.write('\x1b[32m[终端会话已恢复]\x1b[0m\r\n');
+      this.fit();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errorLog('[Terminal] 恢复终端会话失败:', error);
+      this.sessionRecoveryNeeded = true;
+      this.webSocketDisconnected = true;
+      this.xterm.write(`\x1b[1;31m[终端会话恢复失败] ${errorMessage}\x1b[0m\r\n`);
+    } finally {
+      this.sessionRecoveryInProgress = false;
+    }
   }
 
   destroy(): void {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
 
-    if (this.inputFlushTimer !== null) {
-      window.clearTimeout(this.inputFlushTimer);
-      this.inputFlushTimer = null;
-    }
-    this.pendingInput = [];
+    this.clearPendingInput();
     this.promptMarkers = [];
     this.commandMarkers = [];
 
     // Unsubscribe from events
-    this.outputUnsubscribe?.();
-    this.exitUnsubscribe?.();
-    this.errorUnsubscribe?.();
-    this.shellEventUnsubscribe?.();
-    
-    this.outputUnsubscribe = null;
-    this.exitUnsubscribe = null;
-    this.errorUnsubscribe = null;
-    this.shellEventUnsubscribe = null;
+    this.disposePtyClientHandlers();
+    for (const disposable of this.parserDisposables) {
+      try { disposable.dispose(); } catch { /* ignore */ }
+    }
+    this.parserDisposables = [];
 
     // Destroy the PTY session
     if (this.ptyClient && this.sessionId) {
@@ -1380,6 +1553,13 @@ export class TerminalInstance {
   }
 
   getTitle(): string { return this.title; }
+
+  isClaudeCodeSession(): boolean {
+    const normalizedTitle = this.title.trim().toLowerCase().replace(/\s+/g, ' ');
+    return this.claudeCodeTuiSignalObserved
+      || normalizedTitle === 'claude'
+      || normalizedTitle === 'claude code';
+  }
 
   getOptions(): Readonly<TerminalOptions> {
     return this.options;
