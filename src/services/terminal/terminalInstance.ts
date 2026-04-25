@@ -194,6 +194,7 @@ export class TerminalInstance {
   private commandMarkers: TerminalCommandMarker[] = [];
   private win32InputModeEnabled = false;
   private modifyOtherKeysEnabled = false;
+  private claudeCodeTuiSignalObserved = false;
   private pendingControlSequenceText = '';
   private parserDisposables: IDisposable[] = [];
 
@@ -499,6 +500,7 @@ export class TerminalInstance {
           return false;
         }
 
+        this.claudeCodeTuiSignalObserved = true;
         this.write(XTVERSION_RESPONSE);
         return true;
       }),
@@ -510,6 +512,7 @@ export class TerminalInstance {
           return false;
         }
 
+        this.claudeCodeTuiSignalObserved = true;
         this.modifyOtherKeysEnabled = params[1] === 2;
         return true;
       }),
@@ -1463,6 +1466,13 @@ export class TerminalInstance {
   }
 
   getTitle(): string { return this.title; }
+
+  isClaudeCodeSession(): boolean {
+    const normalizedTitle = this.title.trim().toLowerCase().replace(/\s+/g, ' ');
+    return this.claudeCodeTuiSignalObserved
+      || normalizedTitle === 'claude'
+      || normalizedTitle === 'claude code';
+  }
 
   getOptions(): Readonly<TerminalOptions> {
     return this.options;

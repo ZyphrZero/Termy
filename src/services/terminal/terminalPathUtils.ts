@@ -203,6 +203,26 @@ export function fileUriToPlatformPath(
   }
 }
 
+export function obsidianUriToVaultPath(uri: string): string | null {
+  const normalizedUri = normalizeTerminalRawToken(uri);
+  if (!normalizedUri.toLowerCase().startsWith('obsidian://')) {
+    return null;
+  }
+
+  try {
+    const url = new URL(normalizedUri);
+    if (url.protocol !== 'obsidian:') {
+      return null;
+    }
+
+    return url.searchParams.get('file')
+      ?? url.searchParams.get('path')
+      ?? url.searchParams.get('linkpath');
+  } catch {
+    return null;
+  }
+}
+
 export function joinTerminalPaths(
   basePath: string,
   relativePath: string,
