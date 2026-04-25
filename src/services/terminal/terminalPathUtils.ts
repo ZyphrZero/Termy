@@ -1,6 +1,11 @@
 import { posix as posixPath, win32 as win32Path } from 'node:path';
 
 export type TerminalPlatform = NodeJS.Platform;
+export interface TerminalNamedPathEntry {
+  name: string;
+  path: string;
+  kind?: 'file' | 'folder';
+}
 
 function isWindowsPlatform(platform: TerminalPlatform): boolean {
   return platform === 'win32';
@@ -12,9 +17,12 @@ function getPathModule(platform: TerminalPlatform) {
 
 function normalizeFilesystemPath(
   value: string,
-  platform: TerminalPlatform = process.platform
+  platform: TerminalPlatform = process.platform,
+  decodeEscapes = true
 ): string {
-  let normalized = normalizeTerminalToken(value);
+  let normalized = decodeEscapes
+    ? normalizeTerminalToken(value)
+    : normalizeTerminalRawToken(value);
   if (!normalized) {
     return '';
   }
@@ -26,7 +34,7 @@ function normalizeFilesystemPath(
   return getPathModule(platform).normalize(normalized);
 }
 
-export function normalizeTerminalToken(value: string): string {
+export function normalizeTerminalRawToken(value: string): string {
   let normalized = value.trim().replace(/^<|>$/g, '');
   if (
     (normalized.startsWith('"') && normalized.endsWith('"'))
@@ -34,6 +42,12 @@ export function normalizeTerminalToken(value: string): string {
   ) {
     normalized = normalized.slice(1, -1);
   }
+
+  return normalized.trim();
+}
+
+export function normalizeTerminalToken(value: string): string {
+  let normalized = normalizeTerminalRawToken(value);
 
   try {
     normalized = decodeURIComponent(normalized);
@@ -155,7 +169,7 @@ export function fileUriToPlatformPath(
   uri: string,
   platform: TerminalPlatform = process.platform
 ): string | null {
-  const normalizedUri = normalizeTerminalToken(uri);
+  const normalizedUri = normalizeTerminalRawToken(uri);
   if (!normalizedUri.toLowerCase().startsWith('file://')) {
     return null;
   }
@@ -173,7 +187,7 @@ export function fileUriToPlatformPath(
         pathname = pathname.slice(1);
       }
 
-      const platformPath = normalizeFilesystemPath(pathname, platform);
+      const platformPath = normalizeFilesystemPath(pathname, platform, false);
       if (url.host) {
         const normalizedPath = platformPath.startsWith('\\') ? platformPath : `\\${platformPath}`;
         return `\\\\${url.host}${normalizedPath}`;
@@ -183,7 +197,7 @@ export function fileUriToPlatformPath(
     }
 
     const localHost = url.hostname.toLowerCase() === 'localhost';
-    return normalizeFilesystemPath(localHost || !url.host ? pathname : `//${url.host}${pathname}`, platform);
+    return normalizeFilesystemPath(localHost || !url.host ? pathname : `//${url.host}${pathname}`, platform, false);
   } catch {
     return null;
   }
@@ -268,4 +282,25 @@ export function getVaultRelativePathFromAbsolute(
   }
 
   return relativePath.replace(/\\/g, '/');
+}
+
+export function findUniqueTerminalEntryByBasename<T extends TerminalNamedPathEntry>(
+  name: string,
+  entries: T[],
+): T | null {
+  const normalizedName = normalizeTerminalToken(name);
+  if (!normalizedName || normalizedName.includes('/') || normalizedName.includes('\\')) {
+    return null;
+  }
+
+  const folderMatches = entries.filter((entry) => entry.kind === 'folder' && entry.name === normalizedName);
+  const candidateEntries = folderMatches.length > 0
+    ? folderMatches
+    : entries.filter((entry) => entry.name === normalizedName);
+
+  if (candidateEntries.length !== 1) {
+    return null;
+  }
+
+  return candidateEntries[0];
 }

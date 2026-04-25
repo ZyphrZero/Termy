@@ -4,11 +4,13 @@ import test from 'node:test';
 import {
   collectTerminalReferenceCandidatePaths,
   fileUriToPlatformPath,
+  findUniqueTerminalEntryByBasename,
   getVaultRelativePathFromAbsolute,
   isAbsoluteTerminalPath,
   joinTerminalPaths,
   normalizeDroppedEntryPath,
   normalizeDroppedEntryReference,
+  normalizeTerminalRawToken,
   normalizeTerminalReferencePath,
   normalizeTerminalToken,
   normalizeVaultPath,
@@ -20,6 +22,13 @@ test('normalizeTerminalToken strips wrappers and decodes escaped drag payload te
     'file:///C:/Program Files/Termy'
   );
   assert.equal(normalizeTerminalToken('"[[Folder/File.md]]"'), '[[Folder/File.md]]');
+});
+
+test('normalizeTerminalRawToken strips wrappers without decoding URL separators', () => {
+  assert.equal(
+    normalizeTerminalRawToken('  <file:///C:/repo/A%26B%23C.md>  '),
+    'file:///C:/repo/A%26B%23C.md'
+  );
 });
 
 test('normalizeVaultPath canonicalizes vault-style separators and relative segments', () => {
@@ -49,6 +58,13 @@ test('fileUriToPlatformPath converts file URIs into local platform paths', () =>
     fileUriToPlatformPath('file://localhost/Users/test/Note%20One.md', 'darwin'),
     '/Users/test/Note One.md'
   );
+  assert.equal(
+    fileUriToPlatformPath('file:///C:/Users/test/Hash%23Note.md#line=3', 'win32'),
+    'C:\\Users\\test\\Hash#Note.md'
+  );
+  assert.equal(fileUriToPlatformPath('obsidian://open?file=Folder%2FNote.md', 'win32'), null);
+  assert.equal(fileUriToPlatformPath('vscode://file/C:/repo/src/main.ts', 'win32'), null);
+  assert.equal(fileUriToPlatformPath('C:\\repo\\src\\main.ts', 'win32'), null);
 });
 
 test('joinTerminalPaths and getVaultRelativePathFromAbsolute share one canonical path shape', () => {
@@ -127,5 +143,30 @@ test('normalizeDroppedEntryReference preserves vault-relative directory entry pa
       absolutePath: 'F:\\obsidian-changqiu\\考试\\15040',
       vaultPath: null,
     }
+  );
+});
+
+test('findUniqueTerminalEntryByBasename resolves a unique basename and rejects ambiguous matches', () => {
+  assert.deepEqual(
+    findUniqueTerminalEntryByBasename('App.tsx', [
+      { name: 'App.tsx', path: 'src/App.tsx', kind: 'file' },
+    ]),
+    { name: 'App.tsx', path: 'src/App.tsx', kind: 'file' },
+  );
+
+  assert.equal(
+    findUniqueTerminalEntryByBasename('App.tsx', [
+      { name: 'App.tsx', path: 'src/App.tsx', kind: 'file' },
+      { name: 'App.tsx', path: 'packages/ui/App.tsx', kind: 'file' },
+    ]),
+    null,
+  );
+
+  assert.deepEqual(
+    findUniqueTerminalEntryByBasename('assets', [
+      { name: 'assets', path: 'docs/assets', kind: 'folder' },
+      { name: 'assets', path: 'src/assets.ts', kind: 'file' },
+    ]),
+    { name: 'assets', path: 'docs/assets', kind: 'folder' },
   );
 });
