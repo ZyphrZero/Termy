@@ -369,7 +369,9 @@ export class TerminalInstance {
         cwd: this.options.cwd,
         env: {
           TERM: process.env.TERM || 'xterm-256color',
-          ...this.options.env
+          ...this.options.env,
+          // Claude Code's @anthropic/ink checks LC_TERMINAL for OSC 8 support.
+          LC_TERMINAL: this.options.env?.LC_TERMINAL ?? process.env.LC_TERMINAL ?? 'iTerm2',
         }
       });
       
@@ -506,6 +508,7 @@ export class TerminalInstance {
     }
 
     const buffer = `${this.pendingControlSequenceText}${data}`;
+    // eslint-disable-next-line no-control-regex -- Need to match ANSI control sequences
     const modeRegex = /\x1b\[\?9001([hl])/g;
     let match: RegExpExecArray | null = null;
     while ((match = modeRegex.exec(buffer)) !== null) {

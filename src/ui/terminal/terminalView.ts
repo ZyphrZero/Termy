@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { WorkspaceLeaf, Menu } from 'obsidian';
-import { FileSystemAdapter, ItemView, MarkdownView, Notice, TFile, TFolder, setIcon } from 'obsidian';
+import { FileSystemAdapter, ItemView, Notice, TFile, TFolder, setIcon } from 'obsidian';
 import { shell, webUtils } from 'electron';
 import type { TerminalService } from '../../services/terminal/terminalService';
 import type { TerminalInstance } from '../../services/terminal/terminalInstance';
@@ -13,6 +13,7 @@ import {
 import {
   collectTerminalReferenceCandidatePaths,
   fileUriToPlatformPath,
+  findUniqueTerminalEntryByBasename,
   getVaultRelativePathFromAbsolute,
   isBasenameOnlyTerminalToken,
   isAbsoluteTerminalPath,
@@ -28,9 +29,7 @@ import { debugLog, errorLog } from '../../utils/logger';
 import { clamp, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
 import { t } from '../../i18n';
 import { RenameTerminalModal } from './renameTerminalModal';
-import { parseTerminalOutputFileReferences, type TerminalOutputFileReference } from '../../services/terminal/terminalOutputLinks';
-
-type TerminalDisposable = import('@xterm/xterm').IDisposable;
+type XtermTerminal = import('@xterm/xterm').Terminal;
 
 export const TERMINAL_VIEW_TYPE = 'terminal-view';
 
@@ -47,7 +46,6 @@ export class TerminalView extends ItemView {
   private searchContainer: HTMLElement | null = null;
   private searchInput: HTMLInputElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
-  private fileReferenceLinkDisposable: TerminalDisposable | null = null;
   private initPromise: Promise<TerminalInstance> | null = null;
   private initResolve: ((terminal: TerminalInstance) => void) | null = null;
   private initReject: ((error: Error) => void) | null = null;
@@ -221,8 +219,6 @@ export class TerminalView extends ItemView {
   async onClose(): Promise<void> {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
-    this.fileReferenceLinkDisposable?.dispose();
-    this.fileReferenceLinkDisposable = null;
     this.removeDropHandlers?.();
     this.removeDropHandlers = null;
     this.dragEnterDepth = 0;
@@ -260,7 +256,8 @@ export class TerminalView extends ItemView {
         this.updateLeafHeader(this.leaf);
         this.updateDropHintText();
       });
-      this.registerFileReferenceLinks();
+      const xterm = this.terminalInstance.getXterm();
+      this.registerTerminalHyperlinkHandler(xterm);
 
       // Set the search state callback
       this.terminalInstance.onSearchStateChange((visible) => {
@@ -698,27 +695,23 @@ export class TerminalView extends ItemView {
   }
 
   private resolveUniqueVaultBasenameToAbsolute(name: string): string | null {
-    const normalizedName = normalizeTerminalToken(name);
-    if (!normalizedName || normalizedName.includes('/') || normalizedName.includes('\\')) {
-      return null;
-    }
-
     const allEntries = this.app.vault.getAllLoadedFiles?.() ?? [];
-    const folderMatches = allEntries.filter((entry) => entry instanceof TFolder && entry.name === normalizedName);
-    const candidateEntries = folderMatches.length > 0
-      ? folderMatches
-      : allEntries.filter((entry) => entry.name === normalizedName);
+    const matchedEntry = findUniqueTerminalEntryByBasename(name, allEntries.map((entry) => ({
+      name: entry.name,
+      path: entry.path,
+      kind: entry instanceof TFolder ? 'folder' : 'file' as const,
+    })));
 
-    if (candidateEntries.length !== 1) {
+    if (!matchedEntry) {
       return null;
     }
 
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
-      return candidateEntries[0].path;
+      return matchedEntry.path;
     }
 
-    return joinTerminalPaths(adapter.getBasePath(), candidateEntries[0].path);
+    return joinTerminalPaths(adapter.getBasePath(), matchedEntry.path);
   }
 
   private async writeInputToTerminal(text: string, usePaste = false): Promise<void> {
@@ -732,49 +725,54 @@ export class TerminalView extends ItemView {
     terminal.focus();
   }
 
-  private registerFileReferenceLinks(): void {
-    this.fileReferenceLinkDisposable?.dispose();
-    this.fileReferenceLinkDisposable = null;
+  private registerTerminalHyperlinkHandler(xterm: XtermTerminal): void {
+    xterm.options.linkHandler = {
+      allowNonHttpProtocols: true,
+      activate: (event: MouseEvent, target: string) => {
+        event.preventDefault();
+        void this.openTerminalHyperlinkTarget(target);
+      },
+    };
+  }
 
-    if (!this.terminalInstance) {
+  private async openTerminalHyperlinkTarget(target: string): Promise<void> {
+    const filePath = fileUriToPlatformPath(target);
+    if (filePath) {
+      await this.openTerminalFileReference(filePath);
       return;
     }
 
-    const xterm = this.terminalInstance.getXterm();
-    this.fileReferenceLinkDisposable = xterm.registerLinkProvider({
-      provideLinks: (bufferLineNumber, callback) => {
-        const line = xterm.buffer.active.getLine(bufferLineNumber - 1);
-        const text = line?.translateToString(true) ?? '';
-        const references = parseTerminalOutputFileReferences(text);
+    if (!this.isAllowedExternalHyperlink(target)) {
+      new Notice(t('notices.terminal.fileReferenceUnavailable'));
+      return;
+    }
 
-        if (references.length === 0) {
-          callback(undefined);
-          return;
-        }
-
-        callback(references.map((reference) => ({
-          range: {
-            start: { x: reference.startIndex + 1, y: bufferLineNumber },
-            end: { x: reference.endIndex, y: bufferLineNumber },
-          },
-          text: reference.text,
-          activate: (_event: MouseEvent) => {
-            void this.openTerminalFileReference(reference);
-          },
-        })));
-      },
-    });
+    try {
+      await shell.openExternal(target);
+    } catch (error) {
+      errorLog('[TerminalView] Failed to open terminal hyperlink:', target, error);
+      new Notice(t('notices.terminal.fileReferenceOpenFailed'));
+    }
   }
 
-  private async openTerminalFileReference(reference: TerminalOutputFileReference): Promise<void> {
-    const resolved = this.resolveTerminalFileReference(reference.path);
+  private isAllowedExternalHyperlink(target: string): boolean {
+    try {
+      const url = new URL(normalizeTerminalToken(target));
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
+  private async openTerminalFileReference(pathLike: string): Promise<void> {
+    const resolved = this.resolveTerminalFileReference(pathLike);
     if (!resolved) {
       new Notice(t('notices.terminal.fileReferenceUnavailable'));
       return;
     }
 
     if (resolved.file) {
-      await this.openVaultFileReference(resolved.file, reference.line, reference.column);
+      await this.openVaultFileReference(resolved.file);
       return;
     }
 
@@ -880,22 +878,10 @@ export class TerminalView extends ItemView {
     );
   }
 
-  private async openVaultFileReference(file: TFile, line: number | null, column: number | null): Promise<void> {
+  private async openVaultFileReference(file: TFile): Promise<void> {
     const leaf = this.app.workspace.getLeaf(false);
     await leaf.openFile(file);
     this.app.workspace.setActiveLeaf(leaf, { focus: true });
-
-    if (!(leaf.view instanceof MarkdownView) || line === null) {
-      return;
-    }
-
-    const targetLine = Math.max(0, line - 1);
-    const targetColumn = Math.max(0, (column ?? 1) - 1);
-    leaf.view.editor.setCursor(targetLine, targetColumn);
-    leaf.view.editor.scrollIntoView({
-      from: { line: targetLine, ch: targetColumn },
-      to: { line: targetLine, ch: targetColumn },
-    }, true);
   }
 
   private updateAppearanceStyles(): void {
