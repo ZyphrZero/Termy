@@ -3,6 +3,7 @@ import * as path from 'path';
 import type { WorkspaceLeaf, Menu } from 'obsidian';
 import { FileSystemAdapter, ItemView, Notice, TFile, TFolder, setIcon } from 'obsidian';
 import { shell, webUtils } from 'electron';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import type { TerminalService } from '../../services/terminal/terminalService';
 import type { TerminalInstance } from '../../services/terminal/terminalInstance';
 import {
@@ -24,6 +25,7 @@ import {
   normalizeVaultPath,
   toPlatformPath,
 } from '../../services/terminal/terminalPathUtils';
+import { TERMINAL_FILE_URI_REGEX } from '../../services/terminal/terminalFileLinks';
 import type { TerminalSettings } from '../../settings/settings';
 import { debugLog, errorLog } from '../../utils/logger';
 import { clamp, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
@@ -46,6 +48,7 @@ export class TerminalView extends ItemView {
   private searchContainer: HTMLElement | null = null;
   private searchInput: HTMLInputElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private fileUriLinkAddon: WebLinksAddon | null = null;
   private initPromise: Promise<TerminalInstance> | null = null;
   private initResolve: ((terminal: TerminalInstance) => void) | null = null;
   private initReject: ((error: Error) => void) | null = null;
@@ -219,6 +222,8 @@ export class TerminalView extends ItemView {
   async onClose(): Promise<void> {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.fileUriLinkAddon?.dispose();
+    this.fileUriLinkAddon = null;
     this.removeDropHandlers?.();
     this.removeDropHandlers = null;
     this.dragEnterDepth = 0;
@@ -733,6 +738,15 @@ export class TerminalView extends ItemView {
         void this.openTerminalHyperlinkTarget(target);
       },
     };
+
+    this.fileUriLinkAddon?.dispose();
+    this.fileUriLinkAddon = new WebLinksAddon((event, uri) => {
+      event.preventDefault();
+      void this.openTerminalHyperlinkTarget(uri);
+    }, {
+      urlRegex: TERMINAL_FILE_URI_REGEX,
+    });
+    xterm.loadAddon(this.fileUriLinkAddon);
   }
 
   private async openTerminalHyperlinkTarget(target: string): Promise<void> {

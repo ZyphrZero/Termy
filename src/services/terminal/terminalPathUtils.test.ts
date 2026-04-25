@@ -43,6 +43,10 @@ test('normalizeTerminalReferencePath removes diff prefixes and matches the targe
 
 test('fileUriToPlatformPath converts file URIs into local platform paths', () => {
   assert.equal(
+    fileUriToPlatformPath('file:///Users/lihanqing/Documents/GitHub/Termy/%E8%BF%9C%E5%B1%B1%E8%BF%91%E9%9B%AA%EF%BC%9A%E4%B8%80%E4%B8%AA%E4%BA%BA%E7%9A%84%E5%B7%9D%E8%A5%BF%E6%97%85%E9%80%94.md', 'darwin'),
+    '/Users/lihanqing/Documents/GitHub/Termy/远山近雪：一个人的川西旅途.md'
+  );
+  assert.equal(
     fileUriToPlatformPath('file:///C:/Users/test/Documents/Note%20One.md', 'win32'),
     'C:\\Users\\test\\Documents\\Note One.md'
   );
