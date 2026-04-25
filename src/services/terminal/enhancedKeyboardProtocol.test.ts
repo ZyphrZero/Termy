@@ -36,7 +36,9 @@ function createKeyboardEvent(
 function createProtocolHarness(overrides: Partial<EnhancedKeyboardProtocolHandlers> = {}) {
   const queuedInput: string[] = [];
   const binaryWrites: Uint8Array[] = [];
-  const textWrites: string[] = [];
+  const insertedTexts: string[] = [];
+  const pastedTexts: string[] = [];
+  const operations: string[] = [];
   const clipboardWrites: string[] = [];
   let selection = 'selected text';
   let clearedSelection = false;
@@ -44,10 +46,14 @@ function createProtocolHarness(overrides: Partial<EnhancedKeyboardProtocolHandle
 
   const handlers: EnhancedKeyboardProtocolHandlers = {
     queueInput(data) {
+      operations.push(`queue:${data}`);
       queuedInput.push(data);
     },
-    flushPendingInput() {},
+    flushPendingInput() {
+      operations.push('flush');
+    },
     writeBinary(data) {
+      operations.push('binary');
       binaryWrites.push(data);
     },
     hasSelection() {
@@ -66,8 +72,13 @@ function createProtocolHarness(overrides: Partial<EnhancedKeyboardProtocolHandle
     async writeClipboardText(text) {
       clipboardWrites.push(text);
     },
-    writeText(text) {
-      textWrites.push(text);
+    insertText(text) {
+      operations.push(`insert:${text}`);
+      insertedTexts.push(text);
+    },
+    pasteText(text) {
+      operations.push(`paste:${text}`);
+      pastedTexts.push(text);
     },
     onError(message, error) {
       errors.push({ message, error });
@@ -79,7 +90,9 @@ function createProtocolHarness(overrides: Partial<EnhancedKeyboardProtocolHandle
     protocol: new EnhancedKeyboardProtocol(handlers),
     queuedInput,
     binaryWrites,
-    textWrites,
+    insertedTexts,
+    pastedTexts,
+    operations,
     clipboardWrites,
     errors,
     get clearedSelection() {
@@ -93,10 +106,14 @@ function createWin32ProtocolHarness() {
   const protocol = new EnhancedKeyboardProtocol(
     {
       queueInput(data) {
+        harness.operations.push(`queue:${data}`);
         harness.queuedInput.push(data);
       },
-      flushPendingInput() {},
+      flushPendingInput() {
+        harness.operations.push('flush');
+      },
       writeBinary(data) {
+        harness.operations.push('binary');
         harness.binaryWrites.push(data);
       },
       hasSelection() {
@@ -110,8 +127,13 @@ function createWin32ProtocolHarness() {
         return 'clipboard text';
       },
       async writeClipboardText() {},
-      writeText(text) {
-        harness.textWrites.push(text);
+      insertText(text) {
+        harness.operations.push(`insert:${text}`);
+        harness.insertedTexts.push(text);
+      },
+      pasteText(text) {
+        harness.operations.push(`paste:${text}`);
+        harness.pastedTexts.push(text);
       },
     },
     () => ({ shiftEnterMode: 'win32-input-mode' })
@@ -163,7 +185,9 @@ test('handleKeyboardEvent pastes clipboard text through the terminal write path'
 
   assert.equal(allowed, false);
   assert.equal(event.prevented, true);
-  assert.deepEqual(harness.textWrites, ['clipboard text']);
+  assert.deepEqual(harness.pastedTexts, ['clipboard text']);
+  assert.deepEqual(harness.insertedTexts, []);
+  assert.deepEqual(harness.operations, ['flush', 'paste:clipboard text']);
 });
 
 test('handleKeyboardEvent inserts a newline for Shift+Enter without queueing raw input', () => {
@@ -174,8 +198,10 @@ test('handleKeyboardEvent inserts a newline for Shift+Enter without queueing raw
 
   assert.equal(allowed, false);
   assert.equal(event.prevented, true);
-  assert.deepEqual(harness.textWrites, ['\n']);
+  assert.deepEqual(harness.insertedTexts, ['\n']);
   assert.deepEqual(harness.queuedInput, []);
+  assert.deepEqual(harness.pastedTexts, []);
+  assert.deepEqual(harness.operations, ['flush', 'insert:\n']);
 });
 
 test('handleKeyboardEvent queues the win32-input-mode Shift+Enter sequence when configured', () => {
@@ -187,7 +213,9 @@ test('handleKeyboardEvent queues the win32-input-mode Shift+Enter sequence when 
   assert.equal(allowed, false);
   assert.equal(event.prevented, true);
   assert.deepEqual(harness.queuedInput, [WIN32_SHIFT_ENTER_SEQUENCE]);
-  assert.deepEqual(harness.textWrites, []);
+  assert.deepEqual(harness.insertedTexts, []);
+  assert.deepEqual(harness.pastedTexts, []);
+  assert.deepEqual(harness.operations, ['queue:\x1b[13;28;13;1;16;1_']);
 });
 
 test('handleKeyboardEvent queues win32-input-mode keyup events when configured', () => {
@@ -210,7 +238,44 @@ test('handleKeyboardEvent blocks keypress default handling in win32-input-mode',
   assert.equal(allowed, false);
   assert.equal(event.prevented, true);
   assert.deepEqual(harness.queuedInput, []);
-  assert.deepEqual(harness.textWrites, []);
+  assert.deepEqual(harness.insertedTexts, []);
+  assert.deepEqual(harness.pastedTexts, []);
+});
+
+test('handleKeyboardEvent lets xterm handle IME composition keydown events in win32-input-mode', () => {
+  const { harness, protocol } = createWin32ProtocolHarness();
+  const event = createKeyboardEvent('Process', { code: 'KeyX' }) as KeyboardEventLike & {
+    prevented: boolean;
+    isComposing?: boolean;
+    keyCode?: number;
+  };
+  event.isComposing = true;
+  event.keyCode = 229;
+
+  const allowed = protocol.handleKeyboardEvent(event);
+
+  assert.equal(allowed, true);
+  assert.equal(event.prevented, false);
+  assert.deepEqual(harness.queuedInput, []);
+  assert.deepEqual(harness.insertedTexts, []);
+  assert.deepEqual(harness.pastedTexts, []);
+});
+
+test('handleKeyboardEvent lets xterm handle win32 IME process keys even when browsers keep the physical key value', () => {
+  const { harness, protocol } = createWin32ProtocolHarness();
+  const event = createKeyboardEvent('x', { code: 'KeyX' }) as KeyboardEventLike & {
+    prevented: boolean;
+    keyCode?: number;
+  };
+  event.keyCode = 229;
+
+  const allowed = protocol.handleKeyboardEvent(event);
+
+  assert.equal(allowed, true);
+  assert.equal(event.prevented, false);
+  assert.deepEqual(harness.queuedInput, []);
+  assert.deepEqual(harness.insertedTexts, []);
+  assert.deepEqual(harness.pastedTexts, []);
 });
 
 test('handleKeyboardEvent suppresses follow-up win32 shortcut events after local paste handling', async () => {
@@ -227,8 +292,10 @@ test('handleKeyboardEvent suppresses follow-up win32 shortcut events after local
 
   assert.equal(protocol.handleKeyboardEvent(pasteKeydown), false);
   await Promise.resolve();
-  assert.deepEqual(harness.textWrites, ['clipboard text']);
+  assert.deepEqual(harness.pastedTexts, ['clipboard text']);
+  assert.deepEqual(harness.insertedTexts, []);
   assert.deepEqual(harness.queuedInput, []);
+  assert.deepEqual(harness.operations, ['flush', 'paste:clipboard text']);
 
   assert.equal(protocol.handleKeyboardEvent(pasteKeyup), false);
   assert.equal(pasteKeyup.prevented, true);

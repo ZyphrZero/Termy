@@ -211,7 +211,7 @@ export class TerminalInstance {
         theme: this.getTheme(),
         scrollback: this.options.scrollback ?? 1000,
         allowTransparency: !!this.options.backgroundImage,
-        convertEol: true,
+        convertEol: false,
         rightClickSelectsWord: true,
         allowProposedApi: true,
       });
@@ -444,7 +444,12 @@ export class TerminalInstance {
       },
       readClipboardText: () => navigator.clipboard.readText(),
       writeClipboardText: (text) => navigator.clipboard.writeText(text),
-      writeText: (text) => {
+      insertText: (text) => {
+        if (text) {
+          this.write(text);
+        }
+      },
+      pasteText: (text) => {
         if (text) {
           this.pasteText(text);
         }

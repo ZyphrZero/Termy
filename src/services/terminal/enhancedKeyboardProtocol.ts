@@ -11,6 +11,8 @@ export interface KeyboardEventLike {
   shiftKey: boolean;
   altKey: boolean;
   metaKey: boolean;
+  isComposing?: boolean;
+  keyCode?: number;
   location?: number;
   repeat?: boolean;
   getModifierState?: (key: string) => boolean;
@@ -41,7 +43,8 @@ export interface EnhancedKeyboardProtocolHandlers {
   clearSelection: () => void;
   readClipboardText: () => Promise<string>;
   writeClipboardText: (text: string) => Promise<void>;
-  writeText: (text: string) => void;
+  insertText: (text: string) => void;
+  pasteText: (text: string) => void;
   onError?: (message: string, error: unknown) => void;
 }
 
@@ -57,11 +60,21 @@ export function formatPastedTerminalText(text: string, bracketedPasteMode: boole
   return `\x1b[200~${text}\x1b[201~`;
 }
 
+function isImeCompositionKeyboardEvent(event: KeyboardEventLike): boolean {
+  return event.isComposing === true || event.key === 'Process' || event.keyCode === 229;
+}
+
 export function evaluateKeyboardDecision(
   event: KeyboardEventLike,
   context: KeyboardDecisionContext
 ): KeyboardDecision {
   if (context.shiftEnterMode === 'win32-input-mode') {
+    // Let xterm's textarea/composition pipeline handle IME process keys so
+    // win32-input-mode does not send raw phonetic keystrokes before commit.
+    if (isImeCompositionKeyboardEvent(event)) {
+      return { type: 'allow-default' };
+    }
+
     if (event.type === 'keypress') {
       return { type: 'block-default' };
     }
@@ -175,8 +188,12 @@ export class EnhancedKeyboardProtocol {
         this.handlers.queueInput(decision.data);
         return false;
       case 'write-text':
+        if (decisionContext.shiftEnterMode === 'win32-input-mode') {
+          this.suppressWin32ShortcutEvents = true;
+        }
         event.preventDefault?.();
-        this.handlers.writeText(decision.text);
+        this.handlers.flushPendingInput();
+        this.handlers.insertText(decision.text);
         return false;
     }
   }
@@ -197,7 +214,8 @@ export class EnhancedKeyboardProtocol {
     void this.handlers.readClipboardText()
       .then((text) => {
         if (text) {
-          this.handlers.writeText(text);
+          this.handlers.flushPendingInput();
+          this.handlers.pasteText(text);
         }
       })
       .catch((error) => {
