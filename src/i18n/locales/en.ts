@@ -390,8 +390,6 @@ export const en: TranslationKeys = {
     bash: 'Bash',
     zsh: 'Zsh',
     tmux: 'tmux',
-    kitty: 'kitty',
-    ghostty: 'Ghostty',
     custom: 'Custom',
   },
 

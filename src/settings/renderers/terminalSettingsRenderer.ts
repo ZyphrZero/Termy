@@ -39,7 +39,7 @@ const NEW_INSTANCE_BEHAVIORS = [
 const CURSOR_STYLES = ['block', 'underline', 'bar'] as const;
 const BACKGROUND_IMAGE_SIZES = ['cover', 'contain', 'auto'] as const;
 const PREFERRED_RENDERERS = ['canvas', 'webgl'] as const;
-const OPTIONAL_TERMINAL_SHELLS: TerminalShellType[] = ['tmux', 'kitty', 'ghostty'];
+const OPTIONAL_TERMINAL_SHELLS: TerminalShellType[] = ['tmux'];
 
 type NewInstanceBehavior = (typeof NEW_INSTANCE_BEHAVIORS)[number];
 type CursorStyle = (typeof CURSOR_STYLES)[number];
@@ -161,21 +161,6 @@ const TERMINAL_SHELL_COMMON_PATHS: Record<TerminalShellType, string[]> = {
     '/bin/tmux',
     'C:\\msys64\\usr\\bin\\tmux.exe',
     'C:\\Program Files\\Git\\usr\\bin\\tmux.exe',
-  ],
-  kitty: [
-    '/Applications/kitty.app/Contents/MacOS/kitty',
-    '/opt/homebrew/bin/kitty',
-    '/usr/local/bin/kitty',
-    '/usr/bin/kitty',
-    'C:\\Program Files\\kitty\\kitty.exe',
-  ],
-  ghostty: [
-    '/Applications/Ghostty.app/Contents/MacOS/ghostty',
-    '/opt/homebrew/bin/ghostty',
-    '/usr/local/bin/ghostty',
-    '/usr/bin/ghostty',
-    'C:\\Program Files\\Ghostty\\bin\\ghostty.exe',
-    'C:\\Program Files\\Ghostty\\ghostty.exe',
   ],
 };
 

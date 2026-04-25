@@ -4,11 +4,7 @@ type EnvLike = Record<string, string | undefined>;
 
 export const XTERM_JS_VERSION = '6.0.0';
 export const XTVERSION_RESPONSE = `\x1bP>|xterm.js(${XTERM_JS_VERSION})\x1b\\`;
-export type ClaudeCodeExtendedKeyboardMode = 'none' | 'kitty' | 'modifyOtherKeys';
-export type TerminalNotificationPayload = {
-  title: string;
-  message: string;
-};
+export type ClaudeCodeExtendedKeyboardMode = 'none' | 'modifyOtherKeys';
 
 /**
  * Claude Code has a first-class xterm.js path keyed by TERM_PROGRAM=vscode.
@@ -70,20 +66,6 @@ export function decodeTmuxPassthroughOsc52Clipboard(data: string): string | null
   return decodeOsc52Clipboard(osc52);
 }
 
-export function decodeTmuxPassthroughGhosttyNotification(data: string): TerminalNotificationPayload | null {
-  const passthrough = decodeTmuxPassthrough(data);
-  if (passthrough === null) {
-    return null;
-  }
-
-  const ghosttyNotification = extractOscPayload(passthrough, 777);
-  if (ghosttyNotification === null) {
-    return null;
-  }
-
-  return parseGhosttyNotification(ghosttyNotification);
-}
-
 function decodeTmuxPassthrough(data: string): string | null {
   if (!data.startsWith('mux;')) {
     return null;
@@ -110,63 +92,6 @@ function extractOscPayload(data: string, command: number): string | null {
   return data.slice(oscPayloadStart, oscEnd);
 }
 
-export function parseGhosttyNotification(data: string): TerminalNotificationPayload | null {
-  const parts = data.split(';');
-  if (parts[0] !== 'notify') {
-    return null;
-  }
-
-  const title = parts[1] ?? '';
-  const message = parts.slice(2).join(';');
-  if (!title && !message) {
-    return null;
-  }
-
-  return { title, message };
-}
-
-export type KittyNotificationPayload =
-  | { id: string; part: 'title' | 'body'; value: string }
-  | { id: string; part: 'focus' };
-
-export function parseKittyNotification(data: string): KittyNotificationPayload | null {
-  const separatorIndex = data.indexOf(';');
-  if (separatorIndex === -1) {
-    return null;
-  }
-
-  const metadata = parseKittyMetadata(data.slice(0, separatorIndex));
-  const id = metadata.get('i');
-  const part = metadata.get('p');
-  if (!id) {
-    return null;
-  }
-
-  if (metadata.get('a') === 'focus') {
-    return { id, part: 'focus' };
-  }
-
-  if (part === 'title' || part === 'body') {
-    return { id, part, value: data.slice(separatorIndex + 1) };
-  }
-
-  return null;
-}
-
-function parseKittyMetadata(metadata: string): Map<string, string> {
-  const entries = new Map<string, string>();
-  for (const pair of metadata.split(':')) {
-    const separatorIndex = pair.indexOf('=');
-    if (separatorIndex === -1) {
-      continue;
-    }
-
-    entries.set(pair.slice(0, separatorIndex), pair.slice(separatorIndex + 1));
-  }
-
-  return entries;
-}
-
 export interface ExtendedKeyboardEventLike {
   type: string;
   key: string;
@@ -180,7 +105,7 @@ export function encodeClaudeCodeExtendedKey(
   event: ExtendedKeyboardEventLike,
   mode: ClaudeCodeExtendedKeyboardMode,
 ): string | null {
-  if (mode === 'none' || event.type !== 'keydown') {
+  if (mode !== 'modifyOtherKeys' || event.type !== 'keydown') {
     return null;
   }
 
@@ -189,12 +114,7 @@ export function encodeClaudeCodeExtendedKey(
     return null;
   }
 
-  const modifier = encodeModifier(event);
-  if (mode === 'modifyOtherKeys') {
-    return `\x1b[27;${modifier};${keyCode}~`;
-  }
-
-  return `\x1b[${keyCode};${modifier}u`;
+  return `\x1b[27;${encodeModifier(event)};${keyCode}~`;
 }
 
 function shouldEncodeExtendedKey(event: ExtendedKeyboardEventLike): boolean {

@@ -417,8 +417,6 @@ export interface TranslationKeys {
     bash: string;
     zsh: string;
     tmux: string;
-    kitty: string;
-    ghostty: string;
     custom: string;
   };
 

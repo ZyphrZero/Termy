@@ -15,15 +15,11 @@ import { EnhancedKeyboardProtocol, formatPastedTerminalText } from './enhancedKe
 import {
   buildClaudeCodeTuiEnv,
   decodeOsc52Clipboard,
-  decodeTmuxPassthroughGhosttyNotification,
   decodeTmuxPassthroughOsc52Clipboard,
-  parseKittyNotification,
-  parseGhosttyNotification,
   type ClaudeCodeExtendedKeyboardMode,
   XTVERSION_RESPONSE,
 } from './claudeCodeTuiSupport';
 import { shell } from 'electron';
-import { Notice } from 'obsidian';
 
 // xterm.js CSS (static import handled by esbuild)
 import '@xterm/xterm/css/xterm.css';
@@ -197,10 +193,7 @@ export class TerminalInstance {
   private promptMarkers: IMarker[] = [];
   private commandMarkers: TerminalCommandMarker[] = [];
   private win32InputModeEnabled = false;
-  private kittyKeyboardProtocolEnabled = false;
   private modifyOtherKeysEnabled = false;
-  private terminalProgram = 'vscode';
-  private kittyNotifications = new Map<string, { title?: string; message?: string }>();
   private pendingControlSequenceText = '';
   private parserDisposables: IDisposable[] = [];
 
@@ -387,7 +380,6 @@ export class TerminalInstance {
         process.env,
         this.options.env,
       );
-      this.terminalProgram = terminalEnv.TERM_PROGRAM;
 
       this.sessionId = await this.ptyClient.init({
         shell_type: this.shellType === 'default' ? undefined : this.shellType,
@@ -513,24 +505,6 @@ export class TerminalInstance {
       this.xterm.parser.registerOscHandler(52, (data) => {
         return this.handleOsc52ClipboardData(data, 'OSC 52');
       }),
-      this.xterm.parser.registerOscHandler(777, (data) => {
-        return this.handleGhosttyNotification(data, 'Ghostty notification');
-      }),
-      this.xterm.parser.registerOscHandler(99, (data) => {
-        return this.handleKittyNotification(data);
-      }),
-      this.xterm.parser.registerCsiHandler({ prefix: '>', final: 'u' }, (params) => {
-        if (params[0] !== 1) {
-          return false;
-        }
-
-        this.kittyKeyboardProtocolEnabled = this.terminalProgram !== 'tmux';
-        return true;
-      }),
-      this.xterm.parser.registerCsiHandler({ prefix: '<', final: 'u' }, () => {
-        this.kittyKeyboardProtocolEnabled = false;
-        return true;
-      }),
       this.xterm.parser.registerCsiHandler({ prefix: '>', final: 'm' }, (params) => {
         if (params[0] !== 4) {
           return false;
@@ -546,35 +520,13 @@ export class TerminalInstance {
           return true;
         }
 
-        const notification = decodeTmuxPassthroughGhosttyNotification(data);
-        if (notification !== null) {
-          this.showTerminalNotification(
-            notification.title,
-            notification.message,
-            'tmux Ghostty notification passthrough',
-          );
-          return true;
-        }
-
         return false;
       }),
     );
   }
 
   private getClaudeCodeExtendedKeyboardMode(): ClaudeCodeExtendedKeyboardMode {
-    if (this.terminalProgram === 'tmux' && this.modifyOtherKeysEnabled) {
-      return 'modifyOtherKeys';
-    }
-
-    if (this.kittyKeyboardProtocolEnabled) {
-      return 'kitty';
-    }
-
-    if (this.modifyOtherKeysEnabled) {
-      return 'modifyOtherKeys';
-    }
-
-    return 'none';
+    return this.modifyOtherKeysEnabled ? 'modifyOtherKeys' : 'none';
   }
 
   private isXtversionQuery(params: (number | number[])[]): boolean {
@@ -590,54 +542,6 @@ export class TerminalInstance {
 
     this.writeClipboardFromTerminal(text, source);
     return true;
-  }
-
-  private handleGhosttyNotification(data: string, source: string): boolean {
-    const notification = parseGhosttyNotification(data);
-    if (notification === null) {
-      return false;
-    }
-
-    this.showTerminalNotification(notification.title, notification.message, source);
-    return true;
-  }
-
-  private handleKittyNotification(data: string): boolean {
-    const notification = parseKittyNotification(data);
-    if (notification === null) {
-      return false;
-    }
-
-    const state = this.kittyNotifications.get(notification.id) ?? {};
-    if (notification.part === 'title') {
-      state.title = notification.value;
-      this.kittyNotifications.set(notification.id, state);
-      return true;
-    }
-
-    if (notification.part === 'body') {
-      state.message = notification.value;
-      this.kittyNotifications.set(notification.id, state);
-      return true;
-    }
-
-    this.kittyNotifications.delete(notification.id);
-    this.showTerminalNotification(
-      state.title ?? 'Terminal',
-      state.message ?? '',
-      'Kitty notification',
-    );
-    return true;
-  }
-
-  private showTerminalNotification(title: string, message: string, source: string): void {
-    const content = [title, message].filter(Boolean).join('\n');
-    if (!content) {
-      debugWarn(`[Terminal] ${source} notification was empty`);
-      return;
-    }
-
-    new Notice(content, 8000);
   }
 
   private writeClipboardFromTerminal(text: string, source: string): void {
@@ -734,7 +638,6 @@ export class TerminalInstance {
     this.pendingInput = [];
     this.promptMarkers = [];
     this.commandMarkers = [];
-    this.kittyNotifications.clear();
 
     // Unsubscribe from events
     this.outputUnsubscribe?.();

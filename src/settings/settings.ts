@@ -6,7 +6,7 @@
 import type { VisibilityConfig } from '@/services/visibility';
 
 /** Terminal programs that can be launched from the shell selector when installed */
-export type TerminalShellType = 'tmux' | 'kitty' | 'ghostty';
+export type TerminalShellType = 'tmux';
 
 /** Shell types supported on Windows */
 export type WindowsShellType = 'cmd' | 'powershell' | 'pwsh' | 'wsl' | 'gitbash' | TerminalShellType | 'custom';

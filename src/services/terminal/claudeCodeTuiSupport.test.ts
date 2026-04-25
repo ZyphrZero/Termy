@@ -3,12 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildClaudeCodeTuiEnv,
-  decodeTmuxPassthroughGhosttyNotification,
   decodeOsc52Clipboard,
   decodeTmuxPassthroughOsc52Clipboard,
   encodeClaudeCodeExtendedKey,
-  parseGhosttyNotification,
-  parseKittyNotification,
   XTERM_JS_VERSION,
   XTVERSION_RESPONSE,
 } from './claudeCodeTuiSupport.ts';
@@ -31,13 +28,13 @@ test('buildClaudeCodeTuiEnv preserves user overrides', () => {
       FORCE_HYPERLINK: '0',
     },
     {
-      TERM: 'xterm-ghostty',
+      TERM: 'screen-256color',
       TERM_PROGRAM: 'custom-terminal',
       COLORTERM: 'ansi',
     },
   );
 
-  assert.equal(env.TERM, 'xterm-ghostty');
+  assert.equal(env.TERM, 'screen-256color');
   assert.equal(env.TERM_PROGRAM, 'custom-terminal');
   assert.equal(env.COLORTERM, 'ansi');
   assert.equal(env.FORCE_HYPERLINK, '0');
@@ -66,59 +63,6 @@ test('decodeTmuxPassthroughOsc52Clipboard unwraps tmux DCS passthrough', () => {
   const tmuxDcsPayload = `mux;${osc52.replaceAll('\x1b', '\x1b\x1b')}`;
 
   assert.equal(decodeTmuxPassthroughOsc52Clipboard(tmuxDcsPayload), text);
-});
-
-test('parseGhosttyNotification parses OSC 777 notify payloads', () => {
-  assert.deepEqual(parseGhosttyNotification('notify;Claude Code;Task finished'), {
-    title: 'Claude Code',
-    message: 'Task finished',
-  });
-  assert.deepEqual(parseGhosttyNotification('notify;Claude Code;part 1;part 2'), {
-    title: 'Claude Code',
-    message: 'part 1;part 2',
-  });
-  assert.equal(parseGhosttyNotification('bad;Claude Code;Task finished'), null);
-});
-
-test('decodeTmuxPassthroughGhosttyNotification unwraps tmux DCS passthrough', () => {
-  const ghostty = '\x1b]777;notify;Claude Code;Task finished\x07';
-  const tmuxDcsPayload = `mux;${ghostty.replaceAll('\x1b', '\x1b\x1b')}`;
-
-  assert.deepEqual(decodeTmuxPassthroughGhosttyNotification(tmuxDcsPayload), {
-    title: 'Claude Code',
-    message: 'Task finished',
-  });
-});
-
-test('parseKittyNotification parses staged kitty notification payloads', () => {
-  assert.deepEqual(parseKittyNotification('i=12:d=0:p=title;Claude Code'), {
-    id: '12',
-    part: 'title',
-    value: 'Claude Code',
-  });
-  assert.deepEqual(parseKittyNotification('i=12:p=body;Task finished'), {
-    id: '12',
-    part: 'body',
-    value: 'Task finished',
-  });
-  assert.deepEqual(parseKittyNotification('i=12:d=1:a=focus;'), {
-    id: '12',
-    part: 'focus',
-  });
-});
-
-test('encodeClaudeCodeExtendedKey emits kitty keyboard protocol sequences', () => {
-  assert.equal(
-    encodeClaudeCodeExtendedKey({
-      type: 'keydown',
-      key: 'Enter',
-      ctrlKey: false,
-      shiftKey: true,
-      altKey: false,
-      metaKey: false,
-    }, 'kitty'),
-    '\x1b[13;2u',
-  );
 });
 
 test('encodeClaudeCodeExtendedKey emits modifyOtherKeys sequences', () => {
