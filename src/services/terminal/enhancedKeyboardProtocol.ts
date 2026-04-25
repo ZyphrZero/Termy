@@ -2,6 +2,10 @@ import {
   encodeWin32InputModeKeyEvent,
   type Win32InputModeKeyboardEventLike,
 } from './win32InputModeEncoder.ts';
+import {
+  encodeClaudeCodeExtendedKey,
+  type ClaudeCodeExtendedKeyboardMode,
+} from './claudeCodeTuiSupport.ts';
 
 export interface KeyboardEventLike {
   type: string;
@@ -22,6 +26,7 @@ export interface KeyboardEventLike {
 export interface KeyboardDecisionContext {
   hasSelection: boolean;
   shiftEnterMode?: 'newline' | 'win32-input-mode';
+  extendedKeyboardMode?: ClaudeCodeExtendedKeyboardMode;
 }
 
 export type KeyboardDecision =
@@ -111,6 +116,14 @@ export function evaluateKeyboardDecision(
     return { type: 'paste-from-clipboard' };
   }
 
+  const extendedKey = encodeClaudeCodeExtendedKey(
+    event,
+    context.extendedKeyboardMode ?? 'none',
+  );
+  if (extendedKey) {
+    return { type: 'send-input', data: extendedKey };
+  }
+
   if (event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey && event.key === 'Enter') {
     // Use the text insertion path so shells with bracketed paste support
     // treat Shift+Enter as a multiline edit instead of a raw Enter keypress.
@@ -161,6 +174,7 @@ export class EnhancedKeyboardProtocol {
     const decision = evaluateKeyboardDecision(event, {
       hasSelection: this.handlers.hasSelection(),
       shiftEnterMode: decisionContext.shiftEnterMode ?? 'newline',
+      extendedKeyboardMode: decisionContext.extendedKeyboardMode ?? 'none',
     });
 
     switch (decision.type) {

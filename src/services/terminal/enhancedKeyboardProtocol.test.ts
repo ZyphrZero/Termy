@@ -154,6 +154,24 @@ test('evaluateKeyboardDecision routes Shift+Enter through text insertion', () =>
   assert.deepEqual(decision, { type: 'write-text', text: '\n' });
 });
 
+test('evaluateKeyboardDecision routes Shift+Enter through kitty keyboard protocol when enabled', () => {
+  const event = createKeyboardEvent('Enter', { shiftKey: true });
+  const decision = evaluateKeyboardDecision(event, {
+    hasSelection: false,
+    extendedKeyboardMode: 'kitty',
+  });
+  assert.deepEqual(decision, { type: 'send-input', data: '\x1b[13;2u' });
+});
+
+test('evaluateKeyboardDecision routes Ctrl+Shift+letter through modifyOtherKeys when enabled', () => {
+  const event = createKeyboardEvent('C', { ctrlKey: true, shiftKey: true });
+  const decision = evaluateKeyboardDecision(event, {
+    hasSelection: false,
+    extendedKeyboardMode: 'modifyOtherKeys',
+  });
+  assert.deepEqual(decision, { type: 'send-input', data: '\x1b[27;6;67~' });
+});
+
 test('evaluateKeyboardDecision maps Shift+Enter to win32-input-mode when requested', () => {
   const event = createKeyboardEvent('Enter', { shiftKey: true });
   const decision = evaluateKeyboardDecision(event, {

@@ -389,6 +389,9 @@ export const ru: TranslationKeys = {
     gitbash: 'Git Bash',
     bash: 'Bash',
     zsh: 'Zsh',
+    tmux: 'tmux',
+    kitty: 'kitty',
+    ghostty: 'Ghostty',
     custom: 'Пользовательская',
   },
 

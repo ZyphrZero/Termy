@@ -5,11 +5,14 @@
 
 import type { VisibilityConfig } from '@/services/visibility';
 
+/** Terminal programs that can be launched from the shell selector when installed */
+export type TerminalShellType = 'tmux' | 'kitty' | 'ghostty';
+
 /** Shell types supported on Windows */
-export type WindowsShellType = 'cmd' | 'powershell' | 'pwsh' | 'wsl' | 'gitbash' | 'custom';
+export type WindowsShellType = 'cmd' | 'powershell' | 'pwsh' | 'wsl' | 'gitbash' | TerminalShellType | 'custom';
 
 /** Shell types supported on Unix platforms (macOS/Linux) */
-export type UnixShellType = 'bash' | 'zsh' | 'custom';
+export type UnixShellType = 'bash' | 'zsh' | TerminalShellType | 'custom';
 
 /** Union of all shell types */
 export type ShellType = WindowsShellType | UnixShellType;

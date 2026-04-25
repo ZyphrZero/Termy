@@ -106,16 +106,27 @@ impl PtyHandler {
         shell_args: Option<Vec<String>>,
         cwd: Option<String>,
         env: Option<HashMap<String, String>>,
+        cols: Option<u16>,
+        rows: Option<u16>,
     ) -> Result<Option<ServerResponse>, RouterError> {
         // Generate a unique session_id
         let session_id = Uuid::new_v4().to_string();
+        let cols = cols.filter(|value| *value > 0).unwrap_or(80);
+        let rows = rows.filter(|value| *value > 0).unwrap_or(24);
         
-        log_info!("初始化 PTY 会话: session_id={}, shell_type={:?}, cwd={:?}", session_id, shell_type, cwd);
+        log_info!(
+            "初始化 PTY 会话: session_id={}, shell_type={:?}, cwd={:?}, size={}x{}",
+            session_id,
+            shell_type,
+            cwd,
+            cols,
+            rows
+        );
         
         // Create the PTY session
         let (pty_session, pty_reader, pty_writer) = PtySession::new(
-            80,
-            24,
+            cols,
+            rows,
             shell_type.as_deref(),
             shell_args.as_ref().map(|v| v.as_slice()),
             cwd.as_deref(),
@@ -441,8 +452,10 @@ impl ModuleHandler for PtyHandler {
                 let shell_args: Option<Vec<String>> = msg.get_field("shell_args");
                 let cwd: Option<String> = msg.get_field("cwd");
                 let env: Option<HashMap<String, String>> = msg.get_field("env");
+                let cols: Option<u16> = msg.get_field("cols");
+                let rows: Option<u16> = msg.get_field("rows");
                 
-                self.handle_init(shell_type, shell_args, cwd, env).await
+                self.handle_init(shell_type, shell_args, cwd, env, cols, rows).await
             }
             "resize" => {
                 // resize requires a session_id

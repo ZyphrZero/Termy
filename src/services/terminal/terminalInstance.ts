@@ -12,7 +12,18 @@ import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
 import type { ShellEvent, ShellEventSource } from '@/services/server/types';
 import { EnhancedKeyboardProtocol, formatPastedTerminalText } from './enhancedKeyboardProtocol';
+import {
+  buildClaudeCodeTuiEnv,
+  decodeOsc52Clipboard,
+  decodeTmuxPassthroughGhosttyNotification,
+  decodeTmuxPassthroughOsc52Clipboard,
+  parseKittyNotification,
+  parseGhosttyNotification,
+  type ClaudeCodeExtendedKeyboardMode,
+  XTVERSION_RESPONSE,
+} from './claudeCodeTuiSupport';
 import { shell } from 'electron';
+import { Notice } from 'obsidian';
 
 // xterm.js CSS (static import handled by esbuild)
 import '@xterm/xterm/css/xterm.css';
@@ -24,6 +35,7 @@ type SearchAddon = import('@xterm/addon-search').SearchAddon;
 type CanvasAddon = import('@xterm/addon-canvas').CanvasAddon;
 type WebglAddon = import('@xterm/addon-webgl').WebglAddon;
 type IMarker = import('@xterm/xterm').IMarker;
+type IDisposable = import('@xterm/xterm').IDisposable;
 
 // xterm.js module cache
 let xtermModules: {
@@ -185,7 +197,12 @@ export class TerminalInstance {
   private promptMarkers: IMarker[] = [];
   private commandMarkers: TerminalCommandMarker[] = [];
   private win32InputModeEnabled = false;
+  private kittyKeyboardProtocolEnabled = false;
+  private modifyOtherKeysEnabled = false;
+  private terminalProgram = 'vscode';
+  private kittyNotifications = new Map<string, { title?: string; message?: string }>();
   private pendingControlSequenceText = '';
+  private parserDisposables: IDisposable[] = [];
 
   constructor(options: TerminalOptions = {}) {
     this.id = `terminal-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -213,6 +230,8 @@ export class TerminalInstance {
         allowTransparency: !!this.options.backgroundImage,
         convertEol: false,
         rightClickSelectsWord: true,
+        macOptionClickForcesSelection: true,
+        rescaleOverlappingGlyphs: true,
         allowProposedApi: true,
       });
 
@@ -233,6 +252,7 @@ export class TerminalInstance {
         }
       });
       this.xterm.loadAddon(webLinksAddon);
+      this.setupClaudeCodeTuiHandlers();
       
       debugLog('[Terminal] xterm.js 实例初始化完成');
     } catch (error) {
@@ -363,16 +383,19 @@ export class TerminalInstance {
       this.ptyClient = serverManager.pty();
       
       // Initialize the PTY session and get the session_id
+      const terminalEnv = buildClaudeCodeTuiEnv(
+        process.env,
+        this.options.env,
+      );
+      this.terminalProgram = terminalEnv.TERM_PROGRAM;
+
       this.sessionId = await this.ptyClient.init({
         shell_type: this.shellType === 'default' ? undefined : this.shellType,
         shell_args: this.options.shellArgs,
         cwd: this.options.cwd,
-        env: {
-          TERM: process.env.TERM || 'xterm-256color',
-          ...this.options.env,
-          // Claude Code's @anthropic/ink checks LC_TERMINAL for OSC 8 support.
-          LC_TERMINAL: this.options.env?.LC_TERMINAL ?? process.env.LC_TERMINAL ?? 'iTerm2',
-        }
+        env: terminalEnv,
+        cols: this.xterm.cols,
+        rows: this.xterm.rows,
       });
       
       debugLog('[Terminal] 获取到 session_id:', this.sessionId);
@@ -461,6 +484,7 @@ export class TerminalInstance {
       },
     }, () => ({
       shiftEnterMode: this.win32InputModeEnabled ? 'win32-input-mode' : 'newline',
+      extendedKeyboardMode: this.getClaudeCodeExtendedKeyboardMode(),
     }));
 
     this.xterm.onData((data) => {
@@ -473,6 +497,157 @@ export class TerminalInstance {
 
     this.xterm.attachCustomKeyEventHandler((event: KeyboardEvent) => {
       return keyboardProtocol.handleKeyboardEvent(event);
+    });
+  }
+
+  private setupClaudeCodeTuiHandlers(): void {
+    this.parserDisposables.push(
+      this.xterm.parser.registerCsiHandler({ prefix: '>', final: 'q' }, (params) => {
+        if (!this.isXtversionQuery(params)) {
+          return false;
+        }
+
+        this.write(XTVERSION_RESPONSE);
+        return true;
+      }),
+      this.xterm.parser.registerOscHandler(52, (data) => {
+        return this.handleOsc52ClipboardData(data, 'OSC 52');
+      }),
+      this.xterm.parser.registerOscHandler(777, (data) => {
+        return this.handleGhosttyNotification(data, 'Ghostty notification');
+      }),
+      this.xterm.parser.registerOscHandler(99, (data) => {
+        return this.handleKittyNotification(data);
+      }),
+      this.xterm.parser.registerCsiHandler({ prefix: '>', final: 'u' }, (params) => {
+        if (params[0] !== 1) {
+          return false;
+        }
+
+        this.kittyKeyboardProtocolEnabled = this.terminalProgram !== 'tmux';
+        return true;
+      }),
+      this.xterm.parser.registerCsiHandler({ prefix: '<', final: 'u' }, () => {
+        this.kittyKeyboardProtocolEnabled = false;
+        return true;
+      }),
+      this.xterm.parser.registerCsiHandler({ prefix: '>', final: 'm' }, (params) => {
+        if (params[0] !== 4) {
+          return false;
+        }
+
+        this.modifyOtherKeysEnabled = params[1] === 2;
+        return true;
+      }),
+      this.xterm.parser.registerDcsHandler({ final: 't' }, (data) => {
+        const text = decodeTmuxPassthroughOsc52Clipboard(data);
+        if (text !== null) {
+          this.writeClipboardFromTerminal(text, 'tmux OSC 52 passthrough');
+          return true;
+        }
+
+        const notification = decodeTmuxPassthroughGhosttyNotification(data);
+        if (notification !== null) {
+          this.showTerminalNotification(
+            notification.title,
+            notification.message,
+            'tmux Ghostty notification passthrough',
+          );
+          return true;
+        }
+
+        return false;
+      }),
+    );
+  }
+
+  private getClaudeCodeExtendedKeyboardMode(): ClaudeCodeExtendedKeyboardMode {
+    if (this.terminalProgram === 'tmux' && this.modifyOtherKeysEnabled) {
+      return 'modifyOtherKeys';
+    }
+
+    if (this.kittyKeyboardProtocolEnabled) {
+      return 'kitty';
+    }
+
+    if (this.modifyOtherKeysEnabled) {
+      return 'modifyOtherKeys';
+    }
+
+    return 'none';
+  }
+
+  private isXtversionQuery(params: (number | number[])[]): boolean {
+    const firstParam = params[0];
+    return firstParam === undefined || firstParam === 0;
+  }
+
+  private handleOsc52ClipboardData(data: string, source: string): boolean {
+    const text = decodeOsc52Clipboard(data);
+    if (text === null) {
+      return false;
+    }
+
+    this.writeClipboardFromTerminal(text, source);
+    return true;
+  }
+
+  private handleGhosttyNotification(data: string, source: string): boolean {
+    const notification = parseGhosttyNotification(data);
+    if (notification === null) {
+      return false;
+    }
+
+    this.showTerminalNotification(notification.title, notification.message, source);
+    return true;
+  }
+
+  private handleKittyNotification(data: string): boolean {
+    const notification = parseKittyNotification(data);
+    if (notification === null) {
+      return false;
+    }
+
+    const state = this.kittyNotifications.get(notification.id) ?? {};
+    if (notification.part === 'title') {
+      state.title = notification.value;
+      this.kittyNotifications.set(notification.id, state);
+      return true;
+    }
+
+    if (notification.part === 'body') {
+      state.message = notification.value;
+      this.kittyNotifications.set(notification.id, state);
+      return true;
+    }
+
+    this.kittyNotifications.delete(notification.id);
+    this.showTerminalNotification(
+      state.title ?? 'Terminal',
+      state.message ?? '',
+      'Kitty notification',
+    );
+    return true;
+  }
+
+  private showTerminalNotification(title: string, message: string, source: string): void {
+    const content = [title, message].filter(Boolean).join('\n');
+    if (!content) {
+      debugWarn(`[Terminal] ${source} notification was empty`);
+      return;
+    }
+
+    new Notice(content, 8000);
+  }
+
+  private writeClipboardFromTerminal(text: string, source: string): void {
+    if (!navigator.clipboard?.writeText) {
+      debugWarn(`[Terminal] ${source} clipboard write is unavailable`);
+      return;
+    }
+
+    void navigator.clipboard.writeText(text).catch((error) => {
+      errorLog(`[Terminal] ${source} clipboard write failed:`, error);
     });
   }
 
@@ -559,12 +734,17 @@ export class TerminalInstance {
     this.pendingInput = [];
     this.promptMarkers = [];
     this.commandMarkers = [];
+    this.kittyNotifications.clear();
 
     // Unsubscribe from events
     this.outputUnsubscribe?.();
     this.exitUnsubscribe?.();
     this.errorUnsubscribe?.();
     this.shellEventUnsubscribe?.();
+    for (const disposable of this.parserDisposables) {
+      try { disposable.dispose(); } catch { /* ignore */ }
+    }
+    this.parserDisposables = [];
     
     this.outputUnsubscribe = null;
     this.exitUnsubscribe = null;

@@ -3,10 +3,10 @@
  * Responsible for rendering all terminal-related settings
  */
 
-import type { App, ColorComponent, TextComponent } from 'obsidian';
+import type { App, ColorComponent, DropdownComponent, TextComponent } from 'obsidian';
 import { Modal, Setting, Notice, Platform, ToggleComponent, setIcon } from 'obsidian';
 import type { RendererContext } from '../types';
-import type { BinaryDownloadSource, PresetScript, ShellType } from '../settings';
+import type { BinaryDownloadSource, PresetScript, ShellType, TerminalShellType } from '../settings';
 import { 
   DEFAULT_PRESET_SCRIPTS,
   DEFAULT_SERVER_CONNECTION_SETTINGS,
@@ -20,6 +20,7 @@ import { t } from '../../i18n';
 import { PresetScriptModal } from '../../ui/terminal/presetScriptModal';
 import { PRESET_SCRIPT_ICON_OPTIONS, renderPresetScriptIcon } from '../../ui/terminal/presetScriptIcons';
 import { clamp, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
+import { debugWarn } from '../../utils/logger';
 
 const NEW_INSTANCE_BEHAVIORS = [
   'replaceTab',
@@ -36,6 +37,7 @@ const NEW_INSTANCE_BEHAVIORS = [
 const CURSOR_STYLES = ['block', 'underline', 'bar'] as const;
 const BACKGROUND_IMAGE_SIZES = ['cover', 'contain', 'auto'] as const;
 const PREFERRED_RENDERERS = ['canvas', 'webgl'] as const;
+const OPTIONAL_TERMINAL_SHELLS: TerminalShellType[] = ['tmux', 'kitty', 'ghostty'];
 
 type NewInstanceBehavior = (typeof NEW_INSTANCE_BEHAVIORS)[number];
 type CursorStyle = (typeof CURSOR_STYLES)[number];
@@ -148,6 +150,87 @@ async function validateShellPath(path: string): Promise<boolean> {
   }
 }
 
+const isTerminalShellType = (value: string): value is TerminalShellType =>
+  OPTIONAL_TERMINAL_SHELLS.includes(value as TerminalShellType);
+
+type NodePathModule = typeof import('path');
+type NodeFsModule = typeof import('fs');
+
+const TERMINAL_SHELL_COMMON_PATHS: Record<TerminalShellType, string[]> = {
+  tmux: [
+    '/opt/homebrew/bin/tmux',
+    '/usr/local/bin/tmux',
+    '/usr/bin/tmux',
+    '/bin/tmux',
+    'C:\\msys64\\usr\\bin\\tmux.exe',
+    'C:\\Program Files\\Git\\usr\\bin\\tmux.exe',
+  ],
+  kitty: [
+    '/Applications/kitty.app/Contents/MacOS/kitty',
+    '/opt/homebrew/bin/kitty',
+    '/usr/local/bin/kitty',
+    '/usr/bin/kitty',
+    'C:\\Program Files\\kitty\\kitty.exe',
+  ],
+  ghostty: [
+    '/Applications/Ghostty.app/Contents/MacOS/ghostty',
+    '/opt/homebrew/bin/ghostty',
+    '/usr/local/bin/ghostty',
+    '/usr/bin/ghostty',
+    'C:\\Program Files\\Ghostty\\bin\\ghostty.exe',
+    'C:\\Program Files\\Ghostty\\ghostty.exe',
+  ],
+};
+
+async function detectAvailableTerminalShells(): Promise<TerminalShellType[]> {
+  if (Platform.isMobile) return [];
+
+  const [fsModule, pathModule] = await Promise.all([
+    import('fs'),
+    import('path'),
+  ]);
+
+  return OPTIONAL_TERMINAL_SHELLS.filter((shellType) =>
+    isTerminalShellAvailable(shellType, fsModule, pathModule)
+  );
+}
+
+function isTerminalShellAvailable(
+  shellType: TerminalShellType,
+  fsModule: NodeFsModule,
+  pathModule: NodePathModule,
+): boolean {
+  return commandExists(shellType, fsModule, pathModule)
+    || TERMINAL_SHELL_COMMON_PATHS[shellType].some((candidate) => fsModule.existsSync(candidate));
+}
+
+function commandExists(
+  command: string,
+  fsModule: NodeFsModule,
+  pathModule: NodePathModule,
+): boolean {
+  const pathValue = process.env.PATH ?? '';
+  if (!pathValue) return false;
+
+  const pathEntries = pathValue.split(pathModule.delimiter).filter(Boolean);
+  const extensions = process.platform === 'win32'
+    ? (process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD')
+      .split(';')
+      .filter(Boolean)
+    : [''];
+
+  for (const entry of pathEntries) {
+    for (const extension of extensions) {
+      const candidate = pathModule.join(entry, process.platform === 'win32' ? `${command}${extension}` : command);
+      if (fsModule.existsSync(candidate)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 /**
  * Terminal settings renderer
  * Handles rendering for Shell program, instance behavior, theme, and appearance settings
@@ -219,6 +302,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           dropdown.addOption('bash', t('shellOptions.bash'));
           dropdown.addOption('zsh', t('shellOptions.zsh'));
         }
+        this.addDetectedTerminalShellOptions(dropdown, currentShell);
         dropdown.addOption('custom', t('shellOptions.custom'));
 
         dropdown.setValue(currentShell);
@@ -301,6 +385,33 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         }, 0);
         
         return text;
+      });
+  }
+
+  private addDetectedTerminalShellOptions(
+    dropdown: DropdownComponent,
+    currentShell: ShellType,
+  ): void {
+    const added = new Set<TerminalShellType>();
+    const addOption = (shellType: TerminalShellType): void => {
+      if (added.has(shellType)) return;
+      dropdown.addOption(shellType, t(`shellOptions.${shellType}`));
+      added.add(shellType);
+    };
+
+    if (isTerminalShellType(currentShell)) {
+      addOption(currentShell);
+    }
+
+    void detectAvailableTerminalShells()
+      .then((shellTypes) => {
+        for (const shellType of shellTypes) {
+          addOption(shellType);
+        }
+        dropdown.setValue(currentShell);
+      })
+      .catch((error) => {
+        debugWarn('[TerminalSettings] Failed to detect terminal shell options:', error);
       });
   }
 

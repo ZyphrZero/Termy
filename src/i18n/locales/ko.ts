@@ -389,6 +389,9 @@ export const ko: TranslationKeys = {
     gitbash: 'Git Bash',
     bash: 'Bash',
     zsh: 'Zsh',
+    tmux: 'tmux',
+    kitty: 'kitty',
+    ghostty: 'Ghostty',
     custom: '사용자 지정',
   },
 

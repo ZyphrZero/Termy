@@ -26,7 +26,7 @@ impl PtySession {
     /// # Parameters
     /// - `cols`: Terminal column count
     /// - `rows`: Terminal row count
-    /// - `shell_type`: Optional shell type (cmd, powershell, wsl, bash, zsh, custom:/path)
+    /// - `shell_type`: Optional shell type (cmd, powershell, wsl, bash, zsh, tmux, kitty, ghostty, custom:/path)
     /// - `shell_args`: Optional shell startup arguments
     /// - `cwd`: Optional working directory
     /// - `env`: Optional environment variables
