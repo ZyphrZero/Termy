@@ -1,6 +1,6 @@
 {
   "name": "termy",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "type": "module",
   "description": "Full terminal emulator with split panes, preset scripts, multiple shells, and native Rust PTY backend.",
   "main": "main.js",

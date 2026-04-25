@@ -5,6 +5,26 @@ All notable changes to Termy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-04-26
+
+### Added
+- Added selectable installed terminal shell programs, such as `tmux`, in terminal settings while keeping custom shell paths supported.
+- Added Claude Code-aware file and folder drops that insert working-directory-relative `@path` references with safe quoting, directory trailing slashes, and trailing spacing.
+- Added support for literal `file://` links in terminal output, complementing OSC 8 hyperlinks from Claude Code and other CLIs.
+- Added Telegram community links in settings, README files, and generated release notes.
+
+### Changed
+- Improved Claude Code TUI compatibility by advertising Termy as an xterm.js host and handling terminal capability, extended keyboard, and OSC 52 clipboard flows expected by Claude Code.
+- Improved release-note generation so generated notes use the correct changelog header format and include refreshed support links.
+
+### Fixed
+- Fixed WebSocket reconnect recovery so each open terminal recreates and rebinds its PTY session after reconnect, restoring keyboard input instead of leaving the pane attached to a stale session.
+- Fixed Claude Code file hyperlinks and literal file URI output so matching files open inside Obsidian when possible.
+- Fixed Claude Code drag-and-drop paths from Obsidian URIs with encoded separators and ampersands, and prevented basename-only folder drops from losing full path context.
+- Fixed Windows Codex prompt redraw corruption by preventing duplicate IME/input events in Windows input mode.
+- Fixed shell selection detection in Obsidian's renderer process and filtered GUI terminal apps out of the shell launcher list.
+- Fixed local development install copying so plugin installs are more reliable when refreshing generated assets and native binaries.
+
 ## [1.3.1] - 2026-04-23
 
 This section covers the combined changes shipped in versions `1.3.0-1.3.1`.
@@ -146,6 +166,7 @@ If you're upgrading from version 1.1.1 or earlier:
 
 ---
 
+[1.3.2]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.2
 [1.3.1]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.1
 [1.3.0]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.0
 [1.2.3]: https://github.com/ZyphrZero/Termy/releases/tag/1.2.3

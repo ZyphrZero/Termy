@@ -8,7 +8,7 @@
 
 Full terminal emulation for Obsidian with a native Rust PTY backend, split panes, reusable workflows, file-aware drag and drop, and AI CLI integrations.
 
-[![Version](https://img.shields.io/badge/version-1.3.1-7c3aed?style=for-the-badge)](./manifest.json)
+[![Version](https://img.shields.io/badge/version-1.3.2-7c3aed?style=for-the-badge)](./manifest.json)
 [![Obsidian](https://img.shields.io/badge/Obsidian-Desktop%20Only-8b5cf6?style=for-the-badge)](https://obsidian.md/)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=for-the-badge)](./LICENSE)
 [![PTY](https://img.shields.io/badge/backend-Rust%20PTY-f97316?style=for-the-badge)](./rust-servers)
