@@ -10,7 +10,7 @@ import { debugLog, debugWarn, errorLog } from '@/utils/logger';
 import { t } from '@/i18n';
 import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
-import type { ShellEvent, ShellEventSource } from '@/services/server/types';
+import type { PtyConfig, ShellEvent, ShellEventSource } from '@/services/server/types';
 import { EnhancedKeyboardProtocol, formatPastedTerminalText } from './enhancedKeyboardProtocol';
 import {
   buildClaudeCodeTuiEnv,
@@ -195,6 +195,9 @@ export class TerminalInstance {
   private win32InputModeEnabled = false;
   private modifyOtherKeysEnabled = false;
   private claudeCodeTuiSignalObserved = false;
+  private webSocketDisconnected = false;
+  private sessionRecoveryNeeded = false;
+  private sessionRecoveryInProgress = false;
   private pendingControlSequenceText = '';
   private parserDisposables: IDisposable[] = [];
 
@@ -373,28 +376,8 @@ export class TerminalInstance {
       // Ensure the server is running
       await serverManager.ensureServer();
       
-      // Get the PtyClient
-      this.ptyClient = serverManager.pty();
-      
-      // Initialize the PTY session and get the session_id
-      const terminalEnv = buildClaudeCodeTuiEnv(
-        process.env,
-        this.options.env,
-      );
-
-      this.sessionId = await this.ptyClient.init({
-        shell_type: this.shellType === 'default' ? undefined : this.shellType,
-        shell_args: this.options.shellArgs,
-        cwd: this.options.cwd,
-        env: terminalEnv,
-        cols: this.xterm.cols,
-        rows: this.xterm.rows,
-      });
-      
-      debugLog('[Terminal] 获取到 session_id:', this.sessionId);
-      
-      // Set up session-level event handlers
-      this.setupPtyClientHandlers();
+      await this.initializePtySession(serverManager, this.options.cwd);
+      if (this.isDestroyed) return;
       
       this.setupXtermHandlers();
       this.isInitialized = true;
@@ -440,6 +423,56 @@ export class TerminalInstance {
     this.shellEventUnsubscribe = this.ptyClient.onSessionShellEvent(this.sessionId, (event: ShellEvent) => {
       this.handleShellEvent(event);
     });
+  }
+
+  private buildPtyConfig(cwd: string | undefined): PtyConfig {
+    const terminalEnv = buildClaudeCodeTuiEnv(
+      process.env,
+      this.options.env,
+    );
+
+    return {
+      shell_type: this.shellType === 'default' ? undefined : this.shellType,
+      shell_args: this.options.shellArgs,
+      cwd,
+      env: terminalEnv,
+      cols: this.xterm.cols,
+      rows: this.xterm.rows,
+    };
+  }
+
+  private async initializePtySession(serverManager: ServerManager, cwd: string | undefined): Promise<void> {
+    const ptyClient = serverManager.pty();
+    this.resetSessionProtocolState();
+    const sessionId = await ptyClient.init(this.buildPtyConfig(cwd));
+    if (this.isDestroyed) {
+      ptyClient.destroySession(sessionId);
+      return;
+    }
+
+    this.ptyClient = ptyClient;
+    this.sessionId = sessionId;
+    debugLog('[Terminal] 获取到 session_id:', this.sessionId);
+    this.setupPtyClientHandlers();
+  }
+
+  private resetSessionProtocolState(): void {
+    this.win32InputModeEnabled = false;
+    this.modifyOtherKeysEnabled = false;
+    this.claudeCodeTuiSignalObserved = false;
+    this.pendingControlSequenceText = '';
+  }
+
+  private disposePtyClientHandlers(): void {
+    this.outputUnsubscribe?.();
+    this.exitUnsubscribe?.();
+    this.errorUnsubscribe?.();
+    this.shellEventUnsubscribe?.();
+
+    this.outputUnsubscribe = null;
+    this.exitUnsubscribe = null;
+    this.errorUnsubscribe = null;
+    this.shellEventUnsubscribe = null;
   }
 
   private setupXtermHandlers(): void {
@@ -569,6 +602,14 @@ export class TerminalInstance {
     }
   }
 
+  private clearPendingInput(): void {
+    if (this.inputFlushTimer !== null) {
+      window.clearTimeout(this.inputFlushTimer);
+      this.inputFlushTimer = null;
+    }
+    this.pendingInput = [];
+  }
+
   private flushPendingInput(): void {
     if (this.pendingInput.length === 0) {
       this.inputFlushTimer = null;
@@ -626,36 +667,82 @@ export class TerminalInstance {
   handleServerCrash(): void {
     if (this.isDestroyed) return;
 
+    this.webSocketDisconnected = false;
+    this.sessionRecoveryNeeded = true;
+    this.clearPendingInput();
     this.xterm.write('\r\n\x1b[1;31m[服务器已崩溃]\x1b[0m\r\n');
     this.xterm.write('\x1b[33m正在尝试重启服务器...\x1b[0m\r\n');
+  }
+
+  handleWebSocketDisconnected(): void {
+    if (this.isDestroyed) return;
+
+    this.sessionRecoveryNeeded = true;
+    this.clearPendingInput();
+    if (this.webSocketDisconnected) return;
+    this.webSocketDisconnected = true;
+    this.xterm.write('\r\n\x1b[33m[WebSocket 连接已断开，正在重连...]\x1b[0m\r\n');
+  }
+
+  async handleWebSocketConnected(serverManager: ServerManager): Promise<void> {
+    if (
+      this.isDestroyed
+      || this.sessionRecoveryInProgress
+      || !this.sessionRecoveryNeeded
+    ) {
+      return;
+    }
+
+    this.sessionRecoveryInProgress = true;
+    this.xterm.write('\x1b[32m[连接已恢复，正在恢复终端会话...]\x1b[0m\r\n');
+
+    try {
+      this.disposePtyClientHandlers();
+      this.sessionId = null;
+      this.clearPendingInput();
+
+      const reconnectCwd = this.currentCwd ?? this.options.cwd;
+      try {
+        await this.initializePtySession(serverManager, reconnectCwd);
+      } catch (error) {
+        if (!this.currentCwd || this.currentCwd === this.options.cwd) {
+          throw error;
+        }
+
+        debugWarn('[Terminal] 使用当前目录恢复会话失败，回退到初始目录:', error);
+        await this.initializePtySession(serverManager, this.options.cwd);
+      }
+      if (this.isDestroyed) return;
+
+      this.sessionRecoveryNeeded = false;
+      this.webSocketDisconnected = false;
+      this.xterm.write('\x1b[32m[终端会话已恢复]\x1b[0m\r\n');
+      this.fit();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errorLog('[Terminal] 恢复终端会话失败:', error);
+      this.sessionRecoveryNeeded = true;
+      this.webSocketDisconnected = true;
+      this.xterm.write(`\x1b[1;31m[终端会话恢复失败] ${errorMessage}\x1b[0m\r\n`);
+    } finally {
+      this.sessionRecoveryInProgress = false;
+    }
   }
 
   destroy(): void {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
 
-    if (this.inputFlushTimer !== null) {
-      window.clearTimeout(this.inputFlushTimer);
-      this.inputFlushTimer = null;
-    }
-    this.pendingInput = [];
+    this.clearPendingInput();
     this.promptMarkers = [];
     this.commandMarkers = [];
 
     // Unsubscribe from events
-    this.outputUnsubscribe?.();
-    this.exitUnsubscribe?.();
-    this.errorUnsubscribe?.();
-    this.shellEventUnsubscribe?.();
+    this.disposePtyClientHandlers();
     for (const disposable of this.parserDisposables) {
       try { disposable.dispose(); } catch { /* ignore */ }
     }
     this.parserDisposables = [];
-    
-    this.outputUnsubscribe = null;
-    this.exitUnsubscribe = null;
-    this.errorUnsubscribe = null;
-    this.shellEventUnsubscribe = null;
 
     // Destroy the PTY session
     if (this.ptyClient && this.sessionId) {

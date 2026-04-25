@@ -80,10 +80,14 @@ export class TerminalService {
     this.serverManager.on('ws-disconnected', () => {
       if (!this.isShuttingDown) {
         debugLog('[TerminalService] WebSocket 断开');
-        // Notify all terminal instances
-        this.terminals.forEach(terminal => {
-          terminal.handleServerCrash();
-        });
+        this.handleWebSocketDisconnected();
+      }
+    });
+
+    this.serverManager.on('ws-connected', () => {
+      if (!this.isShuttingDown) {
+        debugLog('[TerminalService] WebSocket 已连接');
+        void this.handleWebSocketConnected();
       }
     });
     
@@ -101,6 +105,18 @@ export class TerminalService {
     this.terminals.forEach(terminal => {
       terminal.handleServerCrash();
     });
+  }
+
+  private handleWebSocketDisconnected(): void {
+    this.terminals.forEach(terminal => {
+      terminal.handleWebSocketDisconnected();
+    });
+  }
+
+  private async handleWebSocketConnected(): Promise<void> {
+    for (const terminal of this.terminals.values()) {
+      await terminal.handleWebSocketConnected(this.serverManager);
+    }
   }
 
   /**
