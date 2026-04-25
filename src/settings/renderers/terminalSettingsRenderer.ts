@@ -5,6 +5,8 @@
 
 import type { App, ColorComponent, DropdownComponent, TextComponent } from 'obsidian';
 import { Modal, Setting, Notice, Platform, ToggleComponent, setIcon } from 'obsidian';
+import * as fs from 'fs';
+import * as path from 'path';
 import type { RendererContext } from '../types';
 import type { BinaryDownloadSource, PresetScript, ShellType, TerminalShellType } from '../settings';
 import { 
@@ -142,9 +144,7 @@ async function validateShellPath(path: string): Promise<boolean> {
   // Mobile does not support filesystem checks
   if (Platform.isMobile) return true;
   try {
-    // Dynamically import the fs module to avoid mobile load failures
-    const { existsSync } = await import('fs');
-    return existsSync(path);
+    return fs.existsSync(path);
   } catch {
     return false;
   }
@@ -152,9 +152,6 @@ async function validateShellPath(path: string): Promise<boolean> {
 
 const isTerminalShellType = (value: string): value is TerminalShellType =>
   OPTIONAL_TERMINAL_SHELLS.includes(value as TerminalShellType);
-
-type NodePathModule = typeof import('path');
-type NodeFsModule = typeof import('fs');
 
 const TERMINAL_SHELL_COMMON_PATHS: Record<TerminalShellType, string[]> = {
   tmux: [
@@ -185,34 +182,21 @@ const TERMINAL_SHELL_COMMON_PATHS: Record<TerminalShellType, string[]> = {
 async function detectAvailableTerminalShells(): Promise<TerminalShellType[]> {
   if (Platform.isMobile) return [];
 
-  const [fsModule, pathModule] = await Promise.all([
-    import('fs'),
-    import('path'),
-  ]);
-
   return OPTIONAL_TERMINAL_SHELLS.filter((shellType) =>
-    isTerminalShellAvailable(shellType, fsModule, pathModule)
+    isTerminalShellAvailable(shellType)
   );
 }
 
-function isTerminalShellAvailable(
-  shellType: TerminalShellType,
-  fsModule: NodeFsModule,
-  pathModule: NodePathModule,
-): boolean {
-  return commandExists(shellType, fsModule, pathModule)
-    || TERMINAL_SHELL_COMMON_PATHS[shellType].some((candidate) => fsModule.existsSync(candidate));
+function isTerminalShellAvailable(shellType: TerminalShellType): boolean {
+  return commandExists(shellType)
+    || TERMINAL_SHELL_COMMON_PATHS[shellType].some((candidate) => fs.existsSync(candidate));
 }
 
-function commandExists(
-  command: string,
-  fsModule: NodeFsModule,
-  pathModule: NodePathModule,
-): boolean {
+function commandExists(command: string): boolean {
   const pathValue = process.env.PATH ?? '';
   if (!pathValue) return false;
 
-  const pathEntries = pathValue.split(pathModule.delimiter).filter(Boolean);
+  const pathEntries = pathValue.split(path.delimiter).filter(Boolean);
   const extensions = process.platform === 'win32'
     ? (process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD')
       .split(';')
@@ -221,8 +205,8 @@ function commandExists(
 
   for (const entry of pathEntries) {
     for (const extension of extensions) {
-      const candidate = pathModule.join(entry, process.platform === 'win32' ? `${command}${extension}` : command);
-      if (fsModule.existsSync(candidate)) {
+      const candidate = path.join(entry, process.platform === 'win32' ? `${command}${extension}` : command);
+      if (fs.existsSync(candidate)) {
         return true;
       }
     }
