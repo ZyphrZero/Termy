@@ -5,6 +5,22 @@ All notable changes to Termy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-04-26
+
+### Added
+- Added OpenCode as a built-in workflow launcher with a dedicated icon and context-aware integration settings.
+- Added OpenCode context handoff through Termy's IDE bridge so OpenCode sessions launched from Termy can inherit the active Obsidian workspace context.
+- Added development auto-reload support so `pnpm install:dev <vault-path>` can refresh the running Termy plugin after copying updated assets.
+
+### Changed
+- Changed Codex context awareness to use a Termy-managed vault-local Skill while the built-in launcher starts `codex` directly.
+- Kept Claude Code and OpenCode on the IDE bridge path while documenting Codex as the Skill-based integration.
+- Normalized built-in workflow definitions from current defaults so saved built-ins pick up refreshed launcher commands and icons.
+
+### Removed
+- Removed Codex MCP auto-registration, global CLI configuration mutation, and the old launch-prompt context handoff path.
+- Removed the legacy context instructions file path in favor of the single live context snapshot consumed by the Codex Skill.
+
 ## [1.3.2] - 2026-04-26
 
 ### Added
@@ -166,6 +182,7 @@ If you're upgrading from version 1.1.1 or earlier:
 
 ---
 
+[1.3.3]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.3
 [1.3.2]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.2
 [1.3.1]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.1
 [1.3.0]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.0
