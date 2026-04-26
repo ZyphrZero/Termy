@@ -165,11 +165,8 @@ export const DEFAULT_SERVER_CONNECTION_SETTINGS: ServerConnectionSettings = {
 /**
  * Default preset scripts
  */
-export const AGENT_CONTEXT_LAUNCH_PROMPT =
-  'Before answering, read the file path stored in the TERMY_CONTEXT_INSTRUCTIONS_PATH environment variable. It points to Termy Obsidian context instructions. Re-read TERMY_CONTEXT_PATH whenever current note, selection, open files, or vault root matters.';
-
-export const CODEX_CONTEXT_LAUNCH_COMMAND =
-  `codex "${AGENT_CONTEXT_LAUNCH_PROMPT}"`;
+export const CODEX_LAUNCH_COMMAND =
+  'codex';
 
 export const OPENCODE_LAUNCH_COMMAND =
   'opencode';
@@ -261,7 +258,7 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
       {
         id: 'action-codex',
         type: 'terminal-command',
-        value: CODEX_CONTEXT_LAUNCH_COMMAND,
+        value: CODEX_LAUNCH_COMMAND,
         enabled: true,
         note: 'Launch Codex with Obsidian context',
       },

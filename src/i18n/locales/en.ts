@@ -280,7 +280,7 @@ export const en: TranslationKeys = {
       openCodeContext: 'OpenCode IDE bridge',
       openCodeContextDesc: 'Termy exposes the active Obsidian file and selection through the IDE bridge that OpenCode detects automatically, so the built-in launcher starts OpenCode directly.',
       agentCliContext: 'Agent context snapshot',
-      agentCliContextDesc: 'Termy writes a lightweight Obsidian context snapshot under the plugin directory and exposes its path through TERMY_CONTEXT_PATH and TERMY_CONTEXT_INSTRUCTIONS_PATH. The built-in Codex workflow uses a short prompt that points to those files, without MCP registration.',
+      agentCliContextDesc: 'Termy writes a lightweight Obsidian context snapshot under the plugin directory and exposes its path through TERMY_CONTEXT_PATH. For Codex, Termy also writes a vault-local Skill so the built-in launcher can start codex without prompt injection.',
       offlineMode: 'Offline mode',
       offlineModeDesc: 'When enabled, skip binary version checks and automatic downloads',
       binaryDownloadSource: 'Binary download source',

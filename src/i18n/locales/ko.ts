@@ -280,7 +280,7 @@ export const ko: TranslationKeys = {
       openCodeContext: 'OpenCode IDE bridge',
       openCodeContextDesc: 'Termy는 OpenCode가 자동 감지하는 IDE bridge를 통해 현재 Obsidian 파일과 선택 영역을 제공하므로 기본 실행기는 OpenCode를 직접 시작합니다.',
       agentCliContext: 'Agent 컨텍스트 스냅샷',
-      agentCliContextDesc: 'Termy는 플러그인 디렉터리에 가벼운 Obsidian 컨텍스트 스냅샷을 기록하고 TERMY_CONTEXT_PATH 및 TERMY_CONTEXT_INSTRUCTIONS_PATH로 경로를 제공합니다. 기본 Codex 워크플로는 짧은 프롬프트로 해당 파일을 가리키므로 MCP 등록이 필요하지 않습니다.',
+      agentCliContextDesc: 'Termy는 플러그인 디렉터리에 가벼운 Obsidian 컨텍스트 스냅샷을 기록하고 TERMY_CONTEXT_PATH로 경로를 제공합니다. Codex의 경우 Termy가 vault 로컬 Skill도 기록하므로 기본 실행기는 prompt 주입 없이 codex를 직접 시작할 수 있습니다.',
       offlineMode: '오프라인 모드',
       offlineModeDesc: '활성화 시 바이너리 버전 확인과 자동 다운로드를 건너뜀',
       binaryDownloadSource: '바이너리 다운로드 소스',

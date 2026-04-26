@@ -280,7 +280,7 @@ export const zhCN: TranslationKeys = {
       openCodeContext: 'OpenCode IDE bridge',
       openCodeContextDesc: 'Termy 会通过 OpenCode 已能自动识别的 IDE bridge 暴露当前 Obsidian 文件与选区，因此内置启动器会直接启动 OpenCode。',
       agentCliContext: 'Agent 上下文快照',
-      agentCliContextDesc: 'Termy 会在插件目录下写入轻量的 Obsidian 上下文快照，并通过 TERMY_CONTEXT_PATH 与 TERMY_CONTEXT_INSTRUCTIONS_PATH 暴露路径。内置 Codex 工作流会用短 prompt 指向这些文件，不需要 MCP 注册。',
+      agentCliContextDesc: 'Termy 会在插件目录下写入轻量的 Obsidian 上下文快照，并通过 TERMY_CONTEXT_PATH 暴露路径。对于 Codex，Termy 还会写入 vault 本地 Skill，因此内置启动器可直接启动 codex，不再注入 prompt。',
       offlineMode: '离线模式',
       offlineModeDesc: '启用后，跳过二进制版本检查与自动下载',
       binaryDownloadSource: '二进制下载来源',

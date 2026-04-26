@@ -2,11 +2,20 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  CODEX_LAUNCH_COMMAND,
   DEFAULT_PRESET_SCRIPTS,
   OPENCODE_LAUNCH_COMMAND,
   isContextAwarePresetScript,
   normalizePresetScriptsByCurrentDefaults,
 } from './settings.ts';
+
+test('Codex built-in launcher starts Codex without prompt injection', () => {
+  const codex = DEFAULT_PRESET_SCRIPTS.find((script) => script.id === 'codex');
+  const launchAction = codex?.actions.find((action) => action.id === 'action-codex');
+
+  assert.equal(CODEX_LAUNCH_COMMAND, 'codex');
+  assert.equal(launchAction?.value, CODEX_LAUNCH_COMMAND);
+});
 
 test('OpenCode built-in launcher starts the IDE bridge client directly', () => {
   const openCode = DEFAULT_PRESET_SCRIPTS.find((script) => script.id === 'opencode');
@@ -69,6 +78,18 @@ test('current built-in workflow order stays unchanged', () => {
 });
 
 test('built-in workflow commands are sourced from current defaults', () => {
+  const staleCodex = {
+    ...findDefaultPresetScript('codex'),
+    actions: [
+      {
+        id: 'action-codex',
+        type: 'terminal-command' as const,
+        value: 'codex "stale context prompt"',
+        enabled: true,
+        note: 'stale prompt command',
+      },
+    ],
+  };
   const staleOpenCode = {
     ...findDefaultPresetScript('opencode'),
     icon: 'terminal',
@@ -83,9 +104,11 @@ test('built-in workflow commands are sourced from current defaults', () => {
     ],
     showInStatusBar: false,
   };
-  const [normalizedOpenCode] = normalizePresetScriptsByCurrentDefaults([staleOpenCode]);
+  const [normalizedCodex, normalizedOpenCode] = normalizePresetScriptsByCurrentDefaults([staleCodex, staleOpenCode]);
+  const codexLaunchAction = normalizedCodex?.actions.find((action) => action.id === 'action-codex');
   const launchAction = normalizedOpenCode?.actions.find((action) => action.id === 'action-opencode');
 
+  assert.equal(codexLaunchAction?.value, CODEX_LAUNCH_COMMAND);
   assert.equal(normalizedOpenCode?.icon, 'opencode');
   assert.equal(normalizedOpenCode?.showInStatusBar, false);
   assert.equal(launchAction?.value, OPENCODE_LAUNCH_COMMAND);

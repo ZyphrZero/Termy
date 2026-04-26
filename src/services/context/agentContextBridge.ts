@@ -5,14 +5,14 @@ import type { App, Editor, EventRef, MarkdownView, TFile, WorkspaceLeaf } from '
 import { normalizePath } from 'obsidian';
 import {
   buildAgentContextTerminalEnv,
-  TERMY_CONTEXT_INSTRUCTIONS_PATH_ENV,
-  TERMY_CONTEXT_PATH_ENV,
+  renderTermyCodexSkill,
+  TERMY_CODEX_SKILL_MANAGED_MARKER,
+  TERMY_CODEX_SKILL_RELATIVE_PATH,
 } from './agentContext';
 import { debugLog, errorLog } from '@/utils/logger';
 
 const CONTEXT_DIR_NAME = 'agent-context';
 const CONTEXT_FILE_NAME = 'obsidian-context.json';
-const CONTEXT_INSTRUCTIONS_FILE_NAME = 'obsidian-context.md';
 const POLL_INTERVAL_MS = 250;
 
 type EditorContext = {
@@ -61,7 +61,6 @@ export class AgentContextBridge {
   private readonly eventRefs: EventRef[] = [];
   private readonly contextDir: string;
   private readonly contextFilePath: string;
-  private readonly contextInstructionsFilePath: string;
 
   private lastSerializedSnapshot = '';
   private pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -71,7 +70,6 @@ export class AgentContextBridge {
     this.app = app;
     this.contextDir = path.join(pluginDir, CONTEXT_DIR_NAME);
     this.contextFilePath = path.join(this.contextDir, CONTEXT_FILE_NAME);
-    this.contextInstructionsFilePath = path.join(this.contextDir, CONTEXT_INSTRUCTIONS_FILE_NAME);
   }
 
   async start(): Promise<void> {
@@ -80,6 +78,7 @@ export class AgentContextBridge {
     }
 
     fs.mkdirSync(this.contextDir, { recursive: true });
+    this.syncCodexSkill();
     this.refreshSnapshot(true);
 
     this.eventRefs.push(
@@ -114,15 +113,11 @@ export class AgentContextBridge {
   }
 
   getTerminalEnv(): Record<string, string> {
-    return buildAgentContextTerminalEnv(this.contextFilePath, this.contextInstructionsFilePath);
+    return buildAgentContextTerminalEnv(this.contextFilePath);
   }
 
   getContextFilePath(): string {
     return this.contextFilePath;
-  }
-
-  getContextInstructionsFilePath(): string {
-    return this.contextInstructionsFilePath;
   }
 
   private refreshSnapshot(force = false): void {
@@ -134,10 +129,38 @@ export class AgentContextBridge {
       }
 
       fs.writeFileSync(this.contextFilePath, serialized, 'utf8');
-      fs.writeFileSync(this.contextInstructionsFilePath, this.renderInstructions(), 'utf8');
       this.lastSerializedSnapshot = serialized;
     } catch (error) {
       errorLog('[AgentContextBridge] Failed to refresh agent context snapshot:', error);
+    }
+  }
+
+  private syncCodexSkill(): void {
+    try {
+      const vaultRoot = this.getVaultRoot();
+      if (!vaultRoot) {
+        return;
+      }
+
+      const skillFilePath = path.join(vaultRoot, TERMY_CODEX_SKILL_RELATIVE_PATH);
+      const skillContent = renderTermyCodexSkill();
+
+      if (fs.existsSync(skillFilePath)) {
+        const currentContent = fs.readFileSync(skillFilePath, 'utf8');
+        if (currentContent === skillContent) {
+          return;
+        }
+        if (!currentContent.includes(TERMY_CODEX_SKILL_MANAGED_MARKER)) {
+          debugLog(`[AgentContextBridge] Existing unmanaged Codex skill found at ${skillFilePath}; leaving it unchanged`);
+          return;
+        }
+      }
+
+      fs.mkdirSync(path.dirname(skillFilePath), { recursive: true });
+      fs.writeFileSync(skillFilePath, skillContent, 'utf8');
+      debugLog(`[AgentContextBridge] Wrote Codex context skill to ${skillFilePath}`);
+    } catch (error) {
+      errorLog('[AgentContextBridge] Failed to sync Codex context skill:', error);
     }
   }
 
@@ -190,22 +213,6 @@ export class AgentContextBridge {
       openFiles,
       selection,
     };
-  }
-
-  private renderInstructions(): string {
-    return [
-      '# Termy Obsidian Context',
-      '',
-      `Latest context JSON: ${this.contextFilePath}`,
-      '',
-      'When current Obsidian state matters, read the JSON file before answering.',
-      'Re-read it after task switches, long conversations, or whenever the current note, selection, open files, or vault root may have changed.',
-      'The JSON contains vaultRoot, workspaceFolders, activeFile, openFiles, and selection.',
-      '',
-      'Environment variables exposed to Termy terminals:',
-      `- ${TERMY_CONTEXT_PATH_ENV}: ${this.contextFilePath}`,
-      `- ${TERMY_CONTEXT_INSTRUCTIONS_PATH_ENV}: ${this.contextInstructionsFilePath}`,
-    ].join('\n');
   }
 
   private getActiveEditorContext(): EditorContext {

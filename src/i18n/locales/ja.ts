@@ -280,7 +280,7 @@ export const ja: TranslationKeys = {
       openCodeContext: 'OpenCode IDE bridge',
       openCodeContextDesc: 'Termy は OpenCode が自動検出できる IDE bridge 経由で現在の Obsidian ファイルと選択範囲を公開するため、内蔵ランチャーは OpenCode を直接起動します。',
       agentCliContext: 'Agent コンテキストスナップショット',
-      agentCliContextDesc: 'Termy はプラグインディレクトリに軽量な Obsidian コンテキストスナップショットを書き込み、TERMY_CONTEXT_PATH と TERMY_CONTEXT_INSTRUCTIONS_PATH でパスを公開します。組み込みの Codex ワークフローは短いプロンプトでこれらのファイルを指し示すため、MCP 登録は不要です。',
+      agentCliContextDesc: 'Termy はプラグインディレクトリに軽量な Obsidian コンテキストスナップショットを書き込み、TERMY_CONTEXT_PATH でパスを公開します。Codex 向けには vault ローカルの Skill も書き込むため、組み込みランチャーは prompt を注入せずに codex を直接起動できます。',
       offlineMode: 'オフラインモード',
       offlineModeDesc: '有効にするとバイナリのバージョン確認と自動ダウンロードをスキップ',
       binaryDownloadSource: 'バイナリのダウンロード元',

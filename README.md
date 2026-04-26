@@ -63,12 +63,12 @@ Termy is built for people who already live in Obsidian and do real work in a ter
 
 ### AI & Coding Integrations
 
-- Claude Code sessions launched from a regular local `cmd` or PowerShell window run outside Obsidian, so they cannot automatically know which note is open, which vault/workspace directory is active, or what text is selected.
-- Claude Code sessions launched from Termy inside Obsidian can use Termy's IDE bridge to access the active Obsidian file, vault/workspace folder, and current or latest editor selection.
-- Agent CLI sessions launched from Termy receive lightweight context snapshot paths through environment variables. Codex CLI receives a context-instructions pointer through its launch command, while OpenCode connects through Termy's IDE bridge automatically.
-- Termy writes the shared context snapshot under the Termy plugin directory at `.obsidian/plugins/<plugin-id>/agent-context/obsidian-context.json`.
-- Agent context snapshots can include active file, current selection, open files, and vault/workspace metadata.
-- Agent context handoff does not require MCP registration or global CLI configuration changes.
+> [!NOTE]
+> Claude Code, OpenCode, or Codex sessions started from an external terminal are ordinary CLI processes outside Termy's Obsidian integration layer, so they cannot automatically know the active note, vault/workspace root, or editor selection.
+
+- Termy starts AI CLIs inside the current vault context, where the active note, selection, open files, and workspace root can be available to coding tasks.
+- Claude Code and OpenCode use Termy's IDE bridge; Codex uses a vault-local Skill at `.agents/skills/termy-obsidian-context/SKILL.md`.
+- The built-in Codex launcher starts `codex` directly, without MCP registration or global CLI configuration changes.
 
 ### Appearance & Ergonomics
 
@@ -203,14 +203,14 @@ graph LR
   B --> C[Native Rust PTY Server]
   A --> D[Workflow Launcher]
   A --> E[Context Services]
-  E --> F[Claude Code]
-  E --> G[Agent Context Snapshot]
-  E --> H[AI CLI Launchers]
+  E --> F[Claude/OpenCode IDE Bridge]
+  E --> G[Codex Skill Context]
+  D --> H[AI CLI Launchers]
 ```
 
 - **Frontend**: TypeScript, Obsidian plugin APIs, and xterm.js.
 - **Backend**: Native Rust PTY server built on `portable-pty`.
-- **Bridges**: Claude Code/OpenCode-compatible IDE bridge and shared agent context snapshots for Codex CLI and other terminal agents.
+- **AI context**: Claude Code and OpenCode integrate through the IDE bridge; Codex integrates through a vault-local Skill.
 - **Packaging**: Generated plugin assets are emitted as `main.js` and `styles.css`; native binaries are copied to `binaries/`.
 
 ## License

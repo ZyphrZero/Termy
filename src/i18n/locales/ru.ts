@@ -280,7 +280,7 @@ export const ru: TranslationKeys = {
       openCodeContext: 'IDE bridge OpenCode',
       openCodeContextDesc: 'Termy передаёт текущий файл и выделение Obsidian через IDE bridge, который OpenCode обнаруживает автоматически, поэтому встроенный запускатель открывает OpenCode напрямую.',
       agentCliContext: 'Снимок контекста Agent',
-      agentCliContextDesc: 'Termy записывает облегченный снимок контекста Obsidian в директории плагина и передает пути через TERMY_CONTEXT_PATH и TERMY_CONTEXT_INSTRUCTIONS_PATH. Встроенный workflow Codex использует короткий prompt, указывающий на эти файлы, без регистрации MCP.',
+      agentCliContextDesc: 'Termy записывает облегченный снимок контекста Obsidian в директории плагина и передает путь через TERMY_CONTEXT_PATH. Для Codex Termy также записывает локальный для vault Skill, поэтому встроенный запускатель может стартовать codex без внедрения prompt.',
       offlineMode: 'Офлайн-режим',
       offlineModeDesc: 'При включении пропускает проверку версии бинарника и автозагрузку',
       binaryDownloadSource: 'Источник загрузки бинарника',
