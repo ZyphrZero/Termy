@@ -18,7 +18,7 @@ English / [简体中文](./README_ZH.md)
 [Install](#installation) · [Quick Start](#quick-start) · [Features](#features) · [Screenshots](#visual-tour) · [Report Issues](https://github.com/ZyphrZero/Termy/issues) · [Telegram](https://t.me/+t6oRqhaw8c1jNzE1)
 
 <p align="center">
-  <img src="assets/termy-workspace-overview.png" width="980" alt="Termy main workspace preview with Obsidian, Codex CLI, and Claude Code" />
+  <img src="assets/termy-workspace-overview.png" width="980" alt="Termy main workspace preview with Obsidian, Codex CLI, OpenCode, and Claude Code" />
 </p>
 
 </div>
@@ -33,7 +33,7 @@ Termy is built for people who already live in Obsidian and do real work in a ter
 - **Real terminal UX**: xterm.js frontend with search, copy/paste, prompt navigation, split panes, and multi-session support.
 - **Workflow-driven automation**: Run reusable terminal, Obsidian-command, and external-link workflows from the status bar or command palette.
 - **File-aware interactions**: Drag text, files, and folders into the terminal and open file references directly from terminal output.
-- **AI-aware context handoff**: Claude Code and Codex CLI integrations can inherit active note context from Obsidian.
+- **AI-aware context handoff**: Claude Code, Codex CLI, and OpenCode integrations can inherit active note context from Obsidian.
 - **Desktop-first customization**: Shell selection, tab/split placement rules, theme sync, background images, blur, renderer controls, and Windows input handling.
 
 ## Features
@@ -52,7 +52,7 @@ Termy is built for people who already live in Obsidian and do real work in a ter
 - Combine terminal commands, Obsidian commands, and external links in a single workflow.
 - Launch workflows from the status bar menu, command palette, or built-in workflow commands.
 - Decide whether each workflow appears in the status bar, opens a terminal, starts a fresh terminal instance, or renames the target tab.
-- Start quickly with built-in launchers for Claude Code, Codex CLI, and Gemini CLI.
+- Start quickly with built-in launchers for Claude Code, Codex CLI, OpenCode, and Gemini CLI.
 
 ### Obsidian Interactions
 
@@ -63,10 +63,12 @@ Termy is built for people who already live in Obsidian and do real work in a ter
 
 ### AI & Coding Integrations
 
-- Claude Code sessions can receive active Obsidian file and selection context.
-- Codex CLI integration can auto-register a local MCP server named `termy-context`.
-- Codex context snapshots can include active file, current selection, open files, and vault/workspace metadata.
-- MCP registration can stay in sync automatically, be re-registered manually, or be removed from settings.
+- Claude Code sessions launched from a regular local `cmd` or PowerShell window run outside Obsidian, so they cannot automatically know which note is open, which vault/workspace directory is active, or what text is selected.
+- Claude Code sessions launched from Termy inside Obsidian can use Termy's IDE bridge to access the active Obsidian file, vault/workspace folder, and current or latest editor selection.
+- Agent CLI sessions launched from Termy receive lightweight context snapshot paths through environment variables, and built-in launchers for Codex CLI and OpenCode start with a short pointer to the context instructions.
+- Termy writes the shared context snapshot under the Termy plugin directory at `.obsidian/plugins/<plugin-id>/agent-context/obsidian-context.json`.
+- Agent context snapshots can include active file, current selection, open files, and vault/workspace metadata.
+- Agent context handoff does not require MCP registration or global CLI configuration changes.
 
 ### Appearance & Ergonomics
 
@@ -100,7 +102,7 @@ Termy is built for people who already live in Obsidian and do real work in a ter
       <sub>Status bar workflow launcher</sub>
     </td>
     <td width="66%" align="center">
-      <img src="assets/termy-settings-workflows.png" alt="Termy workflow settings with built-in Claude Code, Codex CLI, and Gemini CLI entries" />
+      <img src="assets/termy-settings-workflows.png" alt="Termy workflow settings with built-in Claude Code, Codex CLI, OpenCode, and Gemini CLI entries" />
       <br />
       <sub>Workflow configuration, instance behavior, and built-in launchers</sub>
     </td>
@@ -202,13 +204,13 @@ graph LR
   A --> D[Workflow Launcher]
   A --> E[Context Services]
   E --> F[Claude Code]
-  E --> G[Codex CLI MCP]
-  E --> H[Gemini CLI]
+  E --> G[Agent Context Snapshot]
+  E --> H[AI CLI Launchers]
 ```
 
 - **Frontend**: TypeScript, Obsidian plugin APIs, and xterm.js.
 - **Backend**: Native Rust PTY server built on `portable-pty`.
-- **Bridges**: Claude Code IDE bridge, Codex CLI context bridge, and local MCP registration.
+- **Bridges**: Claude Code IDE bridge and shared agent context snapshots for Codex CLI, OpenCode, and other terminal agents.
 - **Packaging**: Generated plugin assets are emitted as `main.js` and `styles.css`; native binaries are copied to `binaries/`.
 
 ## License

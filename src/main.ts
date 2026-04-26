@@ -1,6 +1,5 @@
 import type { View, WorkspaceLeaf } from 'obsidian';
 import { addIcon, FileSystemAdapter, Notice, Plugin, normalizePath } from 'obsidian';
-import * as fs from 'fs';
 import {
   DEFAULT_TERMINAL_SETTINGS,
   type PresetScript,
@@ -13,7 +12,7 @@ import { TerminalSettingTab } from './settings/settingsTab';
 import type { TerminalService } from './services/terminal/terminalService';
 import type { ServerManager } from './services/server/serverManager';
 import type { ClaudeCodeIdeBridge } from './services/claudeCode/ideBridge';
-import type { CodexCliContextBridge } from './services/codexCli/contextBridge';
+import type { AgentContextBridge } from './services/context/agentContextBridge';
 import { TERMINAL_VIEW_TYPE, TerminalView } from './ui/terminal/terminalView';
 import { ChangelogModal } from './ui/changelog/changelogModal';
 import { i18n, t } from './i18n';
@@ -22,7 +21,6 @@ import { createTermyLogoSvg, createTermyLogoSvgMarkup, TERMY_RIBBON_ICON_ID } fr
 import { FeatureVisibilityManager } from './services/visibility';
 import { shell } from 'electron';
 import type { TerminalInstance } from './services/terminal/terminalInstance';
-import { ensureCodexCliMcpConfigured, removeCodexCliMcpConfigured } from './services/codexCli/mcpConfigurator';
 import { resolveChangelogSection } from './utils/changelog';
 import embeddedChangelogContent from '../CHANGELOG.md';
 
@@ -53,8 +51,7 @@ export default class TerminalPlugin extends Plugin {
   private _serverManager: ServerManager | null = null;
   private _terminalService: TerminalService | null = null;
   private _claudeCodeIdeBridge: ClaudeCodeIdeBridge | null = null;
-  private _codexCliContextBridge: CodexCliContextBridge | null = null;
-  private _codexCliMcpConfigPromise: Promise<void> | null = null;
+  private _agentContextBridge: AgentContextBridge | null = null;
   private _changelogContentCache: string | null = null;
   private _changelogSectionCache: Map<string, ChangelogDetails> = new Map();
   
@@ -100,8 +97,7 @@ export default class TerminalPlugin extends Plugin {
    */
   async getTerminalService(): Promise<TerminalService> {
     await this.initializeClaudeCodeIdeBridge();
-    await this.initializeCodexCliContextBridge();
-    await this.ensureCodexCliMcpConfiguredBestEffort();
+    await this.initializeAgentContextBridge();
 
     if (!this._terminalService) {
       debugLog('[TerminalPlugin] Initializing TerminalService...');
@@ -115,7 +111,7 @@ export default class TerminalPlugin extends Plugin {
           serverManager,
           () => ({
             ...(this._claudeCodeIdeBridge?.getTerminalEnv() ?? {}),
-            ...(this._codexCliContextBridge?.getTerminalEnv() ?? {}),
+            ...(this._agentContextBridge?.getTerminalEnv() ?? {}),
           })
         );
       
@@ -162,11 +158,8 @@ export default class TerminalPlugin extends Plugin {
     void this.initializeClaudeCodeIdeBridge().catch((error) => {
       errorLog('[TerminalPlugin] Failed to initialize Claude Code IDE bridge:', error);
     });
-    void this.initializeCodexCliContextBridge().catch((error) => {
-      errorLog('[TerminalPlugin] Failed to initialize Codex CLI context bridge:', error);
-    });
-    void this.ensureCodexCliMcpConfiguredBestEffort().catch((error) => {
-      errorLog('[TerminalPlugin] Failed to auto-configure Codex MCP server:', error);
+    void this.initializeAgentContextBridge().catch((error) => {
+      errorLog('[TerminalPlugin] Failed to initialize agent context bridge:', error);
     });
 
     // Delay UI initialization until the layout is ready whenever possible
@@ -233,13 +226,13 @@ export default class TerminalPlugin extends Plugin {
       }
     }
 
-    if (this._codexCliContextBridge) {
+    if (this._agentContextBridge) {
       try {
-        debugLog('[TerminalPlugin] Shutting down Codex CLI context bridge...');
-        await this._codexCliContextBridge.stop();
-        debugLog('[TerminalPlugin] Codex CLI context bridge stopped');
+        debugLog('[TerminalPlugin] Shutting down agent context bridge...');
+        await this._agentContextBridge.stop();
+        debugLog('[TerminalPlugin] Agent context bridge stopped');
       } catch (error) {
-        errorLog('[TerminalPlugin] Failed to stop Codex CLI context bridge:', error);
+        errorLog('[TerminalPlugin] Failed to stop agent context bridge:', error);
       }
     }
 
@@ -255,94 +248,13 @@ export default class TerminalPlugin extends Plugin {
     await this._claudeCodeIdeBridge.start();
   }
 
-  private async initializeCodexCliContextBridge(): Promise<void> {
-    if (!this._codexCliContextBridge) {
-      const { CodexCliContextBridge } = await import('./services/codexCli/contextBridge');
-      this._codexCliContextBridge = new CodexCliContextBridge(this.app);
+  private async initializeAgentContextBridge(): Promise<void> {
+    if (!this._agentContextBridge) {
+      const { AgentContextBridge } = await import('./services/context/agentContextBridge');
+      this._agentContextBridge = new AgentContextBridge(this.app, this.getPluginDir());
     }
 
-    await this._codexCliContextBridge.start();
-  }
-
-  private getCodexCliMcpServerPath(): string | null {
-    return this.getCodexCliMcpServerInfo().existingPath;
-  }
-
-  private getCodexCliMcpServerInfo(): { expectedPath: string; existingPath: string | null } {
-    const pluginDir = this.getPluginDir();
-    const ext = process.platform === 'win32' ? '.exe' : '';
-    const filename = `termy-server-${process.platform}-${process.arch}${ext}`;
-    const expectedPath = normalizePath(`${pluginDir}/binaries/${filename}`);
-
-    return {
-      expectedPath,
-      existingPath: fs.existsSync(expectedPath) ? expectedPath : null,
-    };
-  }
-
-  async ensureCodexCliMcpConfigured(): Promise<void> {
-    return this.ensureCodexCliMcpConfiguredWithOptions();
-  }
-
-  private async ensureCodexCliMcpConfiguredBestEffort(): Promise<void> {
-    return this.ensureCodexCliMcpConfiguredWithOptions({ allowMissingCli: true });
-  }
-
-  private async ensureCodexCliMcpConfiguredWithOptions(options?: { allowMissingCli?: boolean }): Promise<void> {
-    if (this._codexCliMcpConfigPromise) {
-      return this._codexCliMcpConfigPromise;
-    }
-
-    this._codexCliMcpConfigPromise = this.syncCodexCliMcpConfiguration(options);
-    try {
-      await this._codexCliMcpConfigPromise;
-    } finally {
-      this._codexCliMcpConfigPromise = null;
-    }
-  }
-
-  private async syncCodexCliMcpConfiguration(options?: { allowMissingCli?: boolean }): Promise<void> {
-    await this.initializeCodexCliContextBridge();
-
-    if (!this.settings.serverConnection.autoRegisterCodexCliMcp) {
-      await removeCodexCliMcpConfigured(options);
-      return;
-    }
-
-    const binaryPath = this.getCodexCliMcpServerPath();
-    const snapshotFilePath = this._codexCliContextBridge?.getContextFilePath();
-    if (!binaryPath || !snapshotFilePath) {
-      return;
-    }
-
-    await ensureCodexCliMcpConfigured(binaryPath, snapshotFilePath, options);
-  }
-
-  async forceRegisterCodexCliMcp(): Promise<void> {
-    await this.initializeCodexCliContextBridge();
-
-    const { expectedPath, existingPath } = this.getCodexCliMcpServerInfo();
-    const binaryPath = existingPath;
-    const snapshotFilePath = this._codexCliContextBridge?.getContextFilePath();
-    if (!binaryPath && !snapshotFilePath) {
-      throw new Error(
-        `Codex MCP binary is missing at ${expectedPath} and snapshot path is unavailable`,
-      );
-    }
-
-    if (!binaryPath) {
-      throw new Error(`Codex MCP binary is missing at ${expectedPath}`);
-    }
-
-    if (!snapshotFilePath) {
-      throw new Error('Codex MCP snapshot path is unavailable');
-    }
-
-    await ensureCodexCliMcpConfigured(binaryPath, snapshotFilePath);
-  }
-
-  async removeCodexCliMcpRegistration(): Promise<void> {
-    await removeCodexCliMcpConfigured();
+    await this._agentContextBridge.start();
   }
 
   showChangelog(version = this.manifest.version): void {
@@ -470,7 +382,6 @@ export default class TerminalPlugin extends Plugin {
         ? 'github-release'
         : 'cloudflare-r2',
       offlineMode: Boolean(serverConnection?.offlineMode),
-      autoRegisterCodexCliMcp: serverConnection?.autoRegisterCodexCliMcp !== false,
     };
   }
 
@@ -1231,7 +1142,7 @@ export default class TerminalPlugin extends Plugin {
 
   private normalizePresetScript(script: PresetScript): PresetScript {
     const sourceActions = Array.isArray(script.actions) ? script.actions : [];
-    const normalizedActions = sourceActions
+    const actions = sourceActions
       .map((action) => this.normalizeWorkflowAction(action))
       .filter((action) => action.value.length > 0);
 
@@ -1242,7 +1153,7 @@ export default class TerminalPlugin extends Plugin {
         : undefined,
       name: (script.name || '').trim(),
       icon: (script.icon || '').trim(),
-      actions: normalizedActions,
+      actions,
       terminalTitle: (script.terminalTitle || '').trim(),
       showInStatusBar: script.showInStatusBar !== false,
       autoOpenTerminal: script.autoOpenTerminal !== false,
@@ -1286,7 +1197,7 @@ export default class TerminalPlugin extends Plugin {
       autoOpenTerminal: true,
       runInNewTerminal: false,
     };
-    const modal = new PresetScriptModal(this.app, this, newScript, (updatedScript: PresetScript) => {
+    const modal = new PresetScriptModal(this.app, newScript, (updatedScript: PresetScript) => {
       scripts.push(updatedScript);
       this.settings.presetScripts = scripts;
       void this.saveSettings();

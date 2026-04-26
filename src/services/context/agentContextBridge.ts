@@ -1,22 +1,19 @@
 import * as fs from 'fs';
-import { homedir } from 'os';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 import type { App, Editor, EventRef, MarkdownView, TFile, WorkspaceLeaf } from 'obsidian';
 import { normalizePath } from 'obsidian';
 import {
-  buildCodexCliTerminalEnv,
-  CODEX_IDE_CONTEXT_PATH_ENV,
-  CODEX_IDE_CONTEXT_PROMPT_PATH_ENV,
-} from '../context/agentContext';
+  buildAgentContextTerminalEnv,
+  TERMY_CONTEXT_INSTRUCTIONS_PATH_ENV,
+  TERMY_CONTEXT_PATH_ENV,
+} from './agentContext';
 import { debugLog, errorLog } from '@/utils/logger';
 
-const CODEX_DIR = path.join(homedir(), '.codex');
-const CONTEXT_FILE_NAME = 'ide-context.json';
-const CONTEXT_PROMPT_FILE_NAME = 'ide-context-prompt.md';
+const CONTEXT_DIR_NAME = 'agent-context';
+const CONTEXT_FILE_NAME = 'obsidian-context.json';
+const CONTEXT_INSTRUCTIONS_FILE_NAME = 'obsidian-context.md';
 const POLL_INTERVAL_MS = 250;
-
-export { CODEX_IDE_CONTEXT_PATH_ENV, CODEX_IDE_CONTEXT_PROMPT_PATH_ENV };
 
 type EditorContext = {
   editor: Editor | null;
@@ -48,7 +45,7 @@ type OpenFileContext = FileContext & {
   isActive: boolean;
 };
 
-type CodexIdeContextSnapshot = {
+type AgentContextSnapshot = {
   schemaVersion: 1;
   source: 'termy';
   updatedAt: string;
@@ -59,20 +56,22 @@ type CodexIdeContextSnapshot = {
   selection: SelectionContext | null;
 };
 
-export class CodexCliContextBridge {
+export class AgentContextBridge {
   private readonly app: App;
   private readonly eventRefs: EventRef[] = [];
+  private readonly contextDir: string;
   private readonly contextFilePath: string;
-  private readonly contextPromptFilePath: string;
+  private readonly contextInstructionsFilePath: string;
 
   private lastSerializedSnapshot = '';
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private started = false;
 
-  constructor(app: App) {
+  constructor(app: App, pluginDir: string) {
     this.app = app;
-    this.contextFilePath = path.join(CODEX_DIR, CONTEXT_FILE_NAME);
-    this.contextPromptFilePath = path.join(CODEX_DIR, CONTEXT_PROMPT_FILE_NAME);
+    this.contextDir = path.join(pluginDir, CONTEXT_DIR_NAME);
+    this.contextFilePath = path.join(this.contextDir, CONTEXT_FILE_NAME);
+    this.contextInstructionsFilePath = path.join(this.contextDir, CONTEXT_INSTRUCTIONS_FILE_NAME);
   }
 
   async start(): Promise<void> {
@@ -80,7 +79,7 @@ export class CodexCliContextBridge {
       return;
     }
 
-    fs.mkdirSync(CODEX_DIR, { recursive: true });
+    fs.mkdirSync(this.contextDir, { recursive: true });
     this.refreshSnapshot(true);
 
     this.eventRefs.push(
@@ -93,7 +92,7 @@ export class CodexCliContextBridge {
     this.pollTimer = setInterval(() => this.refreshSnapshot(), POLL_INTERVAL_MS);
     this.started = true;
 
-    debugLog(`[CodexCliContextBridge] Writing context snapshots to ${this.contextFilePath}`);
+    debugLog(`[AgentContextBridge] Writing context snapshots to ${this.contextFilePath}`);
   }
 
   async stop(): Promise<void> {
@@ -115,15 +114,15 @@ export class CodexCliContextBridge {
   }
 
   getTerminalEnv(): Record<string, string> {
-    return buildCodexCliTerminalEnv(this.contextFilePath, this.contextPromptFilePath);
+    return buildAgentContextTerminalEnv(this.contextFilePath, this.contextInstructionsFilePath);
   }
 
   getContextFilePath(): string {
     return this.contextFilePath;
   }
 
-  getContextPromptFilePath(): string {
-    return this.contextPromptFilePath;
+  getContextInstructionsFilePath(): string {
+    return this.contextInstructionsFilePath;
   }
 
   private refreshSnapshot(force = false): void {
@@ -135,14 +134,14 @@ export class CodexCliContextBridge {
       }
 
       fs.writeFileSync(this.contextFilePath, serialized, 'utf8');
-      fs.writeFileSync(this.contextPromptFilePath, this.renderPrompt(snapshot), 'utf8');
+      fs.writeFileSync(this.contextInstructionsFilePath, this.renderInstructions(), 'utf8');
       this.lastSerializedSnapshot = serialized;
     } catch (error) {
-      errorLog('[CodexCliContextBridge] Failed to refresh Codex CLI context snapshot:', error);
+      errorLog('[AgentContextBridge] Failed to refresh agent context snapshot:', error);
     }
   }
 
-  private captureSnapshot(): CodexIdeContextSnapshot {
+  private captureSnapshot(): AgentContextSnapshot {
     const { editor, file } = this.getActiveEditorContext();
     const vaultRoot = this.getVaultRoot();
     const activeFile = this.resolveFileContext(file?.path ?? null);
@@ -193,14 +192,19 @@ export class CodexCliContextBridge {
     };
   }
 
-  private renderPrompt(snapshot: CodexIdeContextSnapshot): string {
+  private renderInstructions(): string {
     return [
-      'Use this Obsidian editor context as the starting IDE reference for the current Codex CLI session.',
-      'This snapshot may become stale after launch; read the JSON file again if you need the latest state.',
+      '# Termy Obsidian Context',
       '',
-      '<obsidian_context>',
-      JSON.stringify(snapshot, null, 2),
-      '</obsidian_context>',
+      `Latest context JSON: ${this.contextFilePath}`,
+      '',
+      'When current Obsidian state matters, read the JSON file before answering.',
+      'Re-read it after task switches, long conversations, or whenever the current note, selection, open files, or vault root may have changed.',
+      'The JSON contains vaultRoot, workspaceFolders, activeFile, openFiles, and selection.',
+      '',
+      'Environment variables exposed to Termy terminals:',
+      `- ${TERMY_CONTEXT_PATH_ENV}: ${this.contextFilePath}`,
+      `- ${TERMY_CONTEXT_INSTRUCTIONS_PATH_ENV}: ${this.contextInstructionsFilePath}`,
     ].join('\n');
   }
 

@@ -152,7 +152,6 @@ export interface PresetScript {
 export interface ServerConnectionSettings {
   binaryDownloadSource: BinaryDownloadSource;
   offlineMode: boolean;
-  autoRegisterCodexCliMcp: boolean;
 }
 
 /**
@@ -161,12 +160,20 @@ export interface ServerConnectionSettings {
 export const DEFAULT_SERVER_CONNECTION_SETTINGS: ServerConnectionSettings = {
   binaryDownloadSource: 'cloudflare-r2',
   offlineMode: false,
-  autoRegisterCodexCliMcp: true,
 };
 
 /**
  * Default preset scripts
  */
+export const AGENT_CONTEXT_LAUNCH_PROMPT =
+  'Before answering, read the file path stored in the TERMY_CONTEXT_INSTRUCTIONS_PATH environment variable. It points to Termy Obsidian context instructions. Re-read TERMY_CONTEXT_PATH whenever current note, selection, open files, or vault root matters.';
+
+export const CODEX_CONTEXT_LAUNCH_COMMAND =
+  `codex "${AGENT_CONTEXT_LAUNCH_PROMPT}"`;
+
+export const OPENCODE_CONTEXT_LAUNCH_COMMAND =
+  `opencode --prompt "${AGENT_CONTEXT_LAUNCH_PROMPT}"`;
+
 export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
   {
     id: 'claude-code',
@@ -201,12 +208,30 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
       {
         id: 'action-codex',
         type: 'terminal-command',
-        value: 'codex',
+        value: CODEX_CONTEXT_LAUNCH_COMMAND,
         enabled: true,
-        note: '',
+        note: 'Launch Codex with Obsidian context',
       },
     ],
     terminalTitle: 'Codex',
+    showInStatusBar: true,
+    autoOpenTerminal: true,
+    runInNewTerminal: false,
+  },
+  {
+    id: 'opencode',
+    name: 'OpenCode',
+    icon: 'terminal',
+    actions: [
+      {
+        id: 'action-opencode',
+        type: 'terminal-command',
+        value: OPENCODE_CONTEXT_LAUNCH_COMMAND,
+        enabled: true,
+        note: 'Launch OpenCode with Obsidian context',
+      },
+    ],
+    terminalTitle: 'OpenCode',
     showInStatusBar: true,
     autoOpenTerminal: true,
     runInNewTerminal: false,

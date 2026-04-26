@@ -208,7 +208,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   private themePreviewEl: HTMLElement | null = null;
   private themePreviewContentEl: HTMLElement | null = null;
   private rendererStatusEl: HTMLElement | null = null;
-  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'gemini-cli']);
+  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'opencode', 'gemini-cli']);
 
   /**
    * Render terminal settings
@@ -639,7 +639,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   private openPresetScriptModal(script: PresetScript, isNew: boolean, listEl: HTMLElement): void {
-    const modal = new PresetScriptModal(this.context.app, this.context.plugin, script, (updatedScript) => {
+    const modal = new PresetScriptModal(this.context.app, script, (updatedScript) => {
       const scripts = this.context.plugin.settings.presetScripts ?? [];
       const index = scripts.findIndex(item => item.id === updatedScript.id);
 

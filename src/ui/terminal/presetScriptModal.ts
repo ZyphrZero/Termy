@@ -3,13 +3,12 @@
  */
 
 import type { App } from 'obsidian';
-import { Modal, Notice, Setting, ToggleComponent, setIcon } from 'obsidian';
+import { Modal, Setting, ToggleComponent, setIcon } from 'obsidian';
 import type {
   PresetScript,
   PresetWorkflowAction,
   PresetWorkflowActionType,
 } from '@/settings/settings';
-import type TerminalPlugin from '@/main';
 import { t } from '@/i18n';
 import { PRESET_SCRIPT_ICON_OPTIONS, renderPresetScriptIcon } from './presetScriptIcons';
 import {
@@ -45,8 +44,7 @@ const ACTION_OPTIONS: ActionOption[] = [
 const COMMAND_SUGGESTION_LIMIT = 50;
 
 export class PresetScriptModal extends Modal {
-  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'gemini-cli']);
-  private readonly plugin: TerminalPlugin;
+  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'opencode', 'gemini-cli']);
   private draft: PresetScript;
   private onSubmit: (script: PresetScript) => void;
   private isNew: boolean;
@@ -69,13 +67,11 @@ export class PresetScriptModal extends Modal {
 
   constructor(
     app: App,
-    plugin: TerminalPlugin,
     script: PresetScript,
     onSubmit: (script: PresetScript) => void,
     isNew: boolean,
   ) {
     super(app);
-    this.plugin = plugin;
     this.draft = this.normalizeDraft(script);
     this.onSubmit = onSubmit;
     this.isNew = isNew;
@@ -108,8 +104,8 @@ export class PresetScriptModal extends Modal {
     if (this.draft.id === 'claude-code') {
       this.renderClaudeCodeContextNotice(formEl);
     }
-    if (this.draft.id === 'codex') {
-      this.renderCodexControls(formEl);
+    if (this.draft.id === 'codex' || this.draft.id === 'opencode') {
+      this.renderAgentContextNotice(formEl);
     }
     this.renderToggles(formEl);
     this.renderButtons(contentEl);
@@ -228,78 +224,16 @@ export class PresetScriptModal extends Modal {
     confirmBtn.addEventListener('click', () => this.submit());
   }
 
-  private renderCodexControls(formEl: HTMLElement): void {
-    const settings = this.plugin.settings;
+  private renderAgentContextNotice(formEl: HTMLElement): void {
     const section = this.renderIntegrationSection(
       formEl,
-      'openai',
-      t('settingsDetails.advanced.codexCliIntegration')
+      this.draft.id === 'codex' ? 'openai' : 'terminal',
+      t('settingsDetails.advanced.agentCliIntegration')
     );
 
     new Setting(section)
-      .setName(t('settingsDetails.advanced.codexCliMcp'))
-      .setDesc(t('settingsDetails.advanced.codexCliMcpDesc'));
-
-    new Setting(section)
-      .setName(t('settingsDetails.advanced.codexCliMcpAutoRegister'))
-      .setDesc(t('settingsDetails.advanced.codexCliMcpAutoRegisterDesc'))
-      .addToggle(toggle => toggle
-        .setValue(settings.serverConnection.autoRegisterCodexCliMcp)
-        .onChange((value) => {
-          settings.serverConnection.autoRegisterCodexCliMcp = value;
-          void this.plugin.saveSettings()
-            .then(async () => {
-              if (value) {
-                await this.plugin.ensureCodexCliMcpConfigured();
-                new Notice(t('notices.settings.codexCliMcpRegistered'));
-              } else {
-                await this.plugin.removeCodexCliMcpRegistration();
-                new Notice(t('notices.settings.codexCliMcpRemoved'));
-              }
-            })
-            .catch((error) => {
-              new Notice(
-                value
-                  ? t('notices.settings.codexCliMcpRegisterFailed', { message: error instanceof Error ? error.message : String(error) })
-                  : t('notices.settings.codexCliMcpRemoveFailed', { message: error instanceof Error ? error.message : String(error) }),
-              );
-            });
-        }));
-
-    new Setting(section)
-      .setName(t('settingsDetails.advanced.codexCliMcpReregister'))
-      .setDesc(t('settingsDetails.advanced.codexCliMcpReregisterDesc'))
-      .addButton(button => button
-        .setButtonText(t('settingsDetails.advanced.codexCliMcpReregister'))
-        .onClick(() => {
-          void this.plugin.forceRegisterCodexCliMcp()
-            .then(() => {
-              new Notice(t('notices.settings.codexCliMcpRegistered'));
-            })
-            .catch((error) => {
-              new Notice(
-                t('notices.settings.codexCliMcpRegisterFailed', {
-                  message: error instanceof Error ? error.message : String(error),
-                }),
-              );
-            });
-        }))
-      .addButton(button => button
-        .setButtonText(t('settingsDetails.advanced.codexCliMcpRemove'))
-        .setWarning()
-        .onClick(() => {
-          void this.plugin.removeCodexCliMcpRegistration()
-            .then(() => {
-              new Notice(t('notices.settings.codexCliMcpRemoved'));
-            })
-            .catch((error) => {
-              new Notice(
-                t('notices.settings.codexCliMcpRemoveFailed', {
-                  message: error instanceof Error ? error.message : String(error),
-                }),
-              );
-            });
-        }));
+      .setName(t('settingsDetails.advanced.agentCliContext'))
+      .setDesc(t('settingsDetails.advanced.agentCliContextDesc'));
   }
 
   private renderClaudeCodeContextNotice(formEl: HTMLElement): void {
