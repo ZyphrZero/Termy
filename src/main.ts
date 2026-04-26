@@ -13,6 +13,7 @@ import type { TerminalService } from './services/terminal/terminalService';
 import type { ServerManager } from './services/server/serverManager';
 import type { ClaudeCodeIdeBridge } from './services/claudeCode/ideBridge';
 import type { AgentContextBridge } from './services/context/agentContextBridge';
+import { DevPluginReloader } from './services/devPluginReloader';
 import { TERMINAL_VIEW_TYPE, TerminalView } from './ui/terminal/terminalView';
 import { ChangelogModal } from './ui/changelog/changelogModal';
 import { i18n, t } from './i18n';
@@ -52,6 +53,7 @@ export default class TerminalPlugin extends Plugin {
   private _terminalService: TerminalService | null = null;
   private _claudeCodeIdeBridge: ClaudeCodeIdeBridge | null = null;
   private _agentContextBridge: AgentContextBridge | null = null;
+  private _devPluginReloader: DevPluginReloader | null = null;
   private _changelogContentCache: string | null = null;
   private _changelogSectionCache: Map<string, ChangelogDetails> = new Map();
   
@@ -135,6 +137,7 @@ export default class TerminalPlugin extends Plugin {
     // Set debug mode
     const { setDebugMode } = await import('./utils/logger');
     setDebugMode(this.settings.enableDebugLog);
+    this.initializeDevPluginReloader();
 
     // Initialize the feature visibility manager
     this.featureVisibilityManager = new FeatureVisibilityManager(this);
@@ -188,6 +191,11 @@ export default class TerminalPlugin extends Plugin {
 
   private async handleUnload(): Promise<void> {
     debugLog(t('plugin.unloadingMessage'));
+
+    if (this._devPluginReloader) {
+      this._devPluginReloader.stop();
+      this._devPluginReloader = null;
+    }
 
     // Clean up the feature visibility manager
     if (this.featureVisibilityManager) {
@@ -255,6 +263,19 @@ export default class TerminalPlugin extends Plugin {
     }
 
     await this._agentContextBridge.start();
+  }
+
+  private initializeDevPluginReloader(): void {
+    try {
+      this._devPluginReloader = new DevPluginReloader(
+        this.app,
+        this.manifest.id,
+        this.getPluginDir()
+      );
+      this._devPluginReloader.start();
+    } catch (error) {
+      errorLog('[TerminalPlugin] Failed to initialize dev plugin reloader:', error);
+    }
   }
 
   showChangelog(version = this.manifest.version): void {
