@@ -221,7 +221,7 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
   {
     id: 'opencode',
     name: 'OpenCode',
-    icon: 'terminal',
+    icon: 'opencode',
     actions: [
       {
         id: 'action-opencode',

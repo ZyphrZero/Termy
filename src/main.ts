@@ -1,6 +1,7 @@
 import type { View, WorkspaceLeaf } from 'obsidian';
 import { addIcon, FileSystemAdapter, Notice, Plugin, normalizePath } from 'obsidian';
 import {
+  DEFAULT_PRESET_SCRIPTS,
   DEFAULT_TERMINAL_SETTINGS,
   type PresetScript,
   type PresetWorkflowAction,
@@ -344,9 +345,7 @@ export default class TerminalPlugin extends Plugin {
    */
   async loadSettings() {
     const loaded = await this.loadData();
-    const normalizedPresetScripts = Array.isArray(loaded?.presetScripts)
-      ? loaded.presetScripts.map((script: PresetScript) => this.normalizePresetScript(script))
-      : DEFAULT_TERMINAL_SETTINGS.presetScripts;
+    const normalizedPresetScripts = this.normalizePresetScripts(loaded?.presetScripts);
     this.settings = {
       ...DEFAULT_TERMINAL_SETTINGS,
       ...loaded,
@@ -366,8 +365,7 @@ export default class TerminalPlugin extends Plugin {
    * Save settings
    */
   async saveSettings() {
-    this.settings.presetScripts = (this.settings.presetScripts ?? [])
-      .map((script) => this.normalizePresetScript(script));
+    this.settings.presetScripts = this.normalizePresetScripts(this.settings.presetScripts);
     this.settings.serverConnection = this.normalizeServerConnectionSettings(this.settings.serverConnection);
     await this.saveData(this.settings);
     
@@ -391,6 +389,32 @@ export default class TerminalPlugin extends Plugin {
 
     // Register newly added preset script commands
     this.registerPresetScriptCommands();
+  }
+
+  private normalizePresetScripts(value: unknown): PresetScript[] {
+    const scripts = Array.isArray(value)
+      ? value.map((script: PresetScript) => this.normalizePresetScript(script))
+      : [];
+    const existingIds = new Set(scripts.map((script) => script.id));
+    const merged = [...scripts];
+
+    for (const builtInScript of DEFAULT_PRESET_SCRIPTS) {
+      if (existingIds.has(builtInScript.id)) {
+        continue;
+      }
+
+      merged.push(this.clonePresetScript(builtInScript));
+      existingIds.add(builtInScript.id);
+    }
+
+    return merged;
+  }
+
+  private clonePresetScript(script: PresetScript): PresetScript {
+    return {
+      ...script,
+      actions: script.actions.map((action) => ({ ...action })),
+    };
   }
 
   private normalizeServerConnectionSettings(

@@ -227,7 +227,7 @@ export class PresetScriptModal extends Modal {
   private renderAgentContextNotice(formEl: HTMLElement): void {
     const section = this.renderIntegrationSection(
       formEl,
-      this.draft.id === 'codex' ? 'openai' : 'terminal',
+      this.draft.id === 'codex' ? 'openai' : 'opencode',
       t('settingsDetails.advanced.agentCliIntegration')
     );
 

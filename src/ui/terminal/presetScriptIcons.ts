@@ -75,7 +75,19 @@ const SIMPLE_ICON_MAP: Record<string, SimpleIcon> = {
   yarn: siYarn,
 };
 
+const OPENCODE_ICON_PATHS = {
+  light: [
+    { fill: '#CFCECD', d: 'M180 240H60V120H180V240Z' },
+    { fill: '#211E1E', d: 'M180 60H60V240H180V60ZM240 300H0V0H240V300Z' },
+  ],
+  dark: [
+    { fill: '#4B4646', d: 'M180 240H60V120H180V240Z' },
+    { fill: '#F1ECEC', d: 'M180 60H60V240H180V60ZM240 300H0V0H240V300Z' },
+  ],
+} as const;
+
 const SIMPLE_ICON_ORDER = [
+  'opencode',
   'openai',
   'claude',
   'anthropic',
@@ -195,9 +207,29 @@ function isEmojiIcon(iconName: string): boolean {
   return emojiRegex.test(iconName);
 }
 
+function isOpenCodeIcon(iconName: string): boolean {
+  return iconName.toLowerCase() === 'opencode';
+}
+
 export function isCustomPresetScriptIcon(iconName: string): boolean {
   const lookup = iconName.toLowerCase();
-  return lookup in SIMPLE_ICON_MAP;
+  return isOpenCodeIcon(lookup) || lookup in SIMPLE_ICON_MAP;
+}
+
+function createOpenCodeSvg(variant: keyof typeof OPENCODE_ICON_PATHS): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 240 300');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.classList.add('preset-script-theme-svg', `preset-script-theme-svg-${variant}`);
+
+  for (const { d, fill } of OPENCODE_ICON_PATHS[variant]) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('fill', fill);
+    path.setAttribute('d', d);
+    svg.appendChild(path);
+  }
+
+  return svg;
 }
 
 export function renderPresetScriptIcon(el: HTMLElement, iconName: string): void {
@@ -208,12 +240,22 @@ export function renderPresetScriptIcon(el: HTMLElement, iconName: string): void 
 
   el.removeClass('preset-script-custom-icon');
   el.removeClass('preset-script-emoji-icon');
+  el.removeClass('preset-script-themed-icon');
   el.removeAttribute('data-icon');
   el.style.removeProperty('--preset-script-icon-color');
 
   if (rawInput && isEmojiIcon(rawInput)) {
     el.addClass('preset-script-emoji-icon');
     el.textContent = rawInput;
+    return;
+  }
+
+  if (isOpenCodeIcon(lookup)) {
+    el.addClass('preset-script-custom-icon');
+    el.addClass('preset-script-themed-icon');
+    el.setAttr('data-icon', lookup);
+    el.appendChild(createOpenCodeSvg('light'));
+    el.appendChild(createOpenCodeSvg('dark'));
     return;
   }
 

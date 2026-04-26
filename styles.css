@@ -862,6 +862,18 @@
   color: var(--preset-script-icon-color, currentColor);
 }
 
+.preset-script-themed-icon .preset-script-theme-svg-dark {
+  display: none;
+}
+
+.theme-dark .preset-script-themed-icon .preset-script-theme-svg-light {
+  display: none;
+}
+
+.theme-dark .preset-script-themed-icon .preset-script-theme-svg-dark {
+  display: block;
+}
+
 .preset-script-emoji-icon {
   display: inline-flex;
   align-items: center;
