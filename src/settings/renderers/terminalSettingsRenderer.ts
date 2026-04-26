@@ -13,6 +13,7 @@ import {
   DEFAULT_PRESET_SCRIPTS,
   DEFAULT_SERVER_CONNECTION_SETTINGS,
   getCurrentPlatformShell, 
+  isContextAwarePresetScript,
   setCurrentPlatformShell, 
   getCurrentPlatformCustomShellPath, 
   setCurrentPlatformCustomShellPath 
@@ -543,6 +544,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     scripts.forEach((script, index) => {
       const row = listEl.createDiv({ cls: 'preset-script-row' });
       const isBuiltIn = this.isBuiltInPresetScript(script);
+      const isContextAware = isContextAwarePresetScript(script);
 
       const toggleWrap = row.createDiv({ cls: 'preset-script-toggle' });
       const showInStatusBar = script.showInStatusBar ?? true;
@@ -569,6 +571,12 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         nameRowEl.createDiv({
           cls: 'preset-script-built-in-badge preset-script-row-built-in-badge',
           text: t('common.builtIn'),
+        });
+      }
+      if (isContextAware) {
+        nameRowEl.createDiv({
+          cls: 'preset-script-context-badge',
+          text: t('settingsDetails.advanced.contextAwareness'),
         });
       }
       contentEl.createDiv({

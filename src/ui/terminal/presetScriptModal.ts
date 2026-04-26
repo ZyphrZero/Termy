@@ -104,7 +104,10 @@ export class PresetScriptModal extends Modal {
     if (this.draft.id === 'claude-code') {
       this.renderClaudeCodeContextNotice(formEl);
     }
-    if (this.draft.id === 'codex' || this.draft.id === 'opencode') {
+    if (this.draft.id === 'opencode') {
+      this.renderOpenCodeContextNotice(formEl);
+    }
+    if (this.draft.id === 'codex') {
       this.renderAgentContextNotice(formEl);
     }
     this.renderToggles(formEl);
@@ -246,6 +249,18 @@ export class PresetScriptModal extends Modal {
     new Setting(section)
       .setName(t('settingsDetails.advanced.claudeCodeContext'))
       .setDesc(t('settingsDetails.advanced.claudeCodeContextDesc'));
+  }
+
+  private renderOpenCodeContextNotice(formEl: HTMLElement): void {
+    const section = this.renderIntegrationSection(
+      formEl,
+      'opencode',
+      t('settingsDetails.advanced.openCodeIntegration')
+    );
+
+    new Setting(section)
+      .setName(t('settingsDetails.advanced.openCodeContext'))
+      .setDesc(t('settingsDetails.advanced.openCodeContextDesc'));
   }
 
   private renderIntegrationSection(

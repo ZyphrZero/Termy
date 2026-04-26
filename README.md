@@ -65,7 +65,7 @@ Termy is built for people who already live in Obsidian and do real work in a ter
 
 - Claude Code sessions launched from a regular local `cmd` or PowerShell window run outside Obsidian, so they cannot automatically know which note is open, which vault/workspace directory is active, or what text is selected.
 - Claude Code sessions launched from Termy inside Obsidian can use Termy's IDE bridge to access the active Obsidian file, vault/workspace folder, and current or latest editor selection.
-- Agent CLI sessions launched from Termy receive lightweight context snapshot paths through environment variables, and built-in launchers for Codex CLI and OpenCode start with a short pointer to the context instructions.
+- Agent CLI sessions launched from Termy receive lightweight context snapshot paths through environment variables. Codex CLI receives a context-instructions pointer through its launch command, while OpenCode connects through Termy's IDE bridge automatically.
 - Termy writes the shared context snapshot under the Termy plugin directory at `.obsidian/plugins/<plugin-id>/agent-context/obsidian-context.json`.
 - Agent context snapshots can include active file, current selection, open files, and vault/workspace metadata.
 - Agent context handoff does not require MCP registration or global CLI configuration changes.
@@ -210,7 +210,7 @@ graph LR
 
 - **Frontend**: TypeScript, Obsidian plugin APIs, and xterm.js.
 - **Backend**: Native Rust PTY server built on `portable-pty`.
-- **Bridges**: Claude Code IDE bridge and shared agent context snapshots for Codex CLI, OpenCode, and other terminal agents.
+- **Bridges**: Claude Code/OpenCode-compatible IDE bridge and shared agent context snapshots for Codex CLI and other terminal agents.
 - **Packaging**: Generated plugin assets are emitted as `main.js` and `styles.css`; native binaries are copied to `binaries/`.
 
 ## License

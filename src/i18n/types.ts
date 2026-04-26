@@ -290,9 +290,12 @@ export interface TranslationKeys {
       serverConnectionDesc: string;
       contextAwareness: string;
       claudeCodeIntegration: string;
+      openCodeIntegration: string;
       agentCliIntegration: string;
       claudeCodeContext: string;
       claudeCodeContextDesc: string;
+      openCodeContext: string;
+      openCodeContextDesc: string;
       agentCliContext: string;
       agentCliContextDesc: string;
       offlineMode: string;

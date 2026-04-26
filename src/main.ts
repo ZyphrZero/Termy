@@ -3,6 +3,7 @@ import { addIcon, FileSystemAdapter, Notice, Plugin, normalizePath } from 'obsid
 import {
   DEFAULT_PRESET_SCRIPTS,
   DEFAULT_TERMINAL_SETTINGS,
+  normalizePresetScriptsByCurrentDefaults,
   type PresetScript,
   type PresetWorkflowAction,
   type TerminalSettings,
@@ -407,7 +408,7 @@ export default class TerminalPlugin extends Plugin {
       existingIds.add(builtInScript.id);
     }
 
-    return merged;
+    return normalizePresetScriptsByCurrentDefaults(merged);
   }
 
   private clonePresetScript(script: PresetScript): PresetScript {
@@ -1191,7 +1192,7 @@ export default class TerminalPlugin extends Plugin {
       .map((action) => this.normalizeWorkflowAction(action))
       .filter((action) => action.value.length > 0);
 
-    return {
+    const normalized: PresetScript = {
       id: (script.id || '').trim(),
       sourceTemplateId: typeof script.sourceTemplateId === 'string' && script.sourceTemplateId.trim().length > 0
         ? script.sourceTemplateId.trim()
@@ -1204,6 +1205,8 @@ export default class TerminalPlugin extends Plugin {
       autoOpenTerminal: script.autoOpenTerminal !== false,
       runInNewTerminal: script.runInNewTerminal === true,
     };
+
+    return normalized;
   }
 
   private normalizeWorkflowAction(action: PresetWorkflowAction): PresetWorkflowAction {

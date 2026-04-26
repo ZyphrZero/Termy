@@ -7,7 +7,7 @@ import { pathToFileURL } from 'url';
 import type { App, Editor, EventRef, TFile } from 'obsidian';
 import { normalizePath } from 'obsidian';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
-import { buildClaudeCodeTerminalEnv } from '../context/agentContext';
+import { buildIdeBridgeTerminalEnv } from '../context/agentContext';
 import { debugLog, errorLog } from '@/utils/logger';
 
 const CLAUDE_IDE_DIR = path.join(homedir(), '.claude', 'ide');
@@ -252,7 +252,7 @@ export class ClaudeCodeIdeBridge {
   }
 
   getTerminalEnv(): Record<string, string> {
-    return buildClaudeCodeTerminalEnv(this.port);
+    return buildIdeBridgeTerminalEnv(this.port);
   }
 
   private startTracking(): void {
@@ -423,6 +423,7 @@ export class ClaudeCodeIdeBridge {
         if (state) {
           state.initialized = true;
         }
+        this.sendLatestSelection(socket);
         return;
       }
       case 'ide_connected':
@@ -470,7 +471,7 @@ export class ClaudeCodeIdeBridge {
         version: this.version,
       },
       instructions:
-        'This Termy bridge exposes the active Obsidian file and selection to Claude Code.',
+        'This Termy bridge exposes the active Obsidian file and selection to compatible agent CLIs.',
     });
   }
 

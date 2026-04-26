@@ -171,8 +171,61 @@ export const AGENT_CONTEXT_LAUNCH_PROMPT =
 export const CODEX_CONTEXT_LAUNCH_COMMAND =
   `codex "${AGENT_CONTEXT_LAUNCH_PROMPT}"`;
 
-export const OPENCODE_CONTEXT_LAUNCH_COMMAND =
-  `opencode --prompt "${AGENT_CONTEXT_LAUNCH_PROMPT}"`;
+export const OPENCODE_LAUNCH_COMMAND =
+  'opencode';
+
+export const DEFAULT_PRESET_SCRIPT_ORDER = ['claude-code', 'codex', 'opencode', 'gemini-cli'] as const;
+
+const DEFAULT_PRESET_SCRIPT_IDS = new Set<string>(DEFAULT_PRESET_SCRIPT_ORDER);
+const CONTEXT_AWARE_PRESET_SCRIPT_IDS = new Set(['claude-code', 'codex', 'opencode']);
+
+export function isContextAwarePresetScript(script: Pick<PresetScript, 'id'>): boolean {
+  return CONTEXT_AWARE_PRESET_SCRIPT_IDS.has(script.id);
+}
+
+export function normalizePresetScriptsByCurrentDefaults(scripts: PresetScript[]): PresetScript[] {
+  const savedBuiltInsById = new Map(
+    scripts
+      .filter((script) => DEFAULT_PRESET_SCRIPT_IDS.has(script.id))
+      .map((script) => [script.id, script]),
+  );
+  const presentBuiltInIds = new Set(savedBuiltInsById.keys());
+  const canonicalBuiltIns = DEFAULT_PRESET_SCRIPT_ORDER
+    .filter((scriptId) => presentBuiltInIds.has(scriptId))
+    .map((scriptId) => {
+      const defaultScript = DEFAULT_PRESET_SCRIPTS.find((script) => script.id === scriptId);
+      if (!defaultScript) {
+        return null;
+      }
+      return clonePresetScriptWithSavedToggles(defaultScript, savedBuiltInsById.get(scriptId));
+    })
+    .filter((script): script is PresetScript => Boolean(script));
+  let builtInIndex = 0;
+
+  return scripts
+    .map((script) => {
+      if (!DEFAULT_PRESET_SCRIPT_IDS.has(script.id)) {
+        return script;
+      }
+      const reordered = canonicalBuiltIns[builtInIndex];
+      builtInIndex += 1;
+      return reordered;
+    })
+    .filter((script): script is PresetScript => Boolean(script));
+}
+
+function clonePresetScriptWithSavedToggles(
+  defaultScript: PresetScript,
+  savedScript: PresetScript | undefined,
+): PresetScript {
+  return {
+    ...defaultScript,
+    actions: defaultScript.actions.map((action) => ({ ...action })),
+    showInStatusBar: savedScript?.showInStatusBar ?? defaultScript.showInStatusBar,
+    autoOpenTerminal: savedScript?.autoOpenTerminal ?? defaultScript.autoOpenTerminal,
+    runInNewTerminal: savedScript?.runInNewTerminal ?? defaultScript.runInNewTerminal,
+  };
+}
 
 export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
   {
@@ -226,7 +279,7 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
       {
         id: 'action-opencode',
         type: 'terminal-command',
-        value: OPENCODE_CONTEXT_LAUNCH_COMMAND,
+        value: OPENCODE_LAUNCH_COMMAND,
         enabled: true,
         note: 'Launch OpenCode with Obsidian context',
       },
@@ -239,7 +292,7 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
   {
     id: 'gemini-cli',
     name: 'Gemini CLI',
-    icon: 'google',
+    icon: 'gemini',
     actions: [
       {
         id: 'action-gemini-cli',

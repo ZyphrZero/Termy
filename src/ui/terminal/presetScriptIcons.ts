@@ -3,7 +3,9 @@
  */
 
 import { setIcon } from 'obsidian';
+import geminiSvgMarkup from '../../../assets/google_gemini_icon.svg';
 import type { SimpleIcon } from 'simple-icons';
+import { isBlackWhiteSimpleIcon, resolveSimpleIconColor } from './simpleIconColors';
 import {
   siAnthropic,
   siCloudflare,
@@ -86,11 +88,14 @@ const OPENCODE_ICON_PATHS = {
   ],
 } as const;
 
+let geminiIconCounter = 0;
+
 const SIMPLE_ICON_ORDER = [
   'opencode',
   'openai',
   'claude',
   'anthropic',
+  'gemini',
   'google',
   'python',
   'javascript',
@@ -211,9 +216,14 @@ function isOpenCodeIcon(iconName: string): boolean {
   return iconName.toLowerCase() === 'opencode';
 }
 
+function isGeminiIcon(iconName: string): boolean {
+  const lookup = iconName.toLowerCase();
+  return lookup === 'gemini' || lookup === 'google-gemini';
+}
+
 export function isCustomPresetScriptIcon(iconName: string): boolean {
   const lookup = iconName.toLowerCase();
-  return isOpenCodeIcon(lookup) || lookup in SIMPLE_ICON_MAP;
+  return isOpenCodeIcon(lookup) || isGeminiIcon(lookup) || lookup in SIMPLE_ICON_MAP;
 }
 
 function createOpenCodeSvg(variant: keyof typeof OPENCODE_ICON_PATHS): SVGSVGElement {
@@ -232,6 +242,24 @@ function createOpenCodeSvg(variant: keyof typeof OPENCODE_ICON_PATHS): SVGSVGEle
   return svg;
 }
 
+function createGeminiSvg(): SVGSVGElement {
+  geminiIconCounter += 1;
+  const idPrefix = `termy-preset-gemini-${geminiIconCounter}`;
+  const markup = geminiSvgMarkup
+    .replace(/\bmaskme\b/g, `${idPrefix}-mask`)
+    .replace(/\bprefix__/g, `${idPrefix}-`);
+  const template = document.createElement('template');
+  template.innerHTML = markup.trim();
+  const svg = template.content.firstElementChild;
+
+  if (!(svg instanceof SVGSVGElement)) {
+    throw new Error('Failed to parse Gemini SVG asset');
+  }
+
+  svg.setAttribute('aria-hidden', 'true');
+  return svg;
+}
+
 export function renderPresetScriptIcon(el: HTMLElement, iconName: string): void {
   const rawInput = (iconName ?? '').trim();
   const raw = rawInput || 'terminal';
@@ -241,6 +269,7 @@ export function renderPresetScriptIcon(el: HTMLElement, iconName: string): void 
   el.removeClass('preset-script-custom-icon');
   el.removeClass('preset-script-emoji-icon');
   el.removeClass('preset-script-themed-icon');
+  el.removeClass('preset-script-black-white-icon');
   el.removeAttribute('data-icon');
   el.style.removeProperty('--preset-script-icon-color');
 
@@ -259,12 +288,23 @@ export function renderPresetScriptIcon(el: HTMLElement, iconName: string): void 
     return;
   }
 
+  if (isGeminiIcon(lookup)) {
+    el.addClass('preset-script-custom-icon');
+    el.setAttr('data-icon', lookup);
+    el.appendChild(createGeminiSvg());
+    return;
+  }
+
   if (isCustomPresetScriptIcon(raw)) {
     const icon = SIMPLE_ICON_MAP[lookup];
     el.addClass('preset-script-custom-icon');
     el.setAttr('data-icon', lookup);
-    if (icon.hex) {
-      el.style.setProperty('--preset-script-icon-color', `#${icon.hex}`);
+    if (isBlackWhiteSimpleIcon(lookup)) {
+      el.addClass('preset-script-black-white-icon');
+    }
+    const color = resolveSimpleIconColor(lookup, icon.hex);
+    if (color) {
+      el.style.setProperty('--preset-script-icon-color', color);
     }
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
