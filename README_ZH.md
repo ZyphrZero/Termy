@@ -8,7 +8,7 @@
 
 Termy 为 Obsidian 提供完整终端体验：原生 Rust PTY 后端、分屏、多会话、可复用工作流、文件感知拖拽，以及面向 AI CLI 的上下文集成
 
-[![Version](https://img.shields.io/badge/version-1.3.3-7c3aed?style=for-the-badge)](./manifest.json)
+[![Version](https://img.shields.io/badge/version-1.3.4-7c3aed?style=for-the-badge)](./manifest.json)
 [![Obsidian](https://img.shields.io/badge/Obsidian-Desktop%20Only-8b5cf6?style=for-the-badge)](https://obsidian.md/)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=for-the-badge)](./LICENSE)
 [![PTY](https://img.shields.io/badge/backend-Rust%20PTY-f97316?style=for-the-badge)](./rust-servers)
