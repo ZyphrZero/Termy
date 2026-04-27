@@ -31,7 +31,7 @@
   "license": "GPL-3.0",
   "devDependencies": {
     "@eslint/js": "^9.39.2",
-    "@types/node": "^16.18.126",
+    "@types/node": "^20.12.12",
     "builtin-modules": "^5.0.0",
     "esbuild": "^0.27.2",
     "esbuild-compress": "^2.0.2",

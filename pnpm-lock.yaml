@@ -34,8 +34,8 @@ importers:
         specifier: ^9.39.2
         version: 9.39.4
       '@types/node':
-        specifier: ^16.18.126
-        version: 16.18.126
+        specifier: ^20.12.12
+        version: 20.12.12
       builtin-modules:
         specifier: ^5.0.0
         version: 5.1.0
@@ -342,9 +342,6 @@ packages:
 
   '@types/json5@0.0.29':
     resolution: {integrity: sha512-dRLjCWHYg4oaA77cxO64oO+7JwCwnIzkZPdrrC71jQmQtlhM556pwKo5bUzqvZndkVbeFLIIi+9TC40JNF5hNQ==}
-
-  '@types/node@16.18.126':
-    resolution: {integrity: sha512-OTcgaiwfGFBKacvfwuHzzn1KLxH/er8mluiy8/uM3sGXHaRe73RrSIj01jow9t4kJEW633Ov+cOexXeiApTyAw==}
 
   '@types/node@20.12.12':
     resolution: {integrity: sha512-eWLDGF/FOSPtAvEqeRAQ4C8LSA7M1I7i0ky1I8U7kD1J5ITyW3AsRhQrKVoWf5pFKZ2kILsEGJhsI9r93PYnOw==}
@@ -1799,8 +1796,6 @@ snapshots:
   '@types/json-schema@7.0.15': {}
 
   '@types/json5@0.0.29': {}
-
-  '@types/node@16.18.126': {}
 
   '@types/node@20.12.12':
     dependencies:

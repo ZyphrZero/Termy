@@ -454,10 +454,25 @@ export class ClaudeCodeIdeBridge {
     }
 
     if (Array.isArray(data)) {
-      return Buffer.concat(data).toString('utf8');
+      return this.decodeBufferChunks(data);
     }
 
     return Buffer.from(data).toString('utf8');
+  }
+
+  private decodeBufferChunks(chunks: Buffer[]): string {
+    const totalLength = chunks.reduce((length, chunk) => length + chunk.byteLength, 0);
+    const bytes = new Uint8Array(totalLength);
+    let offset = 0;
+
+    for (const chunk of chunks) {
+      for (let index = 0; index < chunk.byteLength; index++) {
+        bytes[offset + index] = chunk[index];
+      }
+      offset += chunk.byteLength;
+    }
+
+    return new TextDecoder().decode(bytes);
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {

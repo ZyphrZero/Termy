@@ -612,7 +612,14 @@ export class BinaryDownloader {
       const hash = crypto.createHash('sha256');
       const stream = fs.createReadStream(filePath);
       
-      stream.on('data', (data) => hash.update(data));
+      stream.on('data', (data: string | Buffer) => {
+        if (typeof data === 'string') {
+          hash.update(data);
+          return;
+        }
+
+        hash.update(Uint8Array.from(data));
+      });
       stream.on('end', () => resolve(hash.digest('hex')));
       stream.on('error', reject);
     });
