@@ -59,7 +59,7 @@ export class ChangelogModal extends Modal {
     }
 
     try {
-      const changelog = await this.plugin.getChangelogDetails(this.requestedVersion);
+      const changelog = this.plugin.getChangelogDetails(this.requestedVersion);
       if (this.subtitleEl) {
         this.subtitleEl.setText(t('modals.changelog.subtitle', { version: changelog.version }));
       }
