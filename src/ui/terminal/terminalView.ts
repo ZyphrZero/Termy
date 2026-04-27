@@ -491,7 +491,7 @@ export class TerminalView extends ItemView {
         paths.push(itemPath.trim());
       }
 
-      const itemFile = item.getAsFile() as (File & { path?: string }) | null;
+      const itemFile = item.getAsFile();
       if (itemFile) {
         const droppedPath = this.getDroppedFilePath(itemFile);
         if (droppedPath) {
@@ -506,7 +506,7 @@ export class TerminalView extends ItemView {
     }
 
     for (const file of droppedFiles) {
-      const filePath = this.getDroppedFilePath(file as File & { path?: string });
+      const filePath = this.getDroppedFilePath(file);
       if (filePath) {
         paths.push(filePath);
       }
@@ -543,7 +543,7 @@ export class TerminalView extends ItemView {
       name: file.name,
       size: file.size,
       type: file.type,
-      path: this.getDroppedFilePath(file as File & { path?: string }),
+      path: this.getDroppedFilePath(file),
     }));
 
     return {

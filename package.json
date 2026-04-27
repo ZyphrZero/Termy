@@ -7,6 +7,8 @@
   "packageManager": "pnpm@10.0.0",
   "scripts": {
     "dev": "node esbuild.config.mjs",
+    "lint": "eslint \"src/**/*.ts\"",
+    "lint:obsidian": "eslint -c eslint.obsidian.config.js \"src/**/*.ts\"",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production && node scripts/verify-build.js",
     "build:rust": "node scripts/build-rust.js",
     "build:rust:clean": "node scripts/build-rust.js --clean",
@@ -34,6 +36,7 @@
     "esbuild": "^0.27.2",
     "esbuild-compress": "^2.0.2",
     "eslint": "^9.39.2",
+    "eslint-plugin-obsidianmd": "0.2.4",
     "globals": "^17.0.0",
     "obsidian": "^1.11.0",
     "tslib": "2.8.1",

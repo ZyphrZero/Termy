@@ -284,7 +284,7 @@ export default class TerminalPlugin extends Plugin {
     new ChangelogModal(this.app, this, version).open();
   }
 
-  async getChangelogDetails(version = this.manifest.version): Promise<ChangelogDetails> {
+  getChangelogDetails(version = this.manifest.version): ChangelogDetails {
     const normalizedVersion = version.trim();
     if (!normalizedVersion) {
       throw new Error('Plugin version is unavailable');
@@ -325,7 +325,7 @@ export default class TerminalPlugin extends Plugin {
       return;
     }
 
-    await this.getChangelogDetails(currentVersion);
+    this.getChangelogDetails(currentVersion);
     this.showChangelog(currentVersion);
     this.settings.lastSeenChangelogVersion = currentVersion;
     await this.saveData(this.settings);

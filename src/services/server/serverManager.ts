@@ -288,7 +288,7 @@ export class ServerManager {
     if (!this.eventListeners.has(event)) {
       this.eventListeners.set(event, new Set());
     }
-    this.eventListeners.get(event)!.add(callback as EventListener<keyof ServerEvents>);
+    this.eventListeners.get(event)!.add(callback);
   }
 
   /**
@@ -297,7 +297,7 @@ export class ServerManager {
   off<K extends keyof ServerEvents>(event: K, callback: ServerEvents[K]): void {
     const listeners = this.eventListeners.get(event);
     if (listeners) {
-      listeners.delete(callback as EventListener<keyof ServerEvents>);
+      listeners.delete(callback);
     }
   }
 

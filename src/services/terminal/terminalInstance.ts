@@ -1286,7 +1286,7 @@ export class TerminalInstance {
     if (!svgText) return null;
     const parsed = new DOMParser().parseFromString(svgText, 'image/svg+xml');
     const svg = parsed.querySelector('svg');
-    return svg ? (document.importNode(svg, true) as SVGElement) : null;
+    return svg ? document.importNode(svg, true) : null;
   }
 
   // ==================== Search ====================

@@ -1,6 +1,5 @@
 import {
   encodeWin32InputModeKeyEvent,
-  type Win32InputModeKeyboardEventLike,
 } from './win32InputModeEncoder.ts';
 import {
   encodeClaudeCodeExtendedKey,
@@ -92,7 +91,7 @@ export function evaluateKeyboardDecision(
       return { type: 'paste-from-clipboard' };
     }
 
-    const encoded = encodeWin32InputModeKeyEvent(event as Win32InputModeKeyboardEventLike);
+    const encoded = encodeWin32InputModeKeyEvent(event);
     if (encoded) {
       return { type: 'send-input', data: encoded };
     }
