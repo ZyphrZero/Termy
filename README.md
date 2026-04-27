@@ -70,6 +70,14 @@ Termy is built for people who already live in Obsidian and do real work in a ter
 - Claude Code and OpenCode use Termy's IDE bridge; Codex uses a vault-local Skill at `.agents/skills/termy-obsidian-context/SKILL.md`.
 - The built-in Codex launcher starts `codex` directly, without MCP registration or global CLI configuration changes.
 
+### Privacy and Network Access
+
+- Termy does not include telemetry or analytics.
+- Termy downloads the matching native PTY server binary when needed. The default source is `https://termy.changqiu.xyz`; GitHub Releases can be selected in settings, and offline mode disables automatic download/update checks.
+- Terminal sessions run local shell commands and user-configured workflows. Those commands may read files, modify files, or access the network according to the shell command or external CLI being run.
+- Termy starts local WebSocket connections for its PTY backend and optional IDE bridge. These connections are used for local terminal transport and editor-context handoff.
+- Context-aware AI launchers can pass the active note path, selection, editor context, and vault/workspace path to local CLI tools. The Codex integration writes a vault-local helper skill under `.agents/skills/termy-obsidian-context/`.
+
 ### Appearance & Ergonomics
 
 - Follow the Obsidian theme or use custom foreground and background colors.
