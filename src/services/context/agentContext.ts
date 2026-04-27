@@ -5,6 +5,13 @@ export const TERMY_CODEX_SKILL_NAME = 'termy-obsidian-context';
 export const TERMY_CODEX_SKILL_RELATIVE_PATH = `.agents/skills/${TERMY_CODEX_SKILL_NAME}/SKILL.md`;
 export const TERMY_CODEX_SKILL_MANAGED_MARKER = '<!-- termy:managed-codex-skill -->';
 
+export function serializeAgentContextSnapshotState(
+  snapshot: Record<string, unknown> & { updatedAt?: string }
+): string {
+  const { updatedAt: _updatedAt, ...state } = snapshot;
+  return JSON.stringify(state, null, 2);
+}
+
 export function buildIdeBridgeTerminalEnv(port: number | null): Record<string, string> {
   if (!port) {
     return {};

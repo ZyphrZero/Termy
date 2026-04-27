@@ -1,19 +1,28 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { pathToFileURL } from 'url';
-import type { App, Editor, EventRef, MarkdownView, TFile, WorkspaceLeaf } from 'obsidian';
-import { normalizePath } from 'obsidian';
+import * as fs from "fs";
+import * as path from "path";
+import { pathToFileURL } from "url";
+import type {
+  App,
+  Editor,
+  EventRef,
+  MarkdownView,
+  TFile,
+  WorkspaceLeaf,
+} from "obsidian";
+import { normalizePath } from "obsidian";
 import {
   buildAgentContextTerminalEnv,
   renderTermyCodexSkill,
+  serializeAgentContextSnapshotState,
   TERMY_CODEX_SKILL_MANAGED_MARKER,
   TERMY_CODEX_SKILL_RELATIVE_PATH,
-} from './agentContext';
-import { debugLog, errorLog } from '@/utils/logger';
+} from "./agentContext";
+import { debugLog, errorLog } from "@/utils/logger";
 
-const CONTEXT_DIR_NAME = 'agent-context';
-const CONTEXT_FILE_NAME = 'obsidian-context.json';
-const POLL_INTERVAL_MS = 250;
+const CONTEXT_DIR_NAME = "agent-context";
+const CONTEXT_FILE_NAME = "obsidian-context.json";
+const POLL_INTERVAL_MS = 1000;
+const REFRESH_DEBOUNCE_MS = 500;
 
 type EditorContext = {
   editor: Editor | null;
@@ -47,7 +56,7 @@ type OpenFileContext = FileContext & {
 
 type AgentContextSnapshot = {
   schemaVersion: 1;
-  source: 'termy';
+  source: "termy";
   updatedAt: string;
   vaultRoot: string | null;
   workspaceFolders: string[];
@@ -62,8 +71,9 @@ export class AgentContextBridge {
   private readonly contextDir: string;
   private readonly contextFilePath: string;
 
-  private lastSerializedSnapshot = '';
+  private lastSerializedSnapshotState = "";
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private started = false;
 
   constructor(app: App, pluginDir: string) {
@@ -82,16 +92,27 @@ export class AgentContextBridge {
     this.refreshSnapshot(true);
 
     this.eventRefs.push(
-      this.app.workspace.on('active-leaf-change', () => this.refreshSnapshot()),
-      this.app.workspace.on('file-open', () => this.refreshSnapshot()),
-      this.app.workspace.on('layout-change', () => this.refreshSnapshot()),
-      this.app.workspace.on('editor-change', () => this.refreshSnapshot()),
+      this.app.workspace.on("active-leaf-change", () =>
+        this.scheduleRefreshSnapshot(),
+      ),
+      this.app.workspace.on("file-open", () => this.scheduleRefreshSnapshot()),
+      this.app.workspace.on("layout-change", () =>
+        this.scheduleRefreshSnapshot(),
+      ),
+      this.app.workspace.on("editor-change", () =>
+        this.scheduleRefreshSnapshot(),
+      ),
     );
 
-    this.pollTimer = setInterval(() => this.refreshSnapshot(), POLL_INTERVAL_MS);
+    this.pollTimer = setInterval(
+      () => this.refreshSnapshot(),
+      POLL_INTERVAL_MS,
+    );
     this.started = true;
 
-    debugLog(`[AgentContextBridge] Writing context snapshots to ${this.contextFilePath}`);
+    debugLog(
+      `[AgentContextBridge] Writing context snapshots to ${this.contextFilePath}`,
+    );
   }
 
   async stop(): Promise<void> {
@@ -102,6 +123,11 @@ export class AgentContextBridge {
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
+    }
+
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
     }
 
     for (const eventRef of this.eventRefs) {
@@ -120,18 +146,33 @@ export class AgentContextBridge {
     return this.contextFilePath;
   }
 
+  private scheduleRefreshSnapshot(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+    }
+
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = null;
+      this.refreshSnapshot();
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
   private refreshSnapshot(force = false): void {
     try {
       const snapshot = this.captureSnapshot();
+      const serializedState = serializeAgentContextSnapshotState(snapshot);
       const serialized = JSON.stringify(snapshot, null, 2);
-      if (!force && serialized === this.lastSerializedSnapshot) {
+      if (!force && serializedState === this.lastSerializedSnapshotState) {
         return;
       }
 
-      fs.writeFileSync(this.contextFilePath, serialized, 'utf8');
-      this.lastSerializedSnapshot = serialized;
+      fs.writeFileSync(this.contextFilePath, serialized, "utf8");
+      this.lastSerializedSnapshotState = serializedState;
     } catch (error) {
-      errorLog('[AgentContextBridge] Failed to refresh agent context snapshot:', error);
+      errorLog(
+        "[AgentContextBridge] Failed to refresh agent context snapshot:",
+        error,
+      );
     }
   }
 
@@ -142,25 +183,35 @@ export class AgentContextBridge {
         return;
       }
 
-      const skillFilePath = path.join(vaultRoot, TERMY_CODEX_SKILL_RELATIVE_PATH);
+      const skillFilePath = path.join(
+        vaultRoot,
+        TERMY_CODEX_SKILL_RELATIVE_PATH,
+      );
       const skillContent = renderTermyCodexSkill();
 
       if (fs.existsSync(skillFilePath)) {
-        const currentContent = fs.readFileSync(skillFilePath, 'utf8');
+        const currentContent = fs.readFileSync(skillFilePath, "utf8");
         if (currentContent === skillContent) {
           return;
         }
         if (!currentContent.includes(TERMY_CODEX_SKILL_MANAGED_MARKER)) {
-          debugLog(`[AgentContextBridge] Existing unmanaged Codex skill found at ${skillFilePath}; leaving it unchanged`);
+          debugLog(
+            `[AgentContextBridge] Existing unmanaged Codex skill found at ${skillFilePath}; leaving it unchanged`,
+          );
           return;
         }
       }
 
       fs.mkdirSync(path.dirname(skillFilePath), { recursive: true });
-      fs.writeFileSync(skillFilePath, skillContent, 'utf8');
-      debugLog(`[AgentContextBridge] Wrote Codex context skill to ${skillFilePath}`);
+      fs.writeFileSync(skillFilePath, skillContent, "utf8");
+      debugLog(
+        `[AgentContextBridge] Wrote Codex context skill to ${skillFilePath}`,
+      );
     } catch (error) {
-      errorLog('[AgentContextBridge] Failed to sync Codex context skill:', error);
+      errorLog(
+        "[AgentContextBridge] Failed to sync Codex context skill:",
+        error,
+      );
     }
   }
 
@@ -172,8 +223,8 @@ export class AgentContextBridge {
 
     let selection: SelectionContext | null = null;
     if (editor) {
-      const from = editor.getCursor('from');
-      const to = editor.getCursor('to');
+      const from = editor.getCursor("from");
+      const to = editor.getCursor("to");
       const text = editor.getSelection();
 
       selection = {
@@ -194,7 +245,7 @@ export class AgentContextBridge {
 
     return {
       schemaVersion: 1,
-      source: 'termy',
+      source: "termy",
       updatedAt: new Date().toISOString(),
       vaultRoot,
       workspaceFolders: vaultRoot ? [vaultRoot] : [],
@@ -230,19 +281,22 @@ export class AgentContextBridge {
   }
 
   private getOpenFiles(): OpenFileContext[] {
-    const activeFilePath = this.resolveFileContext(this.app.workspace.getActiveFile()?.path ?? null)?.filePath ?? null;
+    const activeFilePath =
+      this.resolveFileContext(this.app.workspace.getActiveFile()?.path ?? null)
+        ?.filePath ?? null;
     const seen = new Map<string, OpenFileContext>();
 
-    for (const leaf of this.app.workspace.getLeavesOfType('markdown')) {
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
       const file = this.getLeafFile(leaf);
       const fileContext = this.resolveFileContext(file?.path ?? null);
       if (!fileContext) {
         continue;
       }
 
-      const key = process.platform === 'win32'
-        ? fileContext.filePath.toLowerCase()
-        : fileContext.filePath;
+      const key =
+        process.platform === "win32"
+          ? fileContext.filePath.toLowerCase()
+          : fileContext.filePath;
 
       if (!seen.has(key)) {
         seen.set(key, {
@@ -280,7 +334,7 @@ export class AgentContextBridge {
 
   private getVaultRoot(): string | null {
     const adapter = this.app.vault.adapter as { getBasePath?: () => string };
-    if (adapter && typeof adapter.getBasePath === 'function') {
+    if (adapter && typeof adapter.getBasePath === "function") {
       return normalizePath(adapter.getBasePath());
     }
 

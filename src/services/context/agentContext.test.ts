@@ -5,6 +5,7 @@ import {
   buildAgentContextTerminalEnv,
   buildIdeBridgeTerminalEnv,
   renderTermyCodexSkill,
+  serializeAgentContextSnapshotState,
   CLAUDE_CODE_SSE_PORT_ENV,
   OPENCODE_EDITOR_SSE_PORT_ENV,
   TERMY_CODEX_SKILL_MANAGED_MARKER,
@@ -35,4 +36,38 @@ test('renderTermyCodexSkill emits a discoverable managed Codex skill', () => {
   assert.ok(skill.includes(`\`${TERMY_CONTEXT_PATH_ENV}\``));
   assert.ok(skill.includes(TERMY_CODEX_SKILL_MANAGED_MARKER));
   assert.equal(TERMY_CODEX_SKILL_RELATIVE_PATH, `.agents/skills/${TERMY_CODEX_SKILL_NAME}/SKILL.md`);
+});
+
+test('serializeAgentContextSnapshotState ignores updatedAt for write change detection', () => {
+  const snapshot = {
+    schemaVersion: 1,
+    source: 'termy',
+    updatedAt: '2026-04-27T00:00:00.000Z',
+    vaultRoot: '/vault',
+    workspaceFolders: ['/vault'],
+    activeFile: null,
+    openFiles: [],
+    selection: null,
+  };
+
+  assert.equal(
+    serializeAgentContextSnapshotState(snapshot),
+    serializeAgentContextSnapshotState({
+      ...snapshot,
+      updatedAt: '2026-04-27T00:00:01.000Z',
+    })
+  );
+
+  assert.notEqual(
+    serializeAgentContextSnapshotState(snapshot),
+    serializeAgentContextSnapshotState({
+      ...snapshot,
+      selection: {
+        text: 'selected text',
+        isEmpty: false,
+        from: { line: 0, ch: 0, offset: 0 },
+        to: { line: 0, ch: 13, offset: 13 },
+      },
+    })
+  );
 });
