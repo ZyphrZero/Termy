@@ -248,16 +248,15 @@ function createGeminiSvg(): SVGSVGElement {
   const markup = geminiSvgMarkup
     .replace(/\bmaskme\b/g, `${idPrefix}-mask`)
     .replace(/\bprefix__/g, `${idPrefix}-`);
-  const template = document.createElement('template');
-  template.innerHTML = markup.trim();
-  const svg = template.content.firstElementChild;
+  const parsed = new DOMParser().parseFromString(markup.trim(), 'image/svg+xml');
+  const svg = parsed.documentElement;
 
   if (!(svg instanceof SVGSVGElement)) {
     throw new Error('Failed to parse Gemini SVG asset');
   }
 
   svg.setAttribute('aria-hidden', 'true');
-  return svg;
+  return document.importNode(svg, true);
 }
 
 export function renderPresetScriptIcon(el: HTMLElement, iconName: string): void {

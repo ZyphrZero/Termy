@@ -21,9 +21,8 @@ import {
 import { BaseSettingsRenderer } from './baseRenderer';
 import { t } from '../../i18n';
 import { PresetScriptModal } from '../../ui/terminal/presetScriptModal';
-import { PRESET_SCRIPT_ICON_OPTIONS, renderPresetScriptIcon } from '../../ui/terminal/presetScriptIcons';
+import { renderPresetScriptIcon } from '../../ui/terminal/presetScriptIcons';
 import { clamp, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
-import { debugWarn } from '../../utils/logger';
 
 const NEW_INSTANCE_BEHAVIORS = [
   'replaceTab',
@@ -140,7 +139,7 @@ const confirmAction = (app: App, message: string): Promise<boolean> =>
  * @param path Path to the Shell executable
  * @returns Whether the path exists and is valid
  */
-async function validateShellPath(path: string): Promise<boolean> {
+function validateShellPath(path: string): boolean {
   if (!path || path.trim() === '') return false;
   // Mobile does not support filesystem checks
   if (Platform.isMobile) return true;
@@ -165,7 +164,7 @@ const TERMINAL_SHELL_COMMON_PATHS: Record<TerminalShellType, string[]> = {
   ],
 };
 
-async function detectAvailableTerminalShells(): Promise<TerminalShellType[]> {
+function detectAvailableTerminalShells(): TerminalShellType[] {
   if (Platform.isMobile) return [];
 
   return OPTIONAL_TERMINAL_SHELLS.filter((shellType) =>
@@ -346,12 +345,12 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
             void this.saveSettings();
             
             // Validate the path
-            void this.validateCustomShellPath(container, value);
+            this.validateCustomShellPath(container, value);
           });
         
         // Initial validation
         setTimeout(() => {
-          void this.validateCustomShellPath(container, currentCustomPath);
+          this.validateCustomShellPath(container, currentCustomPath);
         }, 0);
         
         return text;
@@ -373,16 +372,10 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       addOption(currentShell);
     }
 
-    void detectAvailableTerminalShells()
-      .then((shellTypes) => {
-        for (const shellType of shellTypes) {
-          addOption(shellType);
-        }
-        dropdown.setValue(currentShell);
-      })
-      .catch((error) => {
-        debugWarn('[TerminalSettings] Failed to detect terminal shell options:', error);
-      });
+    for (const shellType of detectAvailableTerminalShells()) {
+      addOption(shellType);
+    }
+    dropdown.setValue(currentShell);
   }
 
   /**
@@ -1361,7 +1354,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
    * @param containerEl Container element
    * @param path Shell path
    */
-  private async validateCustomShellPath(containerEl: HTMLElement, path: string): Promise<void> {
+  private validateCustomShellPath(containerEl: HTMLElement, path: string): void {
     // Remove the previous validation message
     const existingValidation = containerEl.querySelector('.shell-path-validation');
     if (existingValidation) {
@@ -1379,7 +1372,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     });
     
     // Validate the path
-    const isValid = await validateShellPath(path);
+    const isValid = validateShellPath(path);
     if (!validationEl.isConnected) return;
 
     if (isValid) {

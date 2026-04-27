@@ -82,7 +82,7 @@ export class AgentContextBridge {
     this.contextFilePath = path.join(this.contextDir, CONTEXT_FILE_NAME);
   }
 
-  async start(): Promise<void> {
+  start(): void {
     if (this.started) {
       return;
     }
@@ -115,7 +115,7 @@ export class AgentContextBridge {
     );
   }
 
-  async stop(): Promise<void> {
+  stop(): void {
     if (!this.started) {
       return;
     }

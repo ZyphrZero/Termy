@@ -8,7 +8,8 @@ export const TERMY_CODEX_SKILL_MANAGED_MARKER = '<!-- termy:managed-codex-skill 
 export function serializeAgentContextSnapshotState(
   snapshot: Record<string, unknown> & { updatedAt?: string }
 ): string {
-  const { updatedAt: _updatedAt, ...state } = snapshot;
+  const state = { ...snapshot };
+  delete state.updatedAt;
   return JSON.stringify(state, null, 2);
 }
 

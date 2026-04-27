@@ -9,7 +9,7 @@ import {
   type TerminalSettings,
 } from './settings/settings';
 import { PresetScriptModal } from './ui/terminal/presetScriptModal';
-import { PRESET_SCRIPT_ICON_OPTIONS, renderPresetScriptIcon } from './ui/terminal/presetScriptIcons';
+import { renderPresetScriptIcon } from './ui/terminal/presetScriptIcons';
 import { TerminalSettingTab } from './settings/settingsTab';
 import type { TerminalService } from './services/terminal/terminalService';
 import type { ServerManager } from './services/server/serverManager';
@@ -239,7 +239,7 @@ export default class TerminalPlugin extends Plugin {
     if (this._agentContextBridge) {
       try {
         debugLog('[TerminalPlugin] Shutting down agent context bridge...');
-        await this._agentContextBridge.stop();
+        this._agentContextBridge.stop();
         debugLog('[TerminalPlugin] Agent context bridge stopped');
       } catch (error) {
         errorLog('[TerminalPlugin] Failed to stop agent context bridge:', error);
@@ -264,7 +264,7 @@ export default class TerminalPlugin extends Plugin {
       this._agentContextBridge = new AgentContextBridge(this.app, this.getPluginDir());
     }
 
-    await this._agentContextBridge.start();
+    this._agentContextBridge.start();
   }
 
   private initializeDevPluginReloader(): void {
@@ -295,7 +295,7 @@ export default class TerminalPlugin extends Plugin {
       return cached;
     }
 
-    const changelogContent = await this.readChangelogContent();
+    const changelogContent = this.readChangelogContent();
     const resolvedSection = resolveChangelogSection(changelogContent, normalizedVersion);
     const details = {
       requestedVersion: normalizedVersion,
@@ -331,7 +331,7 @@ export default class TerminalPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
-  private async readChangelogContent(): Promise<string> {
+  private readChangelogContent(): string {
     if (this._changelogContentCache) {
       return this._changelogContentCache;
     }
@@ -756,7 +756,7 @@ export default class TerminalPlugin extends Plugin {
         }
 
         if (!checking) {
-          void this.sendEditorSelectionToTerminal();
+          this.sendEditorSelectionToTerminal();
         }
 
         return true;
@@ -772,7 +772,7 @@ export default class TerminalPlugin extends Plugin {
         }
 
         if (!checking) {
-          void this.sendCurrentNoteToTerminal();
+          this.sendCurrentNoteToTerminal();
         }
 
         return true;
@@ -919,7 +919,7 @@ export default class TerminalPlugin extends Plugin {
     };
   }
 
-  private async sendEditorSelectionToTerminal(): Promise<void> {
+  private sendEditorSelectionToTerminal(): void {
     const terminalView = this.getActiveTerminalView();
     const terminal = terminalView?.getTerminalInstance();
     if (!terminalView || !terminal) {
@@ -938,7 +938,7 @@ export default class TerminalPlugin extends Plugin {
     this.focusTerminalView(terminalView, terminal);
   }
 
-  private async sendCurrentNoteToTerminal(): Promise<void> {
+  private sendCurrentNoteToTerminal(): void {
     const terminalView = this.getActiveTerminalView();
     const terminal = terminalView?.getTerminalInstance();
     if (!terminalView || !terminal) {

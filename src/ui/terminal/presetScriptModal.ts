@@ -173,7 +173,7 @@ export class PresetScriptModal extends Modal {
 
     const addActionBtn = field.createEl('button', {
       cls: 'preset-workflow-action-add',
-      text: '+ Add action',
+      text: 'Add action',
     });
     addActionBtn.setAttribute('type', 'button');
     addActionBtn.addEventListener('click', () => {

@@ -11,7 +11,6 @@ export interface Win32InputModeKeyboardEventLike {
   getModifierState?: (key: string) => boolean;
 }
 
-const DOM_KEY_LOCATION_LEFT = 1;
 const DOM_KEY_LOCATION_RIGHT = 2;
 const DOM_KEY_LOCATION_NUMPAD = 3;
 
@@ -287,17 +286,6 @@ const SPECIAL_KEY_CHAR_CODES: Record<string, number> = {
   Escape: 0x1b,
   Space: 0x20,
 };
-
-const MODIFIER_CODES = new Set([
-  'ShiftLeft',
-  'ShiftRight',
-  'ControlLeft',
-  'ControlRight',
-  'AltLeft',
-  'AltRight',
-  'MetaLeft',
-  'MetaRight',
-]);
 
 const ENHANCED_KEY_CODES = new Set([
   'PageUp',

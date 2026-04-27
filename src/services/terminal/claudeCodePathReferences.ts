@@ -2,6 +2,8 @@ import { posix as posixPath, win32 as win32Path } from 'node:path';
 
 import { normalizeTerminalToken, type TerminalPlatform } from './terminalPathUtils.ts';
 
+type PathModule = Pick<typeof posixPath, 'isAbsolute' | 'normalize' | 'relative' | 'resolve' | 'sep'>;
+
 export interface ClaudeCodePathReferenceOptions {
   cwd?: string | null;
   platform?: TerminalPlatform;
@@ -69,7 +71,7 @@ function shouldQuoteClaudeCodeReference(path: string): boolean {
 function getSafeCwdRelativePath(
   absolutePath: string,
   cwd: string,
-  pathModule: typeof posixPath | typeof win32Path,
+  pathModule: PathModule,
   platform: TerminalPlatform,
   pathExists?: (path: string) => boolean,
 ): string | null {
@@ -102,7 +104,7 @@ function getSafeCwdRelativePath(
 
 function isOutsideCwdRelativePath(
   relativePath: string,
-  pathModule: typeof posixPath | typeof win32Path,
+  pathModule: PathModule,
 ): boolean {
   return relativePath === '..'
     || relativePath.startsWith(`..${pathModule.sep}`)

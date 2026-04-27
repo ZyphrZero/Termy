@@ -396,7 +396,7 @@ export class ClaudeCodeIdeBridge {
   private handleMessage(socket: WebSocket, data: RawData): void {
     let request: JsonRpcRequest;
     try {
-      const raw = typeof data === 'string' ? data : data.toString('utf8');
+      const raw = this.decodeRawMessage(data);
       request = JSON.parse(raw) as JsonRpcRequest;
     } catch (error) {
       errorLog('[ClaudeCodeIdeBridge] Failed to parse JSON-RPC request:', error);
@@ -409,10 +409,7 @@ export class ClaudeCodeIdeBridge {
       return;
     }
 
-    const params =
-      request.params && typeof request.params === 'object'
-        ? (request.params as Record<string, unknown>)
-        : {};
+    const params = this.isRecord(request.params) ? request.params : {};
 
     switch (request.method) {
       case 'initialize':
@@ -445,6 +442,26 @@ export class ClaudeCodeIdeBridge {
           this.sendError(socket, request.id ?? null, -32601, `Method not found: ${request.method}`);
         }
     }
+  }
+
+  private decodeRawMessage(data: RawData): string {
+    if (typeof data === 'string') {
+      return data;
+    }
+
+    if (Buffer.isBuffer(data)) {
+      return data.toString('utf8');
+    }
+
+    if (Array.isArray(data)) {
+      return Buffer.concat(data).toString('utf8');
+    }
+
+    return Buffer.from(data).toString('utf8');
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 
   private handleInitialize(
