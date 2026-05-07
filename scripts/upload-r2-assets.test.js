@@ -16,14 +16,14 @@ test('parseNodeMajorVersion returns null for malformed version strings', () => {
   assert.equal(parseNodeMajorVersion(''), null);
 });
 
-test('assertSupportedNodeVersion accepts Node 20 and newer', () => {
-  assert.doesNotThrow(() => assertSupportedNodeVersion('20.0.0'));
+test('assertSupportedNodeVersion accepts Node 22 and newer', () => {
   assert.doesNotThrow(() => assertSupportedNodeVersion('22.15.1'));
+  assert.doesNotThrow(() => assertSupportedNodeVersion('24.9.0'));
 });
 
-test('assertSupportedNodeVersion rejects Node versions older than 20 with a clear message', () => {
+test('assertSupportedNodeVersion rejects Node versions older than 22 with a clear message', () => {
   assert.throws(
-    () => assertSupportedNodeVersion('18.20.8'),
-    /requires Node\.js v20\+.*Wrangler.*18\.20\.8/i
+    () => assertSupportedNodeVersion('20.20.2'),
+    /requires Node\.js v22\+.*Wrangler.*20\.20\.2/i
   );
 });

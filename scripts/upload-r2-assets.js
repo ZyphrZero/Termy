@@ -18,8 +18,8 @@ const ROOT_DIR = path.join(__dirname, '..');
 const DEFAULT_BUCKET = 'termy-binaries-apac';
 const DEFAULT_BINARIES_DIR = path.join(ROOT_DIR, 'binaries');
 const DEFAULT_WRANGLER_CONFIG = path.join(ROOT_DIR, 'wrangler.jsonc');
-const DEFAULT_WRANGLER_PACKAGE = 'wrangler@4';
-const MINIMUM_NODE_MAJOR = 20;
+const DEFAULT_WRANGLER_PACKAGE = 'wrangler@4.88.0';
+const MINIMUM_NODE_MAJOR = 22;
 
 function parseArgs(argv) {
   const options = {

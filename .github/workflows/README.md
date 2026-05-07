@@ -66,7 +66,7 @@ termy.zip
 
 **R2 同步:**
 - `release.yml` 会调用 `scripts/upload-r2-assets.js`
-- Release job 运行在 Node 20 上，并使用 `wrangler@4`
+- Release job 固定运行在 Node 22 上，并固定使用 `wrangler@4.88.0`
 - 需要配置 GitHub Actions secrets:
   - `CLOUDFLARE_API_TOKEN`
   - `CLOUDFLARE_ACCOUNT_ID`
