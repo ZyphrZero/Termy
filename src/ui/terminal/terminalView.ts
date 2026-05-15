@@ -38,6 +38,10 @@ type XtermTerminal = import('@xterm/xterm').Terminal;
 
 export const TERMINAL_VIEW_TYPE = 'terminal-view';
 
+export type TerminalAttachOptions = {
+  focus?: boolean;
+};
+
 /**
  * Terminal view class
  */
@@ -52,6 +56,8 @@ export class TerminalView extends ItemView {
   private searchInput: HTMLInputElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private fileUriLinkAddon: WebLinksAddon | null = null;
+  private titleChangeCleanup: (() => void) | null = null;
+  private searchStateCleanup: (() => void) | null = null;
   private initPromise: Promise<TerminalInstance> | null = null;
   private initResolve: ((terminal: TerminalInstance) => void) | null = null;
   private initReject: ((error: Error) => void) | null = null;
@@ -102,6 +108,17 @@ export class TerminalView extends ItemView {
           ).open();
         });
     });
+
+    const plugin = this.getTerminalPlugin();
+    if (plugin) {
+      menu.addItem((item) => {
+        item.setTitle(plugin.getAlwaysOnTopTerminalLabel(view))
+          .setIcon('pin')
+          .onClick(() => {
+            void plugin.toggleAlwaysOnTopTerminal(view);
+          });
+      });
+    }
   }
 
   onOpen(): Promise<void> {
@@ -223,10 +240,16 @@ export class TerminalView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.getTerminalPlugin()?.handleTerminalViewClosed(this);
+
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.fileUriLinkAddon?.dispose();
     this.fileUriLinkAddon = null;
+    this.titleChangeCleanup?.();
+    this.titleChangeCleanup = null;
+    this.searchStateCleanup?.();
+    this.searchStateCleanup = null;
     this.removeDropHandlers?.();
     this.removeDropHandlers = null;
     this.dragEnterDepth = 0;
@@ -245,8 +268,49 @@ export class TerminalView extends ItemView {
     this.disposeAppearanceStyle();
   }
 
+  releaseTerminalInstance(): TerminalInstance | null {
+    const terminal = this.terminalInstance;
+    if (!terminal) return null;
+
+    this.detachTerminalBindings();
+    this.fileUriLinkAddon?.dispose();
+    this.fileUriLinkAddon = null;
+    terminal.detach();
+    this.terminalInstance = null;
+    this.initPromise = Promise.resolve(terminal);
+    this.initResolve = null;
+    this.initReject = null;
+    return terminal;
+  }
+
+  adoptTerminalInstance(terminal: TerminalInstance, options: TerminalAttachOptions = {}): void {
+    this.detachTerminalBindings();
+    this.terminalInstance = terminal;
+    this.initPromise = Promise.resolve(terminal);
+    this.initResolve?.(terminal);
+    this.initResolve = null;
+    this.initReject = null;
+    this.bindTerminalInstance(terminal);
+    this.registerTerminalHyperlinkHandler(terminal.getXterm());
+    this.updateAppearanceStyles();
+    this.attachTerminalToContainer(options);
+    this.setupResizeObserver();
+    this.updateLeafHeader(this.leaf);
+    this.updateDropHintText();
+  }
+
   setTerminalService(terminalService: TerminalService): void {
     this.terminalService = terminalService;
+  }
+
+  handleHostWindowChanged(options: TerminalAttachOptions = {}): void {
+    if (!this.terminalInstance || !this.terminalContainer) return;
+
+    this.removeDropHandlers?.();
+    this.removeDropHandlers = this.setupDropHandlers();
+    this.updateAppearanceStyles();
+    this.attachTerminalToContainer(options);
+    this.setupResizeObserver();
   }
 
   private async initializeTerminal(): Promise<void> {
@@ -260,44 +324,12 @@ export class TerminalView extends ItemView {
       this.initResolve = null;
       this.initReject = null;
 
-      this.terminalInstance.onTitleChange(() => {
-        this.updateLeafHeader(this.leaf);
-        this.updateDropHintText();
-      });
+      this.bindTerminalInstance(this.terminalInstance);
       const xterm = this.terminalInstance.getXterm();
       this.registerTerminalHyperlinkHandler(xterm);
 
-      // Set the search state callback
-      this.terminalInstance.onSearchStateChange((visible) => {
-        if (visible) {
-          this.showSearch();
-        } else {
-          this.hideSearch();
-        }
-      });
-
-      // Set context menu callbacks
-      this.terminalInstance.setOnNewTerminal(() => {
-        void this.createNewTerminal();
-      });
-
-      this.terminalInstance.setOnSplitTerminal((direction) => {
-        void this.splitTerminal(direction);
-      });
-
-      this.terminalInstance.setDefaultShellMenuCallbacks(
-        () => this.terminalService?.getDefaultShellOptions() ?? [],
-        (shellType) => {
-          void this.terminalService?.setDefaultShell(shellType).catch((error) => {
-            const message = error instanceof Error ? error.message : String(error);
-            errorLog('[TerminalView] Failed to switch default shell:', error);
-            new Notice(message);
-          });
-        }
-      );
-
       this.updateAppearanceStyles();
-      this.renderTerminal();
+      this.attachTerminalToContainer();
       this.setupResizeObserver();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -322,6 +354,58 @@ export class TerminalView extends ItemView {
     if (plugin) {
       await plugin.activateTerminalView();
     }
+  }
+
+  private bindTerminalInstance(terminal: TerminalInstance): void {
+    this.detachTerminalBindings();
+    this.titleChangeCleanup = terminal.onTitleChange(() => {
+      this.updateLeafHeader(this.leaf);
+      this.updateDropHintText();
+    });
+
+    this.searchStateCleanup = terminal.onSearchStateChange((visible) => {
+      if (visible) {
+        this.showSearch();
+      } else {
+        this.hideSearch();
+      }
+    });
+
+    terminal.setOnNewTerminal(() => {
+      void this.createNewTerminal();
+    });
+
+    terminal.setOnSplitTerminal((direction) => {
+      void this.splitTerminal(direction);
+    });
+
+    terminal.setOnToggleAlwaysOnTop(
+      () => {
+        const plugin = this.getTerminalPlugin();
+        if (plugin) {
+          void plugin.toggleAlwaysOnTopTerminal(this);
+        }
+      },
+      () => this.getTerminalPlugin()?.getAlwaysOnTopTerminalLabel(this) ?? t('terminal.contextMenu.pinToTop')
+    );
+
+    terminal.setDefaultShellMenuCallbacks(
+      () => this.terminalService?.getDefaultShellOptions() ?? [],
+      (shellType) => {
+        void this.terminalService?.setDefaultShell(shellType).catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          errorLog('[TerminalView] Failed to switch default shell:', error);
+          new Notice(message);
+        });
+      }
+    );
+  }
+
+  private detachTerminalBindings(): void {
+    this.titleChangeCleanup?.();
+    this.titleChangeCleanup = null;
+    this.searchStateCleanup?.();
+    this.searchStateCleanup = null;
   }
 
   /**
@@ -413,9 +497,10 @@ export class TerminalView extends ItemView {
     if (!this.terminalContainer) return;
     if (this.dropHintEl && this.dropHintEl.isConnected) return;
 
-    const hint = document.createElement('div');
+    const doc = this.terminalContainer.ownerDocument;
+    const hint = doc.createElement('div');
     hint.className = 'terminal-drop-hint';
-    const textEl = document.createElement('div');
+    const textEl = doc.createElement('div');
     textEl.className = 'terminal-drop-hint__text';
     hint.appendChild(textEl);
     this.dropHintEl = hint;
@@ -981,7 +1066,7 @@ export class TerminalView extends ItemView {
     });
   }
 
-  private renderTerminal(): void {
+  private attachTerminalToContainer(options: TerminalAttachOptions = {}): void {
     if (!this.terminalContainer || !this.terminalInstance) {
       errorLog('[TerminalView] Render failed: missing container or instance');
       return;
@@ -1004,17 +1089,21 @@ export class TerminalView extends ItemView {
     setTimeout(() => {
       if (this.terminalInstance?.isAlive()) {
         this.terminalInstance.fit();
-        this.terminalInstance.focus();
+        if (options.focus !== false) {
+          this.terminalInstance.focus();
+        }
       }
     }, 100);
   }
 
   private setupResizeObserver(): void {
     if (!this.terminalContainer) return;
+    this.resizeObserver?.disconnect();
 
     let resizeTimeout: NodeJS.Timeout | null = null;
+    const ResizeObserverCtor = this.terminalContainer.ownerDocument.defaultView?.ResizeObserver ?? ResizeObserver;
 
-    this.resizeObserver = new ResizeObserver((entries) => {
+    this.resizeObserver = new ResizeObserverCtor((entries) => {
       if (resizeTimeout) clearTimeout(resizeTimeout);
 
       resizeTimeout = setTimeout(() => {
@@ -1125,7 +1214,14 @@ export class TerminalView extends ItemView {
     leafWithHeader.updateHeader?.();
   }
 
-  private getTerminalPlugin(): { settings: TerminalSettings; activateTerminalView: () => Promise<void> } | null {
+  private getTerminalPlugin(): {
+    settings: TerminalSettings;
+    activateTerminalView: () => Promise<void>;
+    toggleAlwaysOnTopTerminal: (terminalView: TerminalView) => Promise<void>;
+    getAlwaysOnTopTerminalLabel: (terminalView: TerminalView) => string;
+    isAlwaysOnTopTerminal: (terminalView: TerminalView) => boolean;
+    handleTerminalViewClosed: (terminalView: TerminalView) => void;
+  } | null {
     const appWithPlugins = this.app as typeof this.app & {
       plugins?: { getPlugin?: (id: string) => unknown };
     };
@@ -1134,9 +1230,28 @@ export class TerminalView extends ItemView {
     return plugin;
   }
 
-  private isTerminalPlugin(value: unknown): value is { settings: TerminalSettings; activateTerminalView: () => Promise<void> } {
+  private isTerminalPlugin(value: unknown): value is {
+    settings: TerminalSettings;
+    activateTerminalView: () => Promise<void>;
+    toggleAlwaysOnTopTerminal: (terminalView: TerminalView) => Promise<void>;
+    getAlwaysOnTopTerminalLabel: (terminalView: TerminalView) => string;
+    isAlwaysOnTopTerminal: (terminalView: TerminalView) => boolean;
+    handleTerminalViewClosed: (terminalView: TerminalView) => void;
+  } {
     if (!value || typeof value !== 'object') return false;
-    const candidate = value as { settings?: unknown; activateTerminalView?: unknown };
-    return typeof candidate.activateTerminalView === 'function' && typeof candidate.settings === 'object';
+    const candidate = value as {
+      settings?: unknown;
+      activateTerminalView?: unknown;
+      toggleAlwaysOnTopTerminal?: unknown;
+      getAlwaysOnTopTerminalLabel?: unknown;
+      isAlwaysOnTopTerminal?: unknown;
+      handleTerminalViewClosed?: unknown;
+    };
+    return typeof candidate.activateTerminalView === 'function'
+      && typeof candidate.toggleAlwaysOnTopTerminal === 'function'
+      && typeof candidate.getAlwaysOnTopTerminalLabel === 'function'
+      && typeof candidate.isAlwaysOnTopTerminal === 'function'
+      && typeof candidate.handleTerminalViewClosed === 'function'
+      && typeof candidate.settings === 'object';
   }
 }

@@ -160,16 +160,16 @@ export class TerminalInstance {
   private titleState: TerminalTitleState;
   private isInitialized = false;
   private isDestroyed = false;
-  private titleChangeCallback: ((title: string) => void) | null = null;
+  private titleChangeCallbacks: Set<(title: string) => void> = new Set();
   
   // Search-related state
   private searchVisible = false;
-  private searchStateCallback: SearchStateCallback | null = null;
+  private searchStateCallbacks: Set<SearchStateCallback> = new Set();
   private lastSearchQuery = '';
   
   // Font size state
   private currentFontSize: number;
-  private fontSizeChangeCallback: FontSizeChangeCallback | null = null;
+  private fontSizeChangeCallbacks: Set<FontSizeChangeCallback> = new Set();
   private readonly minFontSize = 8;
   private readonly maxFontSize = 32;
 
@@ -182,6 +182,8 @@ export class TerminalInstance {
   private contextMenuCallbacks: {
     onNewTerminal?: () => void;
     onSplitTerminal?: (direction: 'horizontal' | 'vertical') => void;
+    onToggleAlwaysOnTop?: () => void;
+    getAlwaysOnTopLabel?: () => string;
     getDefaultShellOptions?: () => DefaultShellOption[];
     onDefaultShellChange?: (shellType: DefaultShellOption['shellType']) => void;
   } = {};
@@ -209,6 +211,8 @@ export class TerminalInstance {
   private pendingControlSequenceText = '';
   private synchronizedOutputCompatibilityState = createSynchronizedOutputCompatibilityState();
   private parserDisposables: IDisposable[] = [];
+  private domEventCleanups: Array<() => void> = [];
+  private hostWindow: Window | null = null;
 
   constructor(options: TerminalOptions = {}) {
     this.id = `terminal-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -599,7 +603,8 @@ export class TerminalInstance {
 
   private applyTitleChange(changed: boolean): void {
     if (changed) {
-      this.titleChangeCallback?.(this.titleState.getTitle());
+      const title = this.titleState.getTitle();
+      this.titleChangeCallbacks.forEach((callback) => callback(title));
     }
   }
 
@@ -807,12 +812,23 @@ export class TerminalInstance {
       throw new Error(t('terminalInstance.instanceDestroyed'));
     }
 
-    if (this.containerEl === container) return;
+    const containerWindow = container.ownerDocument.defaultView ?? window;
+    if (
+      this.containerEl === container
+      && this.xterm.element?.parentElement === container
+      && this.hostWindow === containerWindow
+    ) {
+      return;
+    }
 
     this.detach();
     this.containerEl = container;
+    this.hostWindow = containerWindow;
 
     try {
+      if (this.xterm.element) {
+        container.appendChild(this.xterm.element);
+      }
       this.xterm.open(container);
     } catch (error) {
       errorLog('[Terminal] xterm.open() failed:', error);
@@ -820,8 +836,7 @@ export class TerminalInstance {
     }
 
     // Set up the context menu and keyboard shortcuts
-    this.setupContextMenu(container);
-    this.setupKeyboardShortcuts(container);
+    this.setupDomEventHandlers(container);
 
     const preferredRenderer = this.options.preferredRenderer || 'canvas';
 
@@ -853,8 +868,32 @@ export class TerminalInstance {
   /**
    * Set up keyboard shortcuts
    */
+  private setupDomEventHandlers(container: HTMLElement): void {
+    this.disposeDomEventHandlers();
+    this.setupKeyboardShortcuts(container);
+    this.setupContextMenu(container);
+  }
+
+  private addDomEventListener<K extends keyof HTMLElementEventMap>(
+    container: HTMLElement,
+    type: K,
+    listener: (event: HTMLElementEventMap[K]) => void,
+    options?: AddEventListenerOptions,
+  ): void {
+    container.addEventListener(type, listener as EventListener, options);
+    this.domEventCleanups.push(() => {
+      container.removeEventListener(type, listener as EventListener, options);
+    });
+  }
+
+  private disposeDomEventHandlers(): void {
+    for (const cleanup of this.domEventCleanups.splice(0)) {
+      cleanup();
+    }
+  }
+
   private setupKeyboardShortcuts(container: HTMLElement): void {
-    container.addEventListener('keydown', (e: KeyboardEvent) => {
+    this.addDomEventListener(container, 'keydown', (e: KeyboardEvent) => {
       const isCtrlOrCmd = e.ctrlKey || e.metaKey;
       
       // Ctrl+Shift+A: Select all
@@ -903,7 +942,7 @@ export class TerminalInstance {
     });
 
     // Ctrl+wheel: Adjust font size
-    container.addEventListener('wheel', (e: WheelEvent) => {
+    this.addDomEventListener(container, 'wheel', (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         if (e.deltaY < 0) {
@@ -919,7 +958,7 @@ export class TerminalInstance {
    * Set up the terminal context menu
    */
   private setupContextMenu(container: HTMLElement): void {
-    container.addEventListener('contextmenu', (e: MouseEvent) => {
+    this.addDomEventListener(container, 'contextmenu', (e: MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
       
@@ -931,7 +970,7 @@ export class TerminalInstance {
       // Calculate coordinates using xterm.js sizing assumptions
       const coords = this.getTerminalCoordinates(x, y);
       
-      this.showContextMenu(e.clientX, e.clientY, coords);
+      this.showContextMenu(container, e.clientX, e.clientY, coords);
     });
   }
 
@@ -939,14 +978,22 @@ export class TerminalInstance {
   /**
    * Show the context menu
    */
-  private showContextMenu(x: number, y: number, coords?: { col: number; row: number }): void {
+  private showContextMenu(
+    host: HTMLElement,
+    x: number,
+    y: number,
+    coords?: { col: number; row: number }
+  ): void {
+    const menuDocument = host.ownerDocument;
+    const menuWindow = menuDocument.defaultView ?? window;
+
     // Remove any existing menu
-    const existingMenu = document.querySelector('.terminal-context-menu');
+    const existingMenu = menuDocument.querySelector('.terminal-context-menu');
     if (existingMenu) {
       existingMenu.remove();
     }
 
-    const menu = document.createElement('div');
+    const menu = menuDocument.createElement('div');
     menu.className = 'terminal-context-menu';
     menu.setCssStyles({ left: `${x}px`, top: `${y}px` });
 
@@ -955,6 +1002,7 @@ export class TerminalInstance {
 
     // Copy
     menu.appendChild(this.createMenuItem(
+      menuDocument,
       t('terminal.contextMenu.copy'),
       'copy',
       hasSelection,
@@ -969,6 +1017,7 @@ export class TerminalInstance {
 
     // Copy as plain text (strip ANSI escape sequences)
     menu.appendChild(this.createMenuItem(
+      menuDocument,
       t('terminal.contextMenu.copyAsPlainText'),
       'file-text',
       hasSelection,
@@ -983,6 +1032,7 @@ export class TerminalInstance {
 
     // Paste
     menu.appendChild(this.createMenuItem(
+      menuDocument,
       t('terminal.contextMenu.paste'),
       'clipboard-paste',
       true,
@@ -992,10 +1042,11 @@ export class TerminalInstance {
       'Ctrl+Shift+V'
     ));
 
-    menu.appendChild(this.createSeparator());
+    menu.appendChild(this.createSeparator(menuDocument));
 
     // Select all content
     menu.appendChild(this.createMenuItem(
+      menuDocument,
       t('terminal.contextMenu.selectAll'),
       'select-all',
       true,
@@ -1006,6 +1057,7 @@ export class TerminalInstance {
     // Select the current line
     if (coords) {
       menu.appendChild(this.createMenuItem(
+        menuDocument,
         t('terminal.contextMenu.selectLine'),
         'minus',
         true,
@@ -1015,6 +1067,7 @@ export class TerminalInstance {
 
     // Search
     menu.appendChild(this.createMenuItem(
+      menuDocument,
       t('terminal.contextMenu.search'),
       'search',
       true,
@@ -1022,10 +1075,11 @@ export class TerminalInstance {
       'Ctrl+F'
     ));
 
-    menu.appendChild(this.createSeparator());
+    menu.appendChild(this.createSeparator(menuDocument));
 
     // Copy the current path
     menu.appendChild(this.createMenuItem(
+      menuDocument,
       t('terminal.contextMenu.copyPath'),
       'folder',
       true,
@@ -1037,6 +1091,7 @@ export class TerminalInstance {
 
     // Open in the file manager
     menu.appendChild(this.createMenuItem(
+      menuDocument,
       t('terminal.contextMenu.openInExplorer'),
       'folder-open',
       true,
@@ -1046,10 +1101,21 @@ export class TerminalInstance {
       }
     ));
 
-    menu.appendChild(this.createSeparator());
+    menu.appendChild(this.createSeparator(menuDocument));
+
+    if (this.contextMenuCallbacks.onToggleAlwaysOnTop) {
+      menu.appendChild(this.createMenuItem(
+        menuDocument,
+        this.contextMenuCallbacks.getAlwaysOnTopLabel?.() ?? t('terminal.contextMenu.pinToTop'),
+        'lock',
+        true,
+        () => this.contextMenuCallbacks.onToggleAlwaysOnTop?.()
+      ));
+    }
 
     // New terminal
     menu.appendChild(this.createMenuItem(
+      menuDocument,
       t('terminal.contextMenu.newTerminal'),
       'terminal',
       true,
@@ -1059,6 +1125,8 @@ export class TerminalInstance {
 
     // Split terminal submenu
     const splitSubmenu = this.createSubmenuItem(
+      menuDocument,
+      menuWindow,
       t('terminal.contextMenu.splitTerminal'),
       'columns',
       [
@@ -1081,6 +1149,8 @@ export class TerminalInstance {
     const defaultShellOptions = this.contextMenuCallbacks.getDefaultShellOptions?.() ?? [];
     if (defaultShellOptions.length > 0 && this.contextMenuCallbacks.onDefaultShellChange) {
       menu.appendChild(this.createSubmenuItem(
+        menuDocument,
+        menuWindow,
         t('terminal.contextMenu.switchDefaultTerminal'),
         'terminal',
         defaultShellOptions.map((option) => ({
@@ -1091,10 +1161,12 @@ export class TerminalInstance {
       ));
     }
 
-    menu.appendChild(this.createSeparator());
+    menu.appendChild(this.createSeparator(menuDocument));
 
     // Font size submenu
     const fontSubmenu = this.createSubmenuItem(
+      menuDocument,
+      menuWindow,
       t('terminal.contextMenu.fontSize'),
       'type',
       [
@@ -1122,6 +1194,7 @@ export class TerminalInstance {
 
     // Clear the screen
     menu.appendChild(this.createMenuItem(
+      menuDocument,
       t('terminal.contextMenu.clear'),
       'trash',
       true,
@@ -1131,6 +1204,7 @@ export class TerminalInstance {
 
     // Clear the buffer
     menu.appendChild(this.createMenuItem(
+      menuDocument,
       t('terminal.contextMenu.clearBuffer'),
       'trash',
       true,
@@ -1138,29 +1212,29 @@ export class TerminalInstance {
       'Ctrl+Shift+K'
     ));
 
-    document.body.appendChild(menu);
+    menuDocument.body.appendChild(menu);
 
     // Adjust the menu position
     const rect = menu.getBoundingClientRect();
-    if (rect.right > window.innerWidth) {
-      menu.setCssStyles({ left: `${window.innerWidth - rect.width - 5}px` });
+    if (rect.right > menuWindow.innerWidth) {
+      menu.setCssStyles({ left: `${menuWindow.innerWidth - rect.width - 5}px` });
     }
-    if (rect.bottom > window.innerHeight) {
-      menu.setCssStyles({ top: `${window.innerHeight - rect.height - 5}px` });
+    if (rect.bottom > menuWindow.innerHeight) {
+      menu.setCssStyles({ top: `${menuWindow.innerHeight - rect.height - 5}px` });
     }
 
     // Close the menu when clicking elsewhere
     const closeMenu = (e: MouseEvent) => {
       if (!menu.contains(e.target as Node)) {
         menu.remove();
-        document.removeEventListener('click', closeMenu);
-        document.removeEventListener('contextmenu', closeMenu);
+        menuDocument.removeEventListener('click', closeMenu);
+        menuDocument.removeEventListener('contextmenu', closeMenu);
       }
     };
 
     setTimeout(() => {
-      document.addEventListener('click', closeMenu);
-      document.addEventListener('contextmenu', closeMenu);
+      menuDocument.addEventListener('click', closeMenu);
+      menuDocument.addEventListener('contextmenu', closeMenu);
     }, 0);
   }
 
@@ -1177,33 +1251,34 @@ export class TerminalInstance {
    * Create a menu item
    */
   private createMenuItem(
+    menuDocument: Document,
     label: string,
     icon: string,
     enabled: boolean,
     onClick: () => void,
     shortcut?: string
   ): HTMLElement {
-    const item = document.createElement('div');
+    const item = menuDocument.createElement('div');
     item.className = 'terminal-context-menu-item';
     if (!enabled) item.addClass('is-disabled');
 
     // Icon
-    const iconEl = document.createElement('span');
+    const iconEl = menuDocument.createElement('span');
     iconEl.className = 'terminal-context-menu-icon';
     if (!enabled) iconEl.addClass('is-disabled');
-    const iconSvg = this.createIconElement(icon);
+    const iconSvg = this.createIconElement(menuDocument, icon);
     if (iconSvg) iconEl.appendChild(iconSvg);
     item.appendChild(iconEl);
 
     // Text
-    const textEl = document.createElement('span');
+    const textEl = menuDocument.createElement('span');
     textEl.textContent = label;
     textEl.className = 'terminal-context-menu-text';
     item.appendChild(textEl);
 
     // Shortcut
     if (shortcut) {
-      const shortcutEl = document.createElement('span');
+      const shortcutEl = menuDocument.createElement('span');
       shortcutEl.textContent = shortcut;
       shortcutEl.className = 'terminal-context-menu-shortcut';
       item.appendChild(shortcutEl);
@@ -1213,7 +1288,7 @@ export class TerminalInstance {
       item.addEventListener('click', (e) => {
         e.stopPropagation();
         onClick();
-        document.querySelector('.terminal-context-menu')?.remove();
+        menuDocument.querySelector('.terminal-context-menu')?.remove();
       });
     }
 
@@ -1224,44 +1299,46 @@ export class TerminalInstance {
    * Create a submenu item
    */
   private createSubmenuItem(
+    menuDocument: Document,
+    menuWindow: Window,
     label: string,
     icon: string,
     items: Array<{ label: string; icon: string; onClick: () => void; shortcut?: string }>
   ): HTMLElement {
-    const container = document.createElement('div');
+    const container = menuDocument.createElement('div');
     container.className = 'terminal-context-submenu-container';
 
-    const item = document.createElement('div');
+    const item = menuDocument.createElement('div');
     item.className = 'terminal-context-menu-item';
 
     // Icon
-    const iconEl = document.createElement('span');
+    const iconEl = menuDocument.createElement('span');
     iconEl.className = 'terminal-context-menu-icon';
-    const iconSvg = this.createIconElement(icon);
+    const iconSvg = this.createIconElement(menuDocument, icon);
     if (iconSvg) iconEl.appendChild(iconSvg);
     item.appendChild(iconEl);
 
     // Text
-    const textEl = document.createElement('span');
+    const textEl = menuDocument.createElement('span');
     textEl.textContent = label;
     textEl.className = 'terminal-context-menu-text';
     item.appendChild(textEl);
 
     // Arrow
-    const arrowEl = document.createElement('span');
+    const arrowEl = menuDocument.createElement('span');
     arrowEl.className = 'terminal-context-submenu-arrow';
-    const arrowSvg = this.createIconElement('chevron-right');
+    const arrowSvg = this.createIconElement(menuDocument, 'chevron-right');
     if (arrowSvg) arrowEl.appendChild(arrowSvg);
     item.appendChild(arrowEl);
 
     container.appendChild(item);
 
     // Submenu
-    const submenu = document.createElement('div');
+    const submenu = menuDocument.createElement('div');
     submenu.className = 'terminal-context-submenu';
 
     items.forEach(subItem => {
-      submenu.appendChild(this.createMenuItem(subItem.label, subItem.icon, true, subItem.onClick, subItem.shortcut));
+      submenu.appendChild(this.createMenuItem(menuDocument, subItem.label, subItem.icon, true, subItem.onClick, subItem.shortcut));
     });
 
     container.appendChild(submenu);
@@ -1274,13 +1351,13 @@ export class TerminalInstance {
 
       // Adjust the submenu position
       const rect = submenu.getBoundingClientRect();
-      if (rect.right > window.innerWidth) {
+      if (rect.right > menuWindow.innerWidth) {
         submenu.addClass('is-flipped');
       }
 
       const adjustedRect = submenu.getBoundingClientRect();
-      if (adjustedRect.bottom > window.innerHeight) {
-        const topOffset = Math.min(0, window.innerHeight - adjustedRect.bottom - 8);
+      if (adjustedRect.bottom > menuWindow.innerHeight) {
+        const topOffset = Math.min(0, menuWindow.innerHeight - adjustedRect.bottom - 8);
         submenu.style.top = `${topOffset}px`;
       }
     });
@@ -1295,8 +1372,8 @@ export class TerminalInstance {
   /**
    * Create a separator
    */
-  private createSeparator(): HTMLElement {
-    const separator = document.createElement('div');
+  private createSeparator(menuDocument: Document): HTMLElement {
+    const separator = menuDocument.createElement('div');
     separator.className = 'terminal-context-separator';
     return separator;
   }
@@ -1323,6 +1400,7 @@ export class TerminalInstance {
       'folder': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>',
       'folder-open': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"></path></svg>',
       'terminal': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" x2="20" y1="19" y2="19"></line></svg>',
+      'lock': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>',
       'columns': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><line x1="12" x2="12" y1="3" y2="21"></line></svg>',
       'separator-horizontal': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="12" y2="12"></line><polyline points="8 8 12 4 16 8"></polyline><polyline points="16 16 12 20 8 16"></polyline></svg>',
       'separator-vertical': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="3" y2="21"></line><polyline points="8 8 4 12 8 16"></polyline><polyline points="16 16 20 12 16 8"></polyline></svg>',
@@ -1341,12 +1419,13 @@ export class TerminalInstance {
     return icons[icon] || '';
   }
 
-  private createIconElement(icon: string): SVGElement | null {
+  private createIconElement(menuDocument: Document, icon: string): SVGElement | null {
     const svgText = this.getIconSvg(icon);
     if (!svgText) return null;
-    const parsed = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+    const DOMParserCtor = menuDocument.defaultView?.DOMParser ?? DOMParser;
+    const parsed = new DOMParserCtor().parseFromString(svgText, 'image/svg+xml');
     const svg = parsed.querySelector('svg');
-    return svg ? document.importNode(svg, true) : null;
+    return svg ? menuDocument.importNode(svg, true) : null;
   }
 
   // ==================== Search ====================
@@ -1367,7 +1446,7 @@ export class TerminalInstance {
    */
   showSearch(): void {
     this.searchVisible = true;
-    this.searchStateCallback?.(true);
+    this.searchStateCallbacks.forEach((callback) => callback(true));
   }
 
   /**
@@ -1376,7 +1455,7 @@ export class TerminalInstance {
   hideSearch(): void {
     this.searchVisible = false;
     this.searchAddon.clearDecorations();
-    this.searchStateCallback?.(false);
+    this.searchStateCallbacks.forEach((callback) => callback(false));
     this.focus();
   }
 
@@ -1433,8 +1512,11 @@ export class TerminalInstance {
   /**
    * Listen for search state changes
    */
-  onSearchStateChange(callback: SearchStateCallback): void {
-    this.searchStateCallback = callback;
+  onSearchStateChange(callback: SearchStateCallback): () => void {
+    this.searchStateCallbacks.add(callback);
+    return () => {
+      this.searchStateCallbacks.delete(callback);
+    };
   }
 
   /**
@@ -1533,7 +1615,7 @@ export class TerminalInstance {
       this.currentFontSize = newSize;
       this.xterm.options.fontSize = newSize;
       this.fit();
-      this.fontSizeChangeCallback?.(newSize);
+      this.fontSizeChangeCallbacks.forEach((callback) => callback(newSize));
     }
   }
 
@@ -1547,8 +1629,11 @@ export class TerminalInstance {
   /**
    * Listen for font size changes
    */
-  onFontSizeChange(callback: FontSizeChangeCallback): void {
-    this.fontSizeChangeCallback = callback;
+  onFontSizeChange(callback: FontSizeChangeCallback): () => void {
+    this.fontSizeChangeCallbacks.add(callback);
+    return () => {
+      this.fontSizeChangeCallbacks.delete(callback);
+    };
   }
 
   // ==================== Context Menu Callback Setup ====================
@@ -1565,6 +1650,11 @@ export class TerminalInstance {
    */
   setOnSplitTerminal(callback: (direction: 'horizontal' | 'vertical') => void): void {
     this.contextMenuCallbacks.onSplitTerminal = callback;
+  }
+
+  setOnToggleAlwaysOnTop(callback: () => void, getLabel: () => string): void {
+    this.contextMenuCallbacks.onToggleAlwaysOnTop = callback;
+    this.contextMenuCallbacks.getAlwaysOnTopLabel = getLabel;
   }
 
   setDefaultShellMenuCallbacks(
@@ -1607,10 +1697,10 @@ export class TerminalInstance {
   }
 
   detach(): void {
-    if (this.containerEl) {
-      this.containerEl.empty();
-      this.containerEl = null;
-    }
+    this.disposeDomEventHandlers();
+    this.xterm.element?.remove();
+    this.containerEl = null;
+    this.hostWindow = null;
   }
 
   focus(): void {
@@ -1787,8 +1877,11 @@ export class TerminalInstance {
     return null;
   }
 
-  onTitleChange(callback: (title: string) => void): void {
-    this.titleChangeCallback = callback;
+  onTitleChange(callback: (title: string) => void): () => void {
+    this.titleChangeCallbacks.add(callback);
+    return () => {
+      this.titleChangeCallbacks.delete(callback);
+    };
   }
 
   getXterm(): Terminal { return this.xterm; }

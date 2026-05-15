@@ -49,6 +49,10 @@ export const ko: TranslationKeys = {
       search: '검색',
       copyPath: '현재 경로 복사',
       openInExplorer: '파일 관리자에서 열기',
+      pinToTop: 'Open always-on-top terminal window',
+      alreadyPinnedToTop: 'Already always on top',
+      restorePinnedTerminal: 'Restore to main window',
+      focusPinnedTerminal: 'Focus always-on-top terminal window',
       newTerminal: '새 터미널',
       splitTerminal: '터미널 분할',
       splitHorizontal: '가로 분할',
@@ -82,6 +86,7 @@ export const ko: TranslationKeys = {
     terminalPromptPrevious: '터미널: 이전 프롬프트로 이동',
     terminalPromptNext: '터미널: 다음 프롬프트로 이동',
     terminalPromptLastFailed: '터미널: 최근 실패한 명령으로 이동',
+    terminalToggleAlwaysOnTop: 'Terminal: toggle always on top',
     presetScriptPrefix: '터미널: ',
   },
 
@@ -131,6 +136,9 @@ export const ko: TranslationKeys = {
       initFailed: '터미널 초기화 실패: {{message}}',
       renderFailed: '터미널 렌더링 실패: {{message}}',
       createFailed: '터미널 생성 실패: {{message}}',
+      alwaysOnTopOpenFailed: 'Failed to move the terminal into a separate window: {{message}}',
+      alwaysOnTopUnavailable: 'The terminal was opened in a separate window, but Obsidian did not expose system always-on-top control.',
+      alwaysOnTopRestoreFailed: 'Failed to restore the terminal to the main window.',
     },
     settings: {
       backgroundColorReset: '배경색을 기본값으로 재설정했습니다',

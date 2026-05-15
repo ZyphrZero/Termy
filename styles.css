@@ -1235,6 +1235,30 @@
   color: var(--text-error);
 }
 
+.termy-always-on-top-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin-inline-start: 5px;
+  color: color-mix(in srgb, var(--text-muted) 70%, var(--interactive-accent));
+  flex: 0 0 auto;
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.termy-always-on-top-tab-badge svg {
+  width: 11px;
+  height: 11px;
+  stroke-width: 2.1;
+}
+
+.workspace-tab-header.is-active .termy-always-on-top-tab-badge {
+  color: var(--interactive-accent);
+  opacity: 1;
+}
+
 /* ==================== Terminal Styles ==================== */
 /* Workspace leaf content - terminal view */
 .workspace-leaf-content[data-type="terminal-view"] {

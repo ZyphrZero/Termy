@@ -49,6 +49,10 @@ export const en: TranslationKeys = {
       search: 'Search',
       copyPath: 'Copy current path',
       openInExplorer: 'Open in file manager',
+      pinToTop: 'Open always-on-top terminal window',
+      alreadyPinnedToTop: 'Already always on top',
+      restorePinnedTerminal: 'Restore to main window',
+      focusPinnedTerminal: 'Focus always-on-top terminal window',
       newTerminal: 'New terminal',
       splitTerminal: 'Split terminal',
       splitHorizontal: 'Split horizontal',
@@ -82,6 +86,7 @@ export const en: TranslationKeys = {
     terminalPromptPrevious: 'Terminal: previous prompt',
     terminalPromptNext: 'Terminal: next prompt',
     terminalPromptLastFailed: 'Terminal: last failed command',
+    terminalToggleAlwaysOnTop: 'Terminal: toggle always on top',
     presetScriptPrefix: 'Workflow: ',
   },
 
@@ -131,6 +136,9 @@ export const en: TranslationKeys = {
       initFailed: 'Failed to initialize terminal: {{message}}',
       renderFailed: 'Failed to render terminal: {{message}}',
       createFailed: 'Failed to create terminal: {{message}}',
+      alwaysOnTopOpenFailed: 'Failed to move the terminal into a separate window: {{message}}',
+      alwaysOnTopUnavailable: 'The terminal was opened in a separate window, but Obsidian did not expose system always-on-top control.',
+      alwaysOnTopRestoreFailed: 'Failed to restore the terminal to the main window.',
     },
     settings: {
       backgroundColorReset: 'Background color reset to default',

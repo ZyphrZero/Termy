@@ -49,6 +49,10 @@ export const ru: TranslationKeys = {
       search: 'Поиск',
       copyPath: 'Копировать текущий путь',
       openInExplorer: 'Открыть в файловом менеджере',
+      pinToTop: 'Open always-on-top terminal window',
+      alreadyPinnedToTop: 'Already always on top',
+      restorePinnedTerminal: 'Restore to main window',
+      focusPinnedTerminal: 'Focus always-on-top terminal window',
       newTerminal: 'Новый терминал',
       splitTerminal: 'Разделить терминал',
       splitHorizontal: 'Разделить по горизонтали',
@@ -82,6 +86,7 @@ export const ru: TranslationKeys = {
     terminalPromptPrevious: 'Терминал: перейти к предыдущему приглашению',
     terminalPromptNext: 'Терминал: перейти к следующему приглашению',
     terminalPromptLastFailed: 'Терминал: перейти к последней ошибочной команде',
+    terminalToggleAlwaysOnTop: 'Terminal: toggle always on top',
     presetScriptPrefix: 'Терминал: ',
   },
 
@@ -131,6 +136,9 @@ export const ru: TranslationKeys = {
       initFailed: 'Не удалось инициализировать терминал: {{message}}',
       renderFailed: 'Не удалось отрисовать терминал: {{message}}',
       createFailed: 'Не удалось создать терминал: {{message}}',
+      alwaysOnTopOpenFailed: 'Failed to move the terminal into a separate window: {{message}}',
+      alwaysOnTopUnavailable: 'The terminal was opened in a separate window, but Obsidian did not expose system always-on-top control.',
+      alwaysOnTopRestoreFailed: 'Failed to restore the terminal to the main window.',
     },
     settings: {
       backgroundColorReset: 'Цвет фона сброшен до значения по умолчанию',

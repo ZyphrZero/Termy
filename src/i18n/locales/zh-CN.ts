@@ -49,6 +49,10 @@ export const zhCN: TranslationKeys = {
       search: '搜索',
       copyPath: '复制当前路径',
       openInExplorer: '在文件管理器中打开',
+      pinToTop: '打开系统置顶终端窗口',
+      alreadyPinnedToTop: '当前终端已系统置顶',
+      restorePinnedTerminal: '恢复到主窗口',
+      focusPinnedTerminal: '聚焦已置顶终端窗口',
       newTerminal: '新建终端',
       splitTerminal: '拆分终端',
       splitHorizontal: '水平拆分',
@@ -82,6 +86,7 @@ export const zhCN: TranslationKeys = {
     terminalPromptPrevious: '终端：跳到上一个提示符',
     terminalPromptNext: '终端：跳到下一个提示符',
     terminalPromptLastFailed: '终端：跳到最近失败命令',
+    terminalToggleAlwaysOnTop: '终端：切换置顶显示',
     presetScriptPrefix: '工作流：',
   },
 
@@ -131,6 +136,9 @@ export const zhCN: TranslationKeys = {
       initFailed: '初始化终端失败：{{message}}',
       renderFailed: '渲染终端失败：{{message}}',
       createFailed: '创建终端失败：{{message}}',
+      alwaysOnTopOpenFailed: '无法将终端移到独立窗口：{{message}}',
+      alwaysOnTopUnavailable: '已在独立窗口中打开终端，但当前 Obsidian 环境没有暴露系统级置顶控制。',
+      alwaysOnTopRestoreFailed: '无法将终端恢复到主窗口。',
     },
     settings: {
       backgroundColorReset: '背景颜色已重置为默认值',

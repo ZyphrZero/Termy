@@ -49,6 +49,10 @@ export const ja: TranslationKeys = {
       search: '検索',
       copyPath: '現在のパスをコピー',
       openInExplorer: 'ファイルマネージャーで開く',
+      pinToTop: 'Open always-on-top terminal window',
+      alreadyPinnedToTop: 'Already always on top',
+      restorePinnedTerminal: 'Restore to main window',
+      focusPinnedTerminal: 'Focus always-on-top terminal window',
       newTerminal: '新しいターミナル',
       splitTerminal: 'ターミナルを分割',
       splitHorizontal: '横に分割',
@@ -82,6 +86,7 @@ export const ja: TranslationKeys = {
     terminalPromptPrevious: 'ターミナル: 前のプロンプトへ移動',
     terminalPromptNext: 'ターミナル: 次のプロンプトへ移動',
     terminalPromptLastFailed: 'ターミナル: 直近の失敗コマンドへ移動',
+    terminalToggleAlwaysOnTop: 'Terminal: toggle always on top',
     presetScriptPrefix: 'ターミナル: ',
   },
 
@@ -131,6 +136,9 @@ export const ja: TranslationKeys = {
       initFailed: 'ターミナルの初期化に失敗しました: {{message}}',
       renderFailed: 'ターミナルの描画に失敗しました: {{message}}',
       createFailed: 'ターミナルの作成に失敗しました: {{message}}',
+      alwaysOnTopOpenFailed: 'Failed to move the terminal into a separate window: {{message}}',
+      alwaysOnTopUnavailable: 'The terminal was opened in a separate window, but Obsidian did not expose system always-on-top control.',
+      alwaysOnTopRestoreFailed: 'Failed to restore the terminal to the main window.',
     },
     settings: {
       backgroundColorReset: '背景色を既定値にリセットしました',

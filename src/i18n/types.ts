@@ -60,6 +60,10 @@ export interface TranslationKeys {
       search: string;
       copyPath: string;
       openInExplorer: string;
+      pinToTop: string;
+      alreadyPinnedToTop: string;
+      restorePinnedTerminal: string;
+      focusPinnedTerminal: string;
       newTerminal: string;
       splitTerminal: string;
       splitHorizontal: string;
@@ -94,6 +98,7 @@ export interface TranslationKeys {
     terminalPromptPrevious: string;
     terminalPromptNext: string;
     terminalPromptLastFailed: string;
+    terminalToggleAlwaysOnTop: string;
     presetScriptPrefix: string;
   };
 
@@ -146,6 +151,9 @@ export interface TranslationKeys {
       initFailed: string;
       renderFailed: string;
       createFailed: string;
+      alwaysOnTopOpenFailed: string;
+      alwaysOnTopUnavailable: string;
+      alwaysOnTopRestoreFailed: string;
     };
     settings: {
       backgroundColorReset: string;
