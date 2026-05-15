@@ -1336,11 +1336,15 @@ export default class TerminalPlugin extends Plugin {
     menu.className = 'preset-scripts-menu';
     menu.setAttribute('role', 'menu');
 
+    const listEl = document.createElement('div');
+    listEl.className = 'preset-scripts-menu-list';
+    listEl.setAttribute('role', 'none');
+
     if (visibleScripts.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'preset-scripts-menu-item is-disabled';
       empty.textContent = t('settingsDetails.terminal.presetScriptsEmpty');
-      menu.appendChild(empty);
+      listEl.appendChild(empty);
     }
 
     visibleScripts.forEach((script) => {
@@ -1366,8 +1370,13 @@ export default class TerminalPlugin extends Plugin {
         });
       });
 
-      menu.appendChild(item);
+      listEl.appendChild(item);
     });
+
+    menu.appendChild(listEl);
+
+    const footerEl = document.createElement('div');
+    footerEl.className = 'preset-scripts-menu-footer';
 
     const addItem = document.createElement('div');
     addItem.className = 'preset-scripts-menu-item preset-scripts-menu-add';
@@ -1377,7 +1386,8 @@ export default class TerminalPlugin extends Plugin {
       this.closePresetScriptsMenu();
       this.openPresetScriptCreateModal();
     });
-    menu.appendChild(addItem);
+    footerEl.appendChild(addItem);
+    menu.appendChild(footerEl);
 
     return menu;
   }
