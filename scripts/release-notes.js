@@ -62,6 +62,7 @@ export function readChangelogSection(version, changelogPath = DEFAULT_CHANGELOG_
 
 export function renderReleaseBody({ version, changelogSection, repository = DEFAULT_REPOSITORY }) {
   const repoUrl = `https://github.com/${repository}`;
+  const fullPackageName = `termy-${version}.zip`;
 
   return [
     `## Changelog`,
@@ -78,7 +79,7 @@ export function renderReleaseBody({ version, changelogSection, repository = DEFA
     '### Manual Installation',
     '',
     '**Option 1: Complete Package (All Platforms)**',
-    '1. Download `termy.zip` (includes plugin files and all platform binaries)',
+    `1. Download \`${fullPackageName}\` (includes plugin files and all platform binaries)`,
     '2. Extract to `.obsidian/plugins/` directory',
     '3. Restart Obsidian and enable the plugin',
     '',

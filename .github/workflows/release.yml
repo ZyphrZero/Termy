@@ -147,7 +147,7 @@ jobs:
           cp binaries/termy-server-* termy/binaries/
           chmod +x termy/binaries/termy-server-darwin-* || true
           chmod +x termy/binaries/termy-server-linux-* || true
-          zip -r termy.zip termy
+          zip -r "termy-${{ github.ref_name }}.zip" termy
 
       - name: Upload binaries to R2
         env:
@@ -166,7 +166,7 @@ jobs:
             main.js
             manifest.json
             styles.css
-            termy.zip
+            termy-${{ github.ref_name }}.zip
             binaries/termy-server-win32-x64.exe
             binaries/termy-server-win32-x64.exe.sha256
             binaries/termy-server-darwin-arm64

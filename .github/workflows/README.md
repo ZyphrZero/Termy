@@ -41,13 +41,13 @@
 - 构建所有平台二进制 + SHA256 校验和
 - 构建 TypeScript 插件
 - 上传二进制到 Cloudflare R2
-- 打包为 `termy.zip`
+- 打包为带版本号的 `termy-<version>.zip`
 - 从 `CHANGELOG.md` 自动提取当前 tag 对应的发布说明
 - 创建 GitHub Release
 
 **产物结构:**
 ```
-termy.zip
+termy-<version>.zip
 └── termy/
     ├── main.js
     ├── manifest.json
