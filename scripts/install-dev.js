@@ -17,7 +17,11 @@ import path from 'path';
 import { execSync, spawn } from 'child_process';
 import readline from 'readline';
 import { fileURLToPath } from 'url';
-import { writeDevReloadRequest } from './install-dev-reload.js';
+import {
+  clearDevInstallRequest,
+  writeDevInstallRequest,
+  writeDevReloadRequest,
+} from './install-dev-reload.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -351,11 +355,21 @@ async function main() {
   log('');
 
   // 4. Stop running processes that may lock the installed plugin files
+  const targetDir = path.join(pluginsDir, 'termy');
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+
   if (KILL_OBSIDIAN) {
     log('Closing Obsidian...', 'cyan');
     killObsidian();
     await sleep(1000);
     log('');
+  } else if (!SKIP_RELOAD) {
+    writeDevInstallRequest(targetDir);
+    process.once('exit', () => {
+      clearDevInstallRequest(targetDir);
+    });
   }
 
   log('Stopping Termy processes...', 'cyan');
@@ -370,11 +384,6 @@ async function main() {
   log('');
 
   // 5. Copy files
-  const targetDir = path.join(pluginsDir, 'termy');
-  if (!fs.existsSync(targetDir)) {
-    fs.mkdirSync(targetDir, { recursive: true });
-  }
-
   log('Installing...', 'cyan');
 
   const coreFiles = ['main.js', 'manifest.json', 'styles.css'];

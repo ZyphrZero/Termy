@@ -29,6 +29,20 @@ import { BinaryDownloader } from './binaryDownloader';
 import type { BinaryDownloadConfig } from './binaryDownloadUrls';
 
 type BinaryUpdateResult = 'skipped-offline' | 'already-ready' | 'downloaded' | 'updated';
+const DEV_RELOAD_REQUEST_FILE = '.termy-dev-reload.json';
+const DEV_RELOAD_PHASE_INSTALLING = 'installing';
+
+interface ServerExitDetails {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  abnormal: boolean;
+}
+
+interface DevReloadRequest {
+  pluginId?: unknown;
+  phase?: unknown;
+  activeUntil?: unknown;
+}
 
 /**
  * Event listener type
@@ -359,7 +373,7 @@ export class ServerManager {
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorLog('[ServerManager] 启动服务器失败:', errorMessage);
       
-      new Notice(t('notices.serverStartFailed') || '服务器启动失败', 0);
+      new Notice(t('notices.serverStartFailed', { message: errorMessage }), 0);
       
       this.emit('server-error', error instanceof Error ? error : new Error(errorMessage));
       throw error;
@@ -584,16 +598,19 @@ export class ServerManager {
       debugLog('[ServerManager] 连接 WebSocket:', wsUrl);
       
       this.ws = new WebSocket(wsUrl);
+      const ws = this.ws;
       
       const timeout = setTimeout(() => {
-        this.wsConnectPromise = null;
+        if (this.ws === ws) {
+          this.wsConnectPromise = null;
+        }
         reject(new ServerManagerError(
           ServerErrorCode.CONNECTION_FAILED,
           'WebSocket 连接超时'
         ));
       }, 5000);
 
-      this.ws.onopen = () => {
+      ws.onopen = () => {
         clearTimeout(timeout);
         debugLog('[ServerManager] WebSocket 已连接');
         
@@ -608,12 +625,20 @@ export class ServerManager {
         resolve();
       };
 
-      this.ws.onclose = (event) => {
+      ws.onclose = (event) => {
         debugLog('[ServerManager] WebSocket 已断开, code:', event.code, 'reason:', event.reason);
-        this.wsConnectPromise = null;
+        if (this.ws === ws) {
+          this.ws = null;
+          this.wsConnectPromise = null;
+        }
         
         // Clear the WebSocket on module clients
         this._ptyClient?.setWebSocket(null);
+
+        if (this.isDevInstallInProgress()) {
+          debugLog('[ServerManager] 开发安装进行中，跳过 WebSocket 重连通知');
+          return;
+        }
         
         this.emit('ws-disconnected');
         
@@ -623,13 +648,13 @@ export class ServerManager {
         }
       };
 
-      this.ws.onerror = (event) => {
+      ws.onerror = (event) => {
         clearTimeout(timeout);
         errorLog('[ServerManager] WebSocket 错误:', event);
         // Do not reject here; let onclose handle it
       };
 
-      this.ws.onmessage = (event) => {
+      ws.onmessage = (event) => {
         this.handleWebSocketMessage(event);
       };
     });
@@ -690,6 +715,11 @@ export class ServerManager {
   private scheduleReconnect(): void {
     // If reconnection is already in progress or shutdown is underway, skip
     if (this.isReconnecting || this.isShuttingDown) {
+      return;
+    }
+
+    if (this.isDevInstallInProgress()) {
+      debugLog('[ServerManager] 开发安装进行中，跳过 WebSocket 自动重连');
       return;
     }
     
@@ -777,38 +807,44 @@ export class ServerManager {
       return;
     }
 
-    this.process.on('exit', (code, signal) => {
-      this.port = null;
-      this.serverStartPromise = null;
+    const exitedProcess = this.process;
+    exitedProcess.on('exit', (code, signal) => {
+      if (this.process === exitedProcess) {
+        this.process = null;
+        this.port = null;
+        this.serverStartPromise = null;
+        this.wsConnectPromise = null;
+      }
       
       if (this.isShuttingDown) {
         debugLog(`[ServerManager] 服务器已停止: code=${code}, signal=${signal}`);
         return;
       }
       
-      errorLog(`[ServerManager] 服务器退出: code=${code}, signal=${signal}`);
-      
-      const isAbnormalExit = code !== 0 && code !== null;
-      
-      if (isAbnormalExit) {
-        new Notice(
-          t('notices.serverCrashed', { 
-            code: String(code), 
-            signal: signal || 'N/A' 
-          }) || `服务器崩溃: code=${code}, signal=${signal}`,
-          5000
-        );
+      const exitDetails: ServerExitDetails = {
+        code,
+        signal,
+        abnormal: code !== 0 && code !== null,
+      };
+
+      const logExit = exitDetails.abnormal ? errorLog : debugWarn;
+      logExit(`[ServerManager] 服务器退出: code=${code}, signal=${signal}`);
+
+      if (this.isDevInstallInProgress()) {
+        this.cancelReconnect();
+        debugLog('[ServerManager] 开发安装进行中，跳过服务器自动重启');
+        return;
       }
 
       // Try automatic restart
-      this.attemptRestart();
+      this.attemptRestart(exitDetails);
     });
   }
 
   /**
    * Try to automatically restart the server
    */
-  private attemptRestart(): void {
+  private attemptRestart(exitDetails: ServerExitDetails): void {
     if (this.restartAttempts < this.maxRestartAttempts) {
       this.restartAttempts++;
       debugLog(
@@ -821,24 +857,69 @@ export class ServerManager {
       setTimeout(() => {
         this.ensureServer()
           .then(() => {
-            new Notice(
-              t('notices.serverRestartSuccess') || '服务器重启成功',
-              3000
-            );
+            debugLog('[ServerManager] 服务器自动重启成功');
           })
           .catch(err => {
             errorLog('[ServerManager] 服务器重启失败:', err);
-            new Notice(
-              t('notices.serverRestartFailed') || '服务器重启失败',
-              0
-            );
+            this.showRestartFailedNotice(exitDetails);
           });
       }, delay);
     } else {
-      new Notice(
-        t('notices.serverRestartFailed') || '服务器重启失败，已达到最大重试次数',
-        0
-      );
+      this.showRestartFailedNotice(exitDetails);
+    }
+  }
+
+  private showRestartFailedNotice(exitDetails: ServerExitDetails): void {
+    const restartFailedMessage = t('notices.serverRestartFailed');
+    if (!exitDetails.abnormal) {
+      new Notice(restartFailedMessage, 0);
+      return;
+    }
+
+    new Notice(
+      `${this.formatServerCrashNotice(exitDetails)}\n${restartFailedMessage}`,
+      0
+    );
+  }
+
+  private formatServerCrashNotice(exitDetails: ServerExitDetails): string {
+    return t('notices.serverCrashed', {
+      code: String(exitDetails.code),
+      signal: exitDetails.signal || 'N/A',
+    });
+  }
+
+  private isDevInstallInProgress(): boolean {
+    const requestPath = path.join(this.pluginDir, DEV_RELOAD_REQUEST_FILE);
+    try {
+      if (!fs.existsSync(requestPath)) {
+        return false;
+      }
+
+      const request = JSON.parse(fs.readFileSync(requestPath, 'utf-8')) as DevReloadRequest;
+      if (request.pluginId && request.pluginId !== 'termy') {
+        return false;
+      }
+      if (request.phase !== DEV_RELOAD_PHASE_INSTALLING) {
+        return false;
+      }
+      if (typeof request.activeUntil !== 'string') {
+        return false;
+      }
+
+      const activeUntil = Date.parse(request.activeUntil);
+      if (!Number.isFinite(activeUntil)) {
+        return false;
+      }
+      if (activeUntil <= Date.now()) {
+        fs.rmSync(requestPath, { force: true });
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      debugWarn('[ServerManager] 读取开发安装标记失败:', error);
+      return false;
     }
   }
 

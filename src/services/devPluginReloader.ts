@@ -5,10 +5,12 @@ import * as path from 'path';
 import { debugLog, errorLog } from '@/utils/logger';
 
 export const DEV_RELOAD_REQUEST_FILE = '.termy-dev-reload.json';
+const DEV_RELOAD_PHASE_INSTALLING = 'installing';
 
 interface DevReloadRequest {
   pluginId?: unknown;
   requestId?: unknown;
+  phase?: unknown;
 }
 
 interface ObsidianPluginManager {
@@ -32,7 +34,7 @@ export class DevPluginReloader {
     pluginDir: string
   ) {
     this.requestPath = path.join(pluginDir, DEV_RELOAD_REQUEST_FILE);
-    this.lastRequestId = this.readRequestId();
+    this.lastRequestId = this.readReloadRequestId();
   }
 
   start(): void {
@@ -49,7 +51,7 @@ export class DevPluginReloader {
   }
 
   private readonly handleRequestFileChanged = (): void => {
-    const requestId = this.readRequestId();
+    const requestId = this.readReloadRequestId();
     if (!requestId || requestId === this.lastRequestId) {
       return;
     }
@@ -94,7 +96,7 @@ export class DevPluginReloader {
     }
   }
 
-  private readRequestId(): string | null {
+  private readReloadRequestId(): string | null {
     try {
       if (!fs.existsSync(this.requestPath)) {
         return null;
@@ -102,6 +104,9 @@ export class DevPluginReloader {
 
       const request = JSON.parse(fs.readFileSync(this.requestPath, 'utf-8')) as DevReloadRequest;
       if (request.pluginId !== this.pluginId) {
+        return null;
+      }
+      if (request.phase === DEV_RELOAD_PHASE_INSTALLING) {
         return null;
       }
 
