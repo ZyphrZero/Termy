@@ -342,7 +342,7 @@ export const ja: TranslationKeys = {
   },
 
   shellTypes: {
-    cmd: 'コマンド プロンプト',
+    cmd: 'CMD',
     powershell: 'PowerShell',
     wsl: 'WSL',
     gitbash: 'Git Bash',
@@ -375,7 +375,7 @@ export const ja: TranslationKeys = {
   },
 
   shellOptions: {
-    cmd: 'コマンド プロンプト',
+    cmd: 'CMD',
     powershell: 'PowerShell',
     pwsh: 'PowerShell 7',
     wsl: 'WSL',

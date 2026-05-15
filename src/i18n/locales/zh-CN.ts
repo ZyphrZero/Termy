@@ -375,7 +375,7 @@ export const zhCN: TranslationKeys = {
   },
 
   shellOptions: {
-    cmd: 'Command Prompt',
+    cmd: 'CMD',
     powershell: 'PowerShell',
     pwsh: 'PowerShell 7',
     wsl: 'WSL',

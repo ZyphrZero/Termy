@@ -342,7 +342,7 @@ export const en: TranslationKeys = {
   },
 
   shellTypes: {
-    cmd: 'Command prompt',
+    cmd: 'CMD',
     powershell: 'PowerShell',
     wsl: 'WSL',
     gitbash: 'Git bash',
@@ -375,7 +375,7 @@ export const en: TranslationKeys = {
   },
 
   shellOptions: {
-    cmd: 'Command prompt',
+    cmd: 'CMD',
     powershell: 'PowerShell',
     pwsh: 'PowerShell 7',
     wsl: 'WSL',

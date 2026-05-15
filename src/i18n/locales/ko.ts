@@ -342,7 +342,7 @@ export const ko: TranslationKeys = {
   },
 
   shellTypes: {
-    cmd: '명령 프롬프트',
+    cmd: 'CMD',
     powershell: 'PowerShell',
     wsl: 'WSL',
     gitbash: 'Git Bash',
@@ -375,7 +375,7 @@ export const ko: TranslationKeys = {
   },
 
   shellOptions: {
-    cmd: '명령 프롬프트',
+    cmd: 'CMD',
     powershell: 'PowerShell',
     pwsh: 'PowerShell 7',
     wsl: 'WSL',
