@@ -357,6 +357,95 @@ test('handleKeyboardEvent suppresses follow-up win32 shortcut events after local
   assert.deepEqual(harness.queuedInput, ['\x1b[65;30;97;1;0;1_']);
 });
 
+test('handleKeyboardEvent allows repeat Ctrl+V keydowns while Ctrl is still held in win32-input-mode', async () => {
+  const { harness, protocol } = createWin32ProtocolHarness();
+
+  const firstPasteKeydown = createKeyboardEvent('v', { code: 'KeyV', ctrlKey: true });
+  const firstVKeyup = createKeyboardEvent('v', { code: 'KeyV', ctrlKey: true, type: 'keyup' });
+  const secondPasteKeydown = createKeyboardEvent('v', { code: 'KeyV', ctrlKey: true });
+
+  assert.equal(protocol.handleKeyboardEvent(firstPasteKeydown), false);
+  await Promise.resolve();
+  assert.deepEqual(harness.pastedTexts, ['clipboard text']);
+
+  // The trailing `v` keyup (with Ctrl still held) is still suppressed so it does not
+  // leak into the PTY as a stray win32 KEY_EVENT_RECORD.
+  assert.equal(protocol.handleKeyboardEvent(firstVKeyup), false);
+  assert.equal(firstVKeyup.prevented, true);
+  assert.deepEqual(harness.queuedInput, []);
+
+  // A fresh Ctrl+V keydown while Ctrl is still held must trigger another paste so
+  // users can paste repeatedly without releasing Ctrl between presses.
+  assert.equal(protocol.handleKeyboardEvent(secondPasteKeydown), false);
+  await Promise.resolve();
+  assert.deepEqual(harness.pastedTexts, ['clipboard text', 'clipboard text']);
+});
+
+test('handleKeyboardEvent allows repeat Ctrl+C keydowns while Ctrl is still held in win32-input-mode', async () => {
+  let selectionText = 'first selection';
+  const harness = createProtocolHarness();
+  const protocol = new EnhancedKeyboardProtocol(
+    {
+      queueInput(data) {
+        harness.operations.push(`queue:${data}`);
+        harness.queuedInput.push(data);
+      },
+      flushPendingInput() {
+        harness.operations.push('flush');
+      },
+      writeBinary(data) {
+        harness.operations.push('binary');
+        harness.binaryWrites.push(data);
+      },
+      hasSelection() {
+        return selectionText.length > 0;
+      },
+      getSelection() {
+        return selectionText;
+      },
+      clearSelection() {
+        selectionText = '';
+      },
+      async readClipboardText() {
+        return 'clipboard text';
+      },
+      async writeClipboardText(text) {
+        harness.clipboardWrites.push(text);
+      },
+      insertText(text) {
+        harness.operations.push(`insert:${text}`);
+        harness.insertedTexts.push(text);
+      },
+      pasteText(text) {
+        harness.operations.push(`paste:${text}`);
+        harness.pastedTexts.push(text);
+      },
+    },
+    () => ({ shiftEnterMode: 'win32-input-mode' })
+  );
+
+  const firstCopyKeydown = createKeyboardEvent('c', { code: 'KeyC', ctrlKey: true });
+  const firstCKeyup = createKeyboardEvent('c', { code: 'KeyC', ctrlKey: true, type: 'keyup' });
+  const secondCopyKeydown = createKeyboardEvent('c', { code: 'KeyC', ctrlKey: true });
+
+  assert.equal(protocol.handleKeyboardEvent(firstCopyKeydown), false);
+  await Promise.resolve();
+  assert.deepEqual(harness.clipboardWrites, ['first selection']);
+
+  // The trailing `c` keyup (with Ctrl still held) stays suppressed.
+  assert.equal(protocol.handleKeyboardEvent(firstCKeyup), false);
+  assert.equal(firstCKeyup.prevented, true);
+  assert.deepEqual(harness.queuedInput, []);
+
+  // The first copy cleared the selection, so a fresh Ctrl+C now falls through to the
+  // win32 encoding path (i.e. interrupt). Either way it must NOT be silently
+  // swallowed by the shortcut suppression flag.
+  selectionText = 'second selection';
+  assert.equal(protocol.handleKeyboardEvent(secondCopyKeydown), false);
+  await Promise.resolve();
+  assert.deepEqual(harness.clipboardWrites, ['first selection', 'second selection']);
+});
+
 test('handleData and handleBinary use the extracted input pipeline callbacks', () => {
   let flushCount = 0;
   const harness = createProtocolHarness({

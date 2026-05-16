@@ -267,7 +267,17 @@ export class EnhancedKeyboardProtocol {
       return false;
     }
 
-    if (event.type === 'keyup' && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
+    // Only suppress trailing keyup events from the previous shortcut chord (e.g. the
+    // `v`/`c` keyup after Ctrl+V/Ctrl+C, or the final `Control` keyup). A fresh
+    // keydown — including a repeat Ctrl+V/Ctrl+C while Ctrl is still held — must
+    // re-enter `evaluateKeyboardDecision` so consecutive copy/paste presses keep
+    // working. Without this carve-out the flag would block every keydown until the
+    // user fully released the modifiers.
+    if (event.type !== 'keyup') {
+      return false;
+    }
+
+    if (!event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
       this.suppressWin32ShortcutEvents = false;
     }
 
