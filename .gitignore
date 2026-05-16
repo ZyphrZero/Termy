@@ -47,3 +47,7 @@ coverage/
 .omx/
 .kiro/
 docs/
+
+# Personal scratch notes (not part of the plugin)
+t.md
+new_t.md

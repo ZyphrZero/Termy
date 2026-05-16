@@ -5,6 +5,11 @@ All notable changes to Termy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-05-16
+
+### Changed
+- Bumped `minAppVersion` to `1.8.7` to match the Obsidian APIs Termy currently relies on, and refreshed the plugin description to align the repository `manifest.json` with the release artifact.
+
 ## [1.3.7] - 2026-05-16
 
 ### Fixed
