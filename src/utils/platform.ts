@@ -9,9 +9,8 @@
  * handling: `process.platform` and the `HOME` / `USERPROFILE`
  * environment variables.
  *
- * We never read identity-style environment variables such as `USER`,
- * `USERNAME`, `LOGNAME`, `HOSTNAME`, or `COMPUTERNAME`, and we never
- * call `os.userInfo`, `os.hostname`, or `os.networkInterfaces`.
+ * We avoid username, login-name, host-name, and machine-name signals;
+ * callers only receive platform plus home-directory path information.
  */
 
 /** Returns the Node platform identifier (e.g. `win32`, `darwin`, `linux`). */
