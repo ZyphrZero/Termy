@@ -10,6 +10,7 @@ Powered by xterm.js and a native Rust PTY backend, with split panes, reusable wo
 
 [![Version](https://img.shields.io/badge/version-1.4.0-7c3aed?style=for-the-badge)](./manifest.json)
 [![Obsidian](https://img.shields.io/badge/Obsidian-Desktop%20Only-8b5cf6?style=for-the-badge)](https://obsidian.md/)
+[![Community Plugin](https://img.shields.io/badge/Obsidian-Community%20Plugin-22c55e?style=for-the-badge)](https://obsidian.md/plugins?id=termy)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=for-the-badge)](./LICENSE)
 [![PTY](https://img.shields.io/badge/backend-Rust%20PTY-f97316?style=for-the-badge)](./rust-servers)
 
@@ -158,18 +159,24 @@ Termy is built for people who already live in Obsidian and do real work in a ter
 > [!WARNING]
 > Termy is desktop-only because it uses a native PTY backend.
 
-### Current Availability
+### Install from the Obsidian Community Plugins (recommended)
 
-Termy is **not currently listed in the official Obsidian Community Plugins registry**. Install it with BRAT or from GitHub Releases.
+Termy is now listed in the official Obsidian Community Plugins directory.
 
-### Install with BRAT
+1. Open **Settings → Community plugins** and turn off **Restricted mode** if it is enabled.
+2. Click **Browse** and search for `Termy`.
+3. Click **Install**, then **Enable**.
+
+### Install with BRAT (early updates)
+
+Use BRAT if you want to track the latest tagged build before it ships to the community directory.
 
 1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat).
 2. Open BRAT settings and choose **Add beta plugin**.
 3. Enter `ZyphrZero/Termy`.
 4. Install the plugin and enable it in **Settings → Community plugins**.
 
-### Manual Install
+### Manual install
 
 1. Download the latest release from [GitHub Releases](https://github.com/ZyphrZero/Termy/releases).
 2. Extract the release files into `.obsidian/plugins/termy/` inside your vault.
