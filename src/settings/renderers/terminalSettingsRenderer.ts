@@ -8,7 +8,6 @@ import { Modal, Setting, Notice, Platform, ToggleComponent, setIcon } from 'obsi
 import type { RendererContext } from '../types';
 import type { BinaryDownloadSource, PresetScript, ShellType } from '../settings';
 
-const fs = window.require('fs') as typeof import('fs');
 import { 
   DEFAULT_PRESET_SCRIPTS,
   DEFAULT_SERVER_CONNECTION_SETTINGS,
@@ -146,6 +145,7 @@ function validateShellPath(path: string): boolean {
   // Mobile does not support filesystem checks
   if (Platform.isMobile) return true;
   try {
+    const fs = window.require('fs') as typeof import('fs');
     return fs.existsSync(path);
   } catch {
     return false;

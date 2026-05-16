@@ -13,12 +13,6 @@ import { t } from '@/i18n';
 import { resolveBinaryAssetUrls } from './binaryDownloadUrls';
 import type { BinaryDownloadConfig } from './binaryDownloadUrls';
 
-const fs = window.require('fs') as typeof import('fs');
-const path = window.require('path') as typeof import('path');
-const crypto = window.require('crypto') as typeof import('crypto');
-const http = window.require('http') as typeof import('http');
-const https = window.require('https') as typeof import('https');
-
 /** Download progress callback */
 export type DownloadProgressCallback = (progress: DownloadProgress) => void;
 
@@ -62,12 +56,29 @@ export class BinaryDownloader {
   /** Version cache filename */
   private readonly versionCacheFileName = '.termy-server.version.json';
 
+  /**
+   * Node built-ins are resolved on demand inside the constructor via
+   * Electron's `window.require` to keep filesystem / network access out
+   * of the bundle's top-level scope. Behavior is identical at runtime
+   * because Electron caches the lookup.
+   */
+  private readonly fs: typeof import('fs');
+  private readonly path: typeof import('path');
+  private readonly crypto: typeof import('crypto');
+  private readonly http: typeof import('http');
+  private readonly https: typeof import('https');
+
   constructor(pluginDir: string, version: string, downloadConfig: BinaryDownloadConfig) {
     this.pluginDir = pluginDir;
     this.version = version;
     this.downloadConfig = {
       source: downloadConfig.source,
     };
+    this.fs = window.require('fs') as typeof import('fs');
+    this.path = window.require('path') as typeof import('path');
+    this.crypto = window.require('crypto') as typeof import('crypto');
+    this.http = window.require('http') as typeof import('http');
+    this.https = window.require('https') as typeof import('https');
   }
 
   getDownloadConfig(): BinaryDownloadConfig {
@@ -80,7 +91,7 @@ export class BinaryDownloader {
    */
   binaryExists(skipVersionCheck = false): boolean {
     const binaryPath = this.getBinaryPath();
-    if (!fs.existsSync(binaryPath)) {
+    if (!this.fs.existsSync(binaryPath)) {
       return false;
     }
     
@@ -100,7 +111,7 @@ export class BinaryDownloader {
    */
   needsUpdate(skipVersionCheck = false): boolean {
     const binaryPath = this.getBinaryPath();
-    if (!fs.existsSync(binaryPath)) {
+    if (!this.fs.existsSync(binaryPath)) {
       return false; // The file does not exist, so it needs to be downloaded rather than updated
     }
     
@@ -132,7 +143,7 @@ export class BinaryDownloader {
   private getInstalledVersion(skipExecution = false): string | null {
     try {
       const binaryPath = this.getBinaryPath();
-      if (!fs.existsSync(binaryPath)) {
+      if (!this.fs.existsSync(binaryPath)) {
         this.installedVersionCache = null;
         return null;
       }
@@ -181,7 +192,7 @@ export class BinaryDownloader {
     const ext = platform === 'win32' ? '.exe' : '';
     const filename = `termy-server-${platform}-${arch}${ext}`;
     
-    return path.join(this.pluginDir, 'binaries', filename);
+    return this.path.join(this.pluginDir, 'binaries', filename);
   }
 
   /**
@@ -208,9 +219,9 @@ export class BinaryDownloader {
       const binaryInfo = this.getBinaryInfo();
 
       // Ensure the directory exists
-      const binariesDir = path.join(this.pluginDir, 'binaries');
-      if (!fs.existsSync(binariesDir)) {
-        fs.mkdirSync(binariesDir, { recursive: true });
+      const binariesDir = this.path.join(this.pluginDir, 'binaries');
+      if (!this.fs.existsSync(binariesDir)) {
+        this.fs.mkdirSync(binariesDir, { recursive: true });
       }
 
       notify({ stage: 'downloading', percent: 10 });
@@ -286,7 +297,7 @@ export class BinaryDownloader {
 
       // Set executable permission (Unix)
       if (process.platform !== 'win32') {
-        fs.chmodSync(tempPath, 0o755);
+        this.fs.chmodSync(tempPath, 0o755);
       }
 
       await this.replaceBinary(tempPath, binaryPath);
@@ -353,7 +364,7 @@ export class BinaryDownloader {
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const urlObj = new URL(url);
-      const client = urlObj.protocol === 'https:' ? https : http;
+      const client = urlObj.protocol === 'https:' ? this.https : this.http;
 
       const request = client.get(
         urlObj,
@@ -398,7 +409,7 @@ export class BinaryDownloader {
           let downloadedBytes = 0;
           let finished = false;
 
-          const fileStream = fs.createWriteStream(destPath);
+          const fileStream = this.fs.createWriteStream(destPath);
 
           const fail = (error: Error) => {
             if (finished) {
@@ -406,7 +417,7 @@ export class BinaryDownloader {
             }
             finished = true;
             fileStream.destroy();
-            fs.unlink(destPath, () => reject(error));
+            this.fs.unlink(destPath, () => reject(error));
           };
 
           response.on('data', (chunk: Buffer) => {
@@ -438,17 +449,17 @@ export class BinaryDownloader {
   }
 
   private getVersionCachePath(): string {
-    return path.join(this.pluginDir, 'binaries', this.versionCacheFileName);
+    return this.path.join(this.pluginDir, 'binaries', this.versionCacheFileName);
   }
   
   private readCachedVersion(binaryPath: string): string | null {
     try {
       const cachePath = this.getVersionCachePath();
-      if (!fs.existsSync(cachePath)) {
+      if (!this.fs.existsSync(cachePath)) {
         return null;
       }
       
-      const raw = fs.readFileSync(cachePath, 'utf8').trim();
+      const raw = this.fs.readFileSync(cachePath, 'utf8').trim();
       if (!raw) {
         return null;
       }
@@ -458,7 +469,7 @@ export class BinaryDownloader {
         return null;
       }
       
-      const stats = fs.statSync(binaryPath);
+      const stats = this.fs.statSync(binaryPath);
       if (stats.size !== payload.size) {
         return null;
       }
@@ -477,15 +488,15 @@ export class BinaryDownloader {
   private writeCachedVersion(binaryPath: string, version: string): void {
     try {
       const cachePath = this.getVersionCachePath();
-      const stats = fs.statSync(binaryPath);
+      const stats = this.fs.statSync(binaryPath);
       const payload = {
         version,
         size: stats.size,
         mtimeMs: stats.mtimeMs,
       };
       
-      fs.mkdirSync(path.dirname(cachePath), { recursive: true });
-      fs.writeFileSync(cachePath, JSON.stringify(payload));
+      this.fs.mkdirSync(this.path.dirname(cachePath), { recursive: true });
+      this.fs.writeFileSync(cachePath, JSON.stringify(payload));
     } catch (error) {
       debugWarn('[BinaryDownloader] 写入版本缓存失败:', error);
     }
@@ -499,10 +510,10 @@ export class BinaryDownloader {
     const maxAttempts = 5;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        if (fs.existsSync(destPath)) {
-          fs.unlinkSync(destPath);
+        if (this.fs.existsSync(destPath)) {
+          this.fs.unlinkSync(destPath);
         }
-        fs.renameSync(tempPath, destPath);
+        this.fs.renameSync(tempPath, destPath);
         return;
       } catch (error) {
         if (this.isFileBusyError(error) && attempt < maxAttempts) {
@@ -530,11 +541,11 @@ export class BinaryDownloader {
   }
 
   private safeUnlink(filePath: string): void {
-    if (!fs.existsSync(filePath)) {
+    if (!this.fs.existsSync(filePath)) {
       return;
     }
     try {
-      fs.unlinkSync(filePath);
+      this.fs.unlinkSync(filePath);
     } catch (error) {
       debugWarn('[BinaryDownloader] 清理临时文件失败:', error);
     }
@@ -546,7 +557,7 @@ export class BinaryDownloader {
   private async fetchText(url: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const urlObj = new URL(url);
-      const client = urlObj.protocol === 'https:' ? https : http;
+      const client = urlObj.protocol === 'https:' ? this.https : this.http;
 
       const request = client.get(
         urlObj,
@@ -604,8 +615,8 @@ export class BinaryDownloader {
    */
   private async calculateSHA256(filePath: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      const hash = crypto.createHash('sha256');
-      const stream = fs.createReadStream(filePath);
+      const hash = this.crypto.createHash('sha256');
+      const stream = this.fs.createReadStream(filePath);
       
       stream.on('data', (data: string | Buffer) => {
         if (typeof data === 'string') {
