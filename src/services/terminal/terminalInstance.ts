@@ -5,7 +5,7 @@
  */
 
 import { debugLog, debugWarn, errorLog } from '@/utils/logger';
-import { getPlatform, isWindows } from '@/utils/platform';
+import { getHomeDir, getPlatform, isWindows } from '@/utils/platform';
 import { t } from '@/i18n';
 import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
@@ -1910,7 +1910,7 @@ export class TerminalInstance {
       return;
     }
 
-    const gitBashCwd = extractGitBashPromptCwd(cleanData, process.env.USERPROFILE ?? '');
+    const gitBashCwd = extractGitBashPromptCwd(cleanData, getHomeDir());
     if (gitBashCwd) {
       this.currentCwd = gitBashCwd;
       debugLog('[Terminal CWD] Git Bash prompt matched:', gitBashCwd);
@@ -1928,7 +1928,7 @@ export class TerminalInstance {
    * Get the terminal's initial working directory
    */
   getInitialCwd(): string {
-    return this.options.cwd || process.env.HOME || process.env.USERPROFILE || process.cwd();
+    return this.options.cwd || getHomeDir() || process.cwd();
   }
 
   /**
@@ -1982,7 +1982,7 @@ export class TerminalInstance {
       return extractCwdFromPromptLines(
         cursorLine,
         previousLine,
-        process.env.USERPROFILE ?? ''
+        getHomeDir()
       );
     } catch (error) {
       debugWarn('[Terminal CWD] readCwdFromScreen failed:', error);
