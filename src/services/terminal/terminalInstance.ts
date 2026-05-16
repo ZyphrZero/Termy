@@ -25,6 +25,7 @@ import {
 } from './claudeCodeTuiSupport';
 import { ClaudeCodeSessionState } from './claudeCodeSessionState';
 import { TerminalTitleState } from './terminalTitleState';
+import { resolveTerminalContextMenuAction } from './terminalContextMenuRouter';
 import {
   extractCmdCwd,
   extractCwdFromPromptLines,
@@ -1084,17 +1085,31 @@ export class TerminalInstance {
    */
   private setupContextMenu(container: HTMLElement): void {
     this.addDomEventListener(container, 'contextmenu', (e: MouseEvent) => {
+      const action = resolveTerminalContextMenuAction({
+        isClaudeCodeSession: this.isClaudeCodeSession(),
+        event: e,
+      });
+
+      // Either way Termy stops the host (browser / Obsidian) from also
+      // popping its own context menu on this gesture.
       e.preventDefault();
       e.stopPropagation();
-      
+
+      if (action === 'suppress') {
+        // Claude Code's TUI already handles right-click as paste through
+        // xterm.js mouse tracking. Termy must not also paste here, otherwise
+        // the clipboard contents land in the terminal twice.
+        return;
+      }
+
       // Calculate the terminal row/column coordinates for the mouse click
       const rect = container.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      
+
       // Calculate coordinates using xterm.js sizing assumptions
       const coords = this.getTerminalCoordinates(x, y);
-      
+
       this.showContextMenu(container, e.clientX, e.clientY, coords);
     });
   }
