@@ -143,10 +143,6 @@ export function evaluateKeyboardDecision(
 }
 
 export function decodeBinaryInput(data: string): Uint8Array {
-  if (typeof atob === 'function') {
-    return Uint8Array.from(atob(data), (char) => char.charCodeAt(0));
-  }
-
   return Uint8Array.from(Buffer.from(data, 'base64'));
 }
 
