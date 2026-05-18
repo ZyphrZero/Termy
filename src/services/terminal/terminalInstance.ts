@@ -306,12 +306,19 @@ export class TerminalInstance {
       const fgFromVar = computed?.getPropertyValue('--text-normal').trim();
       const cursorFromVar = computed?.getPropertyValue('--text-normal').trim();
       const selectionFromVar = computed?.getPropertyValue('--text-selection').trim();
+      // Obsidian's --text-selection is often very translucent (e.g. hsla with
+      // 0.15 alpha) which works for the editor but is nearly invisible in the
+      // terminal's canvas/webgl renderer. Use a higher-contrast fallback that
+      // still harmonizes with the theme.
+      const selectionColor = isDark
+        ? (selectionFromVar || '#264f78')
+        : 'rgba(0, 120, 215, 0.3)';
       return {
         background: bgFromVar || (isDark ? '#1e1e1e' : '#ffffff'),
         foreground: fgFromVar || (isDark ? '#cccccc' : '#333333'),
         cursor: cursorFromVar || (isDark ? '#ffffff' : '#000000'),
         cursorAccent: bgFromVar || (isDark ? '#000000' : '#ffffff'),
-        selectionBackground: selectionFromVar || (isDark ? '#264f78' : '#add6ff'),
+        selectionBackground: selectionColor,
       };
     }
 
