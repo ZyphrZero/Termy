@@ -116,6 +116,10 @@ export interface TerminalSettings {
   // and AGENTS.md disclose only when the user opts in.
   checkAiLauncherUpdates: boolean;
 
+  // Optional absolute path to a Node.js executable used for npm-backed AI
+  // launcher diagnostics. When blank, Termy resolves node/npm from PATH.
+  customNodePath: string;
+
   // Latest version whose changelog modal has already been shown
   lastSeenChangelogVersion: string;
 
@@ -358,6 +362,7 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   presetScripts: [...DEFAULT_PRESET_SCRIPTS],
   hideUnavailableAiLaunchers: false,
   checkAiLauncherUpdates: true,
+  customNodePath: '',
   lastSeenChangelogVersion: '',
   enableDebugLog: false,
 };

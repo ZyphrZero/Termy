@@ -23,6 +23,7 @@
 // guessing the way esbuild does. Other sibling imports in this folder do
 // the same.
 import { compareVersions } from './commandVersionProbe.ts';
+import type { NodeRuntimeSnapshot } from './nodeRuntime.ts';
 
 export type AiLauncherReadiness =
   | 'unknown'
@@ -40,6 +41,8 @@ export interface AiLauncherStatusSnapshot {
   registryError?: string;
   /** Absolute path the local probe resolved to, if known. */
   resolvedFrom?: string | null;
+  /** Node.js/npm/fnm readiness, only populated for npm-backed launchers. */
+  nodeRuntime?: NodeRuntimeSnapshot | null;
 }
 
 export interface BuildSnapshotInput {
@@ -59,6 +62,8 @@ export interface BuildSnapshotInput {
    * not opted in to update checks.
    */
   latest: { version: string | null; error?: string } | null;
+  /** Optional Node.js/npm/fnm readiness for npm-backed install guidance. */
+  nodeRuntime?: NodeRuntimeSnapshot | null;
 }
 
 /**
@@ -75,7 +80,7 @@ export interface BuildSnapshotInput {
 export function buildAiLauncherStatusSnapshot(
   input: BuildSnapshotInput,
 ): AiLauncherStatusSnapshot {
-  const { pathAvailable, local, latest } = input;
+  const { pathAvailable, local, latest, nodeRuntime = null } = input;
 
   if (pathAvailable === 'not-installed' && !local.version) {
     return {
@@ -83,6 +88,7 @@ export function buildAiLauncherStatusSnapshot(
       local: null,
       latest: latest?.version ?? null,
       registryError: latest?.error,
+      nodeRuntime,
     };
   }
 
@@ -94,6 +100,7 @@ export function buildAiLauncherStatusSnapshot(
       local: null,
       latest: latest?.version ?? null,
       registryError: latest?.error,
+      nodeRuntime,
     };
   }
 
@@ -106,6 +113,7 @@ export function buildAiLauncherStatusSnapshot(
         latest: latest.version,
         registryError: latest.error,
         resolvedFrom: local.resolvedFrom,
+        nodeRuntime,
       };
     }
   }
@@ -116,6 +124,7 @@ export function buildAiLauncherStatusSnapshot(
     latest: latest?.version ?? null,
     registryError: latest?.error,
     resolvedFrom: local.resolvedFrom,
+    nodeRuntime,
   };
 }
 

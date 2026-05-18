@@ -38,6 +38,39 @@ test('readiness is ready when PATH probe failed but the fallback scan found a bi
   assert.equal(snapshot.resolvedFrom, '/Users/example/.local/bin/claude');
 });
 
+test('snapshot carries node runtime diagnostics for missing npm-backed launchers', () => {
+  const snapshot = buildAiLauncherStatusSnapshot({
+    pathAvailable: 'not-installed',
+    local: { version: null, resolvedFrom: null },
+    latest: null,
+    nodeRuntime: {
+      node: {
+        command: 'node',
+        availability: 'not-installed',
+        version: null,
+        path: null,
+      },
+      npm: {
+        command: 'npm',
+        availability: 'not-installed',
+        version: null,
+        path: null,
+      },
+      fnm: {
+        command: 'fnm',
+        availability: 'ready',
+        version: '1.38.1',
+        path: '/usr/local/bin/fnm',
+      },
+      fnmCurrent: 'none',
+      customNodePath: null,
+    },
+  });
+
+  assert.equal(snapshot.readiness, 'not-installed');
+  assert.equal(snapshot.nodeRuntime?.fnm.availability, 'ready');
+});
+
 test('readiness is update-available when local is older than the registry version', () => {
   const snapshot = buildAiLauncherStatusSnapshot({
     pathAvailable: 'ready',

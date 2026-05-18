@@ -21,6 +21,9 @@ import type { App } from 'obsidian';
 import { Modal, Notice } from 'obsidian';
 import { shell } from 'electron';
 import { t } from '../../i18n';
+import { getNodeRuntimeRecommendation, type NodeRuntimeSnapshot } from '../../services/terminal/nodeRuntime';
+
+export type LauncherInstallCommandKind = 'launcher' | 'fnm-node' | 'fnm-bootstrap';
 
 export interface LauncherInstallModalOptions {
   /** Display name shown in the modal header (e.g. "Claude Code"). */
@@ -34,6 +37,8 @@ export interface LauncherInstallModalOptions {
    * modal shows it as a copy-paste friendly code block.
    */
   installCommand?: string | null;
+  /** What the install command prepares; changes the card copy. */
+  installCommandKind?: LauncherInstallCommandKind;
   /**
    * One-liner upgrade command for the current platform. Shown alongside
    * an "Update now" button when {@link updateAvailable} is true.
@@ -48,6 +53,8 @@ export interface LauncherInstallModalOptions {
    * tone — "Update Foo" instead of "Foo is not installed".
    */
   updateAvailable?: boolean;
+  /** Node.js/npm/fnm readiness for npm-backed launchers. */
+  nodeRuntime?: NodeRuntimeSnapshot | null;
   /**
    * Invoked when the user clicks "Run anyway".
    */
@@ -106,6 +113,10 @@ export class LauncherInstallModal extends Modal {
         cls: 'termy-launcher-install-detail-command',
         text: this.options.command,
       });
+    }
+
+    if (!this.options.updateAvailable && this.options.nodeRuntime) {
+      this.renderRuntimeDiagnostics(contentEl, this.options.nodeRuntime);
     }
 
     // The card prefers the upgrade command when an update is available
@@ -226,6 +237,7 @@ export class LauncherInstallModal extends Modal {
    */
   private renderInstallCommand(contentEl: HTMLElement, command: string): void {
     const showingUpgrade = this.options.updateAvailable === true && this.options.upgradeCommand === command;
+    const commandKind = this.options.installCommandKind ?? 'launcher';
     const card = contentEl.createDiv({ cls: 'termy-launcher-install-card' });
     card.createDiv({
       cls: 'termy-launcher-install-card-title',
@@ -233,7 +245,7 @@ export class LauncherInstallModal extends Modal {
         ? t('modals.launcherInstall.cardTitleUpgradeOneClick')
         : this.options.updateAvailable
           ? t('modals.launcherInstall.cardTitleUpgrade')
-          : t('modals.launcherInstall.cardTitleInstall'),
+          : this.getInstallCardTitle(commandKind),
     });
     card.createEl('p', {
       cls: 'termy-launcher-install-card-desc',
@@ -241,7 +253,7 @@ export class LauncherInstallModal extends Modal {
         ? t('modals.launcherInstall.cardDescUpgradeOneClick')
         : this.options.updateAvailable
           ? t('modals.launcherInstall.cardDescUpgrade')
-          : t('modals.launcherInstall.cardDescInstall'),
+          : this.getInstallCardDescription(commandKind),
     });
 
     const commandRow = card.createDiv({ cls: 'termy-launcher-install-command-row' });
@@ -268,5 +280,84 @@ export class LauncherInstallModal extends Modal {
           selection?.addRange(range);
         });
     });
+  }
+
+  private renderRuntimeDiagnostics(contentEl: HTMLElement, runtime: NodeRuntimeSnapshot): void {
+    const panel = contentEl.createDiv({ cls: 'termy-launcher-runtime-panel' });
+    panel.createDiv({
+      cls: 'termy-launcher-runtime-title',
+      text: t('modals.launcherInstall.runtimeTitle'),
+    });
+    panel.createEl('p', {
+      cls: 'termy-launcher-runtime-desc',
+      text: this.getRuntimeDescription(runtime),
+    });
+
+    const list = panel.createDiv({ cls: 'termy-launcher-runtime-list' });
+    this.renderRuntimeRow(list, t('modals.launcherInstall.runtimeNode'), runtime.node);
+    this.renderRuntimeRow(list, t('modals.launcherInstall.runtimeNpm'), runtime.npm);
+    this.renderRuntimeRow(list, t('modals.launcherInstall.runtimeFnm'), runtime.fnm);
+  }
+
+  private renderRuntimeRow(
+    container: HTMLElement,
+    label: string,
+    command: NodeRuntimeSnapshot['node'],
+  ): void {
+    const row = container.createDiv({ cls: 'termy-launcher-runtime-row' });
+    row.createDiv({ cls: 'termy-launcher-runtime-label', text: label });
+    const status = row.createDiv({
+      cls: `termy-launcher-runtime-status is-${command.availability}`,
+      text: this.getRuntimeStatusLabel(command),
+    });
+    if (command.path) {
+      status.setAttr('title', command.path);
+    }
+  }
+
+  private getRuntimeDescription(runtime: NodeRuntimeSnapshot): string {
+    const recommendation = getNodeRuntimeRecommendation(runtime);
+    if (recommendation === 'npm-ready') {
+      return t('modals.launcherInstall.runtimeDescNpmReady');
+    }
+    if (recommendation === 'fnm-ready') {
+      return t('modals.launcherInstall.runtimeDescFnmReady');
+    }
+    if (recommendation === 'fnm-missing') {
+      return t('modals.launcherInstall.runtimeDescFnmMissing');
+    }
+    return t('modals.launcherInstall.runtimeDescUnknown');
+  }
+
+  private getRuntimeStatusLabel(command: NodeRuntimeSnapshot['node']): string {
+    if (command.availability === 'ready') {
+      return command.version
+        ? t('modals.launcherInstall.runtimeStatusReadyVersion', { version: command.version })
+        : t('modals.launcherInstall.runtimeStatusReady');
+    }
+    if (command.availability === 'not-installed') {
+      return t('modals.launcherInstall.runtimeStatusMissing');
+    }
+    return t('modals.launcherInstall.runtimeStatusUnknown');
+  }
+
+  private getInstallCardTitle(kind: LauncherInstallCommandKind): string {
+    if (kind === 'fnm-node') {
+      return t('modals.launcherInstall.cardTitlePrepareWithFnm');
+    }
+    if (kind === 'fnm-bootstrap') {
+      return t('modals.launcherInstall.cardTitleInstallFnm');
+    }
+    return t('modals.launcherInstall.cardTitleInstall');
+  }
+
+  private getInstallCardDescription(kind: LauncherInstallCommandKind): string {
+    if (kind === 'fnm-node') {
+      return t('modals.launcherInstall.cardDescPrepareWithFnm');
+    }
+    if (kind === 'fnm-bootstrap') {
+      return t('modals.launcherInstall.cardDescInstallFnm');
+    }
+    return t('modals.launcherInstall.cardDescInstall');
   }
 }
