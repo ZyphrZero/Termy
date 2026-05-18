@@ -45,12 +45,9 @@ import { clearCommandVersionCache, probeCommandVersion } from './services/termin
 import { clearLatestVersionCache, fetchLatestVersion } from './services/terminal/latestVersionRegistry';
 import {
   buildNodeRuntimeEnvironment,
-  buildFnmPackageInstallCommand,
   buildNpmPackageInstallCommand,
   clearNodeRuntimeCache,
   detectNodeRuntime,
-  getFnmBootstrapCommandForPlatform,
-  getFnmInstallDocsUrl,
   getNodeDownloadUrl,
   getNodeRuntimeRecommendation,
   type NodeRuntimeSnapshot,
@@ -60,6 +57,12 @@ import {
   readinessToBadge,
   type AiLauncherStatusSnapshot,
 } from './services/terminal/aiLauncherStatus';
+import {
+  clearEnrichedShellEnvCache,
+  getCachedEnrichedShellEnv,
+  getEnrichedShellEnv,
+  type EnrichedShellEnvResult,
+} from './services/terminal/enrichedShellEnv';
 import { LauncherInstallModal } from './ui/terminal/launcherInstallModal';
 import { resolveChangelogSection } from './utils/changelog';
 import embeddedChangelogContent from '../CHANGELOG.md';
@@ -258,11 +261,11 @@ export default class TerminalPlugin extends Plugin {
       });
       // Warm up the AI launcher availability snapshot so the first menu
       // open already shows accurate Ready / Not installed badges.
-      void this.refreshNodeRuntimeSnapshot().catch((error) => {
-        errorLog('[TerminalPlugin] Failed to refresh Node.js runtime status:', error);
-      });
-      void this.refreshAiLauncherAvailability().catch((error) => {
-        errorLog('[TerminalPlugin] Failed to refresh AI launcher availability:', error);
+      // The enriched login-shell PATH must finish first so the launcher
+      // probe sees fnm / nvm / asdf / mise / volta entries; see
+      // {@link getEnrichedShellEnv} for the rationale.
+      void this.warmRuntimeAndLaunchers().catch((error) => {
+        errorLog('[TerminalPlugin] Failed to warm runtime caches:', error);
       });
     });
 
@@ -1895,12 +1898,17 @@ export default class TerminalPlugin extends Plugin {
       if (options.force) {
         clearLatestVersionCache();
         clearNodeRuntimeCache();
+        clearEnrichedShellEnvCache();
         for (const entry of AI_LAUNCHER_CATALOG) {
           if (entry.detectCommand) {
             clearCommandVersionCache(entry.detectCommand);
           }
         }
       }
+      // Re-warm the enriched login-shell PATH first; the launcher
+      // probe in `refreshAiLauncherAvailability` reads it through the
+      // shared cache.
+      await getEnrichedShellEnv({ enabled: this.isEnrichedShellEnvEnabled() }).catch(() => null);
       await this.refreshAiLauncherAvailability();
     } catch (error) {
       errorLog('[TerminalPlugin] Failed to refresh AI launcher status:', error);
@@ -2006,17 +2014,10 @@ export default class TerminalPlugin extends Plugin {
         return;
       }
       const command = entry.detectCommand;
-      const [pathAvailable, localVersion] = await Promise.all([
-        detectCommandAvailability(command).catch((): CommandAvailability => 'unknown'),
-        probeCommandVersion(command).catch(() => ({
-          version: null,
-          resolvedFrom: null,
-          rawOutput: null,
-        })),
-      ]);
-      const nodeRuntime = await this.detectNodeRuntimeForLauncher(entry, pathAvailable, localVersion.version);
+      const probe = await this.probeLauncher(command);
+      const nodeRuntime = await this.detectNodeRuntimeForLauncher(entry, probe.pathAvailable, probe.localVersion.version);
 
-      this._aiLauncherAvailability.set(command, pathAvailable);
+      this._aiLauncherAvailability.set(command, probe.pathAvailable);
 
       let latest: { version: string | null; error?: string } | null = null;
       if (checkUpdates && entry.versionRegistry) {
@@ -2029,8 +2030,8 @@ export default class TerminalPlugin extends Plugin {
       }
 
       const snapshot = buildAiLauncherStatusSnapshot({
-        pathAvailable,
-        local: { version: localVersion.version, resolvedFrom: localVersion.resolvedFrom },
+        pathAvailable: probe.pathAvailable,
+        local: { version: probe.localVersion.version, resolvedFrom: probe.localVersion.resolvedFrom },
         latest,
         nodeRuntime,
       });
@@ -2205,16 +2206,9 @@ export default class TerminalPlugin extends Plugin {
       this.settings.checkAiLauncherUpdates === true
       && this.settings.serverConnection?.offlineMode !== true;
 
-    const [pathAvailable, localVersion] = await Promise.all([
-      detectCommandAvailability(command).catch((): CommandAvailability => 'unknown'),
-      probeCommandVersion(command).catch(() => ({
-        version: null,
-        resolvedFrom: null,
-        rawOutput: null,
-      })),
-    ]);
-    const nodeRuntime = await this.detectNodeRuntimeForLauncher(entry, pathAvailable, localVersion.version);
-    this._aiLauncherAvailability.set(command, pathAvailable);
+    const probe = await this.probeLauncher(command);
+    const nodeRuntime = await this.detectNodeRuntimeForLauncher(entry, probe.pathAvailable, probe.localVersion.version);
+    this._aiLauncherAvailability.set(command, probe.pathAvailable);
 
     let latest: { version: string | null; error?: string } | null = null;
     if (checkUpdates && entry.versionRegistry) {
@@ -2227,13 +2221,40 @@ export default class TerminalPlugin extends Plugin {
     }
 
     const snapshot = buildAiLauncherStatusSnapshot({
-      pathAvailable,
-      local: { version: localVersion.version, resolvedFrom: localVersion.resolvedFrom },
+      pathAvailable: probe.pathAvailable,
+      local: { version: probe.localVersion.version, resolvedFrom: probe.localVersion.resolvedFrom },
       latest,
       nodeRuntime,
     });
     this.setAiLauncherSnapshot(entry.presetId, snapshot);
     return snapshot;
+  }
+
+  /**
+   * Resolve a launcher's PATH availability and local version. Both
+   * probes inherit the enriched login-shell PATH (see
+   * {@link getEnrichedShellEnv}) so npm-installed CLIs registered
+   * inside the user's shell profile — fnm, nvm, asdf, mise, volta,
+   * scoop, brew, manual installs — are picked up uniformly without
+   * Termy needing per-tool knowledge.
+   */
+  private async probeLauncher(command: string): Promise<{
+    pathAvailable: CommandAvailability;
+    localVersion: { version: string | null; resolvedFrom: string | null };
+  }> {
+    const [pathAvailable, localVersion] = await Promise.all([
+      detectCommandAvailability(command).catch((): CommandAvailability => 'unknown'),
+      probeCommandVersion(command).catch(() => ({
+        version: null,
+        resolvedFrom: null as string | null,
+        rawOutput: null,
+      })),
+    ]);
+
+    return {
+      pathAvailable,
+      localVersion: { version: localVersion.version, resolvedFrom: localVersion.resolvedFrom },
+    };
   }
 
   private async detectNodeRuntimeForLauncher(
@@ -2256,10 +2277,13 @@ export default class TerminalPlugin extends Plugin {
   }
 
   private getNodeRuntimeTerminalEnv(): Record<string, string> {
-    if (!this.settings.customNodePath) return {};
-    const snapshot = this._nodeRuntimeSnapshot;
-    if (!snapshot) return {};
-    const env = buildNodeRuntimeEnvironment(snapshot);
+    // The env builder injects the fnm default-alias dir whenever no
+    // custom Node path is configured AND fnm fallback was discovered,
+    // so users in fnm-only environments get `node` / `npm` / global
+    // npm CLIs in every Termy terminal without first running
+    // `fnm env`. With a custom Node.js path set, the explicit choice
+    // wins instead.
+    const env = buildNodeRuntimeEnvironment(this._nodeRuntimeSnapshot);
     return Object.fromEntries(
       Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
     );
@@ -2283,6 +2307,54 @@ export default class TerminalPlugin extends Plugin {
 
   getNodeRuntimeSnapshot(): NodeRuntimeSnapshot | null {
     return this._nodeRuntimeSnapshot;
+  }
+
+  /**
+   * Read the cached enriched shell env result so settings diagnostics
+   * can surface the source ("login-shell" / "powershell" / "cmd" /
+   * "disabled" / "unavailable") and any error message.
+   */
+  getEnrichedShellEnvSnapshot(): EnrichedShellEnvResult | null {
+    return getCachedEnrichedShellEnv();
+  }
+
+  /**
+   * Pre-warm caches that the AI launcher menu and terminal env
+   * injection rely on. The enriched login-shell PATH probe must
+   * complete first so all subsequent probes — and the terminal env
+   * builder — see the same view of `PATH` the user has in their own
+   * shell. Runs on plugin load and from settings refresh.
+   */
+  async warmRuntimeAndLaunchers(options: { force?: boolean } = {}): Promise<void> {
+    if (options.force) {
+      clearEnrichedShellEnvCache();
+    }
+    // Wait for the enriched PATH harvest before touching the launcher
+    // probes; the timeout inside the harvest caps this at 3 s.
+    await getEnrichedShellEnv({ enabled: this.isEnrichedShellEnvEnabled() })
+      .catch((error) => {
+        errorLog('[TerminalPlugin] Enriched shell PATH probe failed:', error);
+        return null;
+      });
+    await Promise.all([
+      this.refreshNodeRuntimeSnapshot({ force: options.force }).catch((error) => {
+        errorLog('[TerminalPlugin] Failed to refresh Node.js runtime status:', error);
+      }),
+      this.refreshAiLauncherAvailability().catch((error) => {
+        errorLog('[TerminalPlugin] Failed to refresh AI launcher availability:', error);
+      }),
+    ]);
+  }
+
+  /**
+   * Whether the enriched-shell-PATH harvest is allowed. The harvest
+   * is on by default; users who do not want Termy to spawn their
+   * login shell during plugin load can opt out via the settings
+   * toggle. The toggle defaults to `true`/undefined so existing users
+   * see the new behaviour automatically.
+   */
+  private isEnrichedShellEnvEnabled(): boolean {
+    return this.settings.enrichedShellEnv !== false;
   }
 
   /**
@@ -2404,7 +2476,7 @@ export default class TerminalPlugin extends Plugin {
     snapshot: AiLauncherStatusSnapshot | null,
   ): {
     command: string | null;
-    kind: 'launcher' | 'fnm-node' | 'fnm-bootstrap';
+    kind: 'launcher' | 'node-missing';
     docsUrl?: string;
   } {
     const fallback = getInstallCommandForPlatform(entry);
@@ -2424,18 +2496,18 @@ export default class TerminalPlugin extends Plugin {
         docsUrl: entry.installDocsUrl,
       };
     }
-    if (recommendation === 'fnm-ready') {
+    if (recommendation === 'node-missing') {
+      // Termy does not push any specific Node.js installer or version
+      // manager on users — that decision belongs to them. The modal
+      // points at the upstream Node.js download page; once Node.js is
+      // installed and the user reopens Obsidian (or hits Refresh), the
+      // enriched login-shell PATH harvest picks the install up
+      // automatically, regardless of whether the user chose fnm, nvm,
+      // asdf, mise, volta, or a direct download.
       return {
-        command: buildFnmPackageInstallCommand(entry.npmPackage),
-        kind: 'fnm-node',
-        docsUrl: entry.installDocsUrl,
-      };
-    }
-    if (recommendation === 'fnm-missing') {
-      return {
-        command: getFnmBootstrapCommandForPlatform(),
-        kind: 'fnm-bootstrap',
-        docsUrl: getFnmInstallDocsUrl(),
+        command: null,
+        kind: 'node-missing',
+        docsUrl: getNodeDownloadUrl(),
       };
     }
 

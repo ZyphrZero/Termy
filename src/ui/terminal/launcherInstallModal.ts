@@ -11,6 +11,11 @@
  *   3. Provides the upstream's recommended one-liner install command for
  *      the current platform, copy-paste friendly.
  *   4. Lets the user open the official docs or attempt the launcher anyway.
+ *   5. When Node.js / npm cannot be detected, points the user at the
+ *      official Node.js download page without recommending any specific
+ *      version manager. Termy treats fnm, nvm, asdf, mise, volta, and
+ *      direct installs identically: once Node.js is reachable from the
+ *      user's shell PATH, the launcher install will work.
  *
  * It deliberately does NOT execute the install command itself. The user has
  * to paste it into a shell themselves. This keeps Termy on the right side
@@ -23,7 +28,7 @@ import { shell } from 'electron';
 import { t } from '../../i18n';
 import { getNodeRuntimeRecommendation, type NodeRuntimeSnapshot } from '../../services/terminal/nodeRuntime';
 
-export type LauncherInstallCommandKind = 'launcher' | 'fnm-node' | 'fnm-bootstrap';
+export type LauncherInstallCommandKind = 'launcher' | 'node-missing';
 
 export interface LauncherInstallModalOptions {
   /** Display name shown in the modal header (e.g. "Claude Code"). */
@@ -34,7 +39,9 @@ export interface LauncherInstallModalOptions {
   docsUrl?: string;
   /**
    * One-liner install command for the current platform. When provided, the
-   * modal shows it as a copy-paste friendly code block.
+   * modal shows it as a copy-paste friendly code block. Null when Termy
+   * has no command to recommend (e.g. Node.js is missing — in that case
+   * the modal points to the Node.js download page instead).
    */
   installCommand?: string | null;
   /** What the install command prepares; changes the card copy. */
@@ -128,6 +135,8 @@ export class LauncherInstallModal extends Modal {
       : this.options.installCommand;
     if (cardCommand) {
       this.renderInstallCommand(contentEl, cardCommand);
+    } else if (this.options.installCommandKind === 'node-missing') {
+      this.renderNodeMissingCard(contentEl);
     }
 
     const buttonContainer = contentEl.createDiv({ cls: 'modal-button-container' });
@@ -237,7 +246,6 @@ export class LauncherInstallModal extends Modal {
    */
   private renderInstallCommand(contentEl: HTMLElement, command: string): void {
     const showingUpgrade = this.options.updateAvailable === true && this.options.upgradeCommand === command;
-    const commandKind = this.options.installCommandKind ?? 'launcher';
     const card = contentEl.createDiv({ cls: 'termy-launcher-install-card' });
     card.createDiv({
       cls: 'termy-launcher-install-card-title',
@@ -245,7 +253,7 @@ export class LauncherInstallModal extends Modal {
         ? t('modals.launcherInstall.cardTitleUpgradeOneClick')
         : this.options.updateAvailable
           ? t('modals.launcherInstall.cardTitleUpgrade')
-          : this.getInstallCardTitle(commandKind),
+          : t('modals.launcherInstall.cardTitleInstall'),
     });
     card.createEl('p', {
       cls: 'termy-launcher-install-card-desc',
@@ -253,7 +261,7 @@ export class LauncherInstallModal extends Modal {
         ? t('modals.launcherInstall.cardDescUpgradeOneClick')
         : this.options.updateAvailable
           ? t('modals.launcherInstall.cardDescUpgrade')
-          : this.getInstallCardDescription(commandKind),
+          : t('modals.launcherInstall.cardDescInstall'),
     });
 
     const commandRow = card.createDiv({ cls: 'termy-launcher-install-command-row' });
@@ -282,6 +290,25 @@ export class LauncherInstallModal extends Modal {
     });
   }
 
+  /**
+   * Card shown when Termy could not find Node.js or npm. Points the
+   * user at the Node.js download page without endorsing any specific
+   * version manager. Once Node.js is reachable from the user's shell
+   * PATH, the standard install command card will take over on the
+   * next visit.
+   */
+  private renderNodeMissingCard(contentEl: HTMLElement): void {
+    const card = contentEl.createDiv({ cls: 'termy-launcher-install-card' });
+    card.createDiv({
+      cls: 'termy-launcher-install-card-title',
+      text: t('modals.launcherInstall.cardTitleInstallNode'),
+    });
+    card.createEl('p', {
+      cls: 'termy-launcher-install-card-desc',
+      text: t('modals.launcherInstall.cardDescInstallNode'),
+    });
+  }
+
   private renderRuntimeDiagnostics(contentEl: HTMLElement, runtime: NodeRuntimeSnapshot): void {
     const panel = contentEl.createDiv({ cls: 'termy-launcher-runtime-panel' });
     panel.createDiv({
@@ -296,7 +323,6 @@ export class LauncherInstallModal extends Modal {
     const list = panel.createDiv({ cls: 'termy-launcher-runtime-list' });
     this.renderRuntimeRow(list, t('modals.launcherInstall.runtimeNode'), runtime.node);
     this.renderRuntimeRow(list, t('modals.launcherInstall.runtimeNpm'), runtime.npm);
-    this.renderRuntimeRow(list, t('modals.launcherInstall.runtimeFnm'), runtime.fnm);
   }
 
   private renderRuntimeRow(
@@ -320,11 +346,8 @@ export class LauncherInstallModal extends Modal {
     if (recommendation === 'npm-ready') {
       return t('modals.launcherInstall.runtimeDescNpmReady');
     }
-    if (recommendation === 'fnm-ready') {
-      return t('modals.launcherInstall.runtimeDescFnmReady');
-    }
-    if (recommendation === 'fnm-missing') {
-      return t('modals.launcherInstall.runtimeDescFnmMissing');
+    if (recommendation === 'node-missing') {
+      return t('modals.launcherInstall.runtimeDescNodeMissing');
     }
     return t('modals.launcherInstall.runtimeDescUnknown');
   }
@@ -339,25 +362,5 @@ export class LauncherInstallModal extends Modal {
       return t('modals.launcherInstall.runtimeStatusMissing');
     }
     return t('modals.launcherInstall.runtimeStatusUnknown');
-  }
-
-  private getInstallCardTitle(kind: LauncherInstallCommandKind): string {
-    if (kind === 'fnm-node') {
-      return t('modals.launcherInstall.cardTitlePrepareWithFnm');
-    }
-    if (kind === 'fnm-bootstrap') {
-      return t('modals.launcherInstall.cardTitleInstallFnm');
-    }
-    return t('modals.launcherInstall.cardTitleInstall');
-  }
-
-  private getInstallCardDescription(kind: LauncherInstallCommandKind): string {
-    if (kind === 'fnm-node') {
-      return t('modals.launcherInstall.cardDescPrepareWithFnm');
-    }
-    if (kind === 'fnm-bootstrap') {
-      return t('modals.launcherInstall.cardDescInstallFnm');
-    }
-    return t('modals.launcherInstall.cardDescInstall');
   }
 }

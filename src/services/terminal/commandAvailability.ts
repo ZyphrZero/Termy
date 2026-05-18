@@ -1,17 +1,22 @@
 /**
- * Lightweight detection for whether an executable is available on the user's PATH.
+ * Lightweight detection for whether an executable is available on the
+ * environment Termy actually sees — that is, the inherited Obsidian
+ * PATH plus the enriched login-shell PATH harvested by
+ * {@link enrichedShellEnv}. This makes version managers like fnm,
+ * nvm, asdf, mise, volta and any manual install behave the same way.
  *
  * Used by the workflow launcher menu to render readiness badges:
  *  - 'ready'         → executable resolves on PATH
  *  - 'not-installed' → resolver returned a non-zero status
- *  - 'unknown'       → resolver failed for an unexpected reason (timeout, spawn error)
+ *  - 'unknown'       → resolver failed for an unexpected reason
  *
- * Detection only spawns the platform's standard PATH resolver (`where` / `which`).
- * It never executes the target command, never auto-installs anything, and never
- * touches the network — it is purely informational.
+ * Detection only spawns the platform's standard PATH resolver
+ * (`where` / `which`). It never executes the target command, never
+ * auto-installs anything, and never touches the network — it is
+ * purely informational.
  */
 
-import { debugWarn } from '../../utils/logger.ts';
+import { runProbeCommand } from './childProcessUtils.ts';
 
 export type CommandAvailability = 'ready' | 'not-installed' | 'unknown';
 
@@ -21,19 +26,9 @@ interface CacheEntry {
 }
 
 const CACHE_TTL_MS = 5_000;
-const DETECT_TIMEOUT_MS = 1_500;
+const PROBE_TIMEOUT_MS = 1_500;
 
 const cache = new Map<string, CacheEntry>();
-
-interface ChildProcessLike {
-  on(event: 'error', listener: (error: Error) => void): void;
-  on(event: 'exit', listener: (code: number | null) => void): void;
-  kill(): void;
-}
-
-interface NodeChildProcess {
-  spawn: (command: string, args: string[], options: Record<string, unknown>) => ChildProcessLike;
-}
 
 /**
  * Detect whether an executable is reachable from the current PATH.
@@ -41,9 +36,7 @@ interface NodeChildProcess {
  */
 export function detectCommandAvailability(command: string): Promise<CommandAvailability> {
   const trimmed = command.trim();
-  if (!trimmed) {
-    return Promise.resolve('unknown');
-  }
+  if (!trimmed) return Promise.resolve('unknown');
 
   const cached = cache.get(trimmed);
   if (cached && cached.expiresAt > Date.now()) {
@@ -57,8 +50,9 @@ export function detectCommandAvailability(command: string): Promise<CommandAvail
 }
 
 /**
- * Clear cached detection results. Exposed primarily for tests and explicit refresh
- * actions (e.g. when the user re-runs an install step).
+ * Clear cached detection results. Exposed primarily for tests and
+ * explicit refresh actions (e.g. when the user re-runs an install
+ * step).
  */
 export function clearCommandAvailabilityCache(command?: string): void {
   if (command) {
@@ -68,56 +62,16 @@ export function clearCommandAvailabilityCache(command?: string): void {
   }
 }
 
-function runDetection(command: string): Promise<CommandAvailability> {
-  return new Promise((resolve) => {
-    let childProcess: NodeChildProcess;
-    try {
-      childProcess = window.require('child_process') as NodeChildProcess;
-    } catch (error) {
-      debugWarn('[commandAvailability] child_process is unavailable:', error);
-      resolve('unknown');
-      return;
-    }
-
-    const isWindows = process.platform === 'win32';
-    const resolver = isWindows ? 'where' : 'which';
-
-    let proc: ChildProcessLike;
-    try {
-      proc = childProcess.spawn(resolver, [command], {
-        windowsHide: true,
-        stdio: 'ignore',
-      });
-    } catch (error) {
-      debugWarn(`[commandAvailability] failed to spawn ${resolver}:`, error);
-      resolve('unknown');
-      return;
-    }
-
-    let settled = false;
-    const settle = (result: CommandAvailability) => {
-      if (settled) return;
-      settled = true;
-      resolve(result);
-    };
-
-    const timer = window.setTimeout(() => {
-      try {
-        proc.kill();
-      } catch (error) {
-        debugWarn('[commandAvailability] failed to kill detector process:', error);
-      }
-      settle('unknown');
-    }, DETECT_TIMEOUT_MS);
-
-    proc.on('error', () => {
-      window.clearTimeout(timer);
-      settle('unknown');
-    });
-
-    proc.on('exit', (code) => {
-      window.clearTimeout(timer);
-      settle(code === 0 ? 'ready' : 'not-installed');
-    });
+async function runDetection(command: string): Promise<CommandAvailability> {
+  const resolver = process.platform === 'win32' ? 'where' : 'which';
+  const result = await runProbeCommand({
+    command: resolver,
+    args: [command],
+    timeoutMs: PROBE_TIMEOUT_MS,
+    // `where` / `which` resolve PATH themselves; bypassing the
+    // cmd.exe wrapper avoids a second layer of escaping.
+    useWindowsShell: false,
   });
+  if (!result) return 'unknown';
+  return result.code === 0 ? 'ready' : 'not-installed';
 }

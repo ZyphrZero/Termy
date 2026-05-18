@@ -371,6 +371,23 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     const runtimeRowsEl = runtimeCard.createDiv({ cls: 'node-runtime-list' });
     this.renderNodeRuntimeSnapshot(runtimeRowsEl, this.context.plugin.getNodeRuntimeSnapshot());
 
+    const enrichedShellEnabled = this.context.plugin.settings.enrichedShellEnv !== false;
+    const enrichedToggleSetting = new Setting(runtimeCard)
+      .setName(t('settingsDetails.terminal.enrichedShellEnv'))
+      .setDesc(t('settingsDetails.terminal.enrichedShellEnvDesc'))
+      .addToggle((toggle) => {
+        toggle
+          .setValue(enrichedShellEnabled)
+          .onChange((value) => {
+            this.context.plugin.settings.enrichedShellEnv = value;
+            void this.saveSettings().then(() => {
+              void this.refreshNodeRuntimeRows(runtimeRowsEl);
+              void this.context.plugin.refreshAiLauncherStatusFromSettings({ force: true });
+            });
+          });
+      });
+    enrichedToggleSetting.settingEl.addClass('node-runtime-enriched-shell-setting');
+
     const customPath = this.context.plugin.settings.customNodePath ?? '';
     const customPathSetting = new Setting(runtimeCard)
       .setName(t('settingsDetails.terminal.customNodePath'))
@@ -411,7 +428,13 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       button.textContent = t('settingsDetails.terminal.nodeRuntimeRefreshing');
     }
     try {
-      const snapshot = await this.context.plugin.refreshNodeRuntimeSnapshot({ force: true });
+      // Re-warm both the enriched login-shell PATH and the runtime
+      // probe so the user gets a single, consistent snapshot after a
+      // refresh click. Order matters: enriched PATH must finish before
+      // the runtime probe so the runtime probe's spawn calls inherit
+      // the harvested PATH.
+      await this.context.plugin.warmRuntimeAndLaunchers({ force: true });
+      const snapshot = this.context.plugin.getNodeRuntimeSnapshot();
       this.renderNodeRuntimeSnapshot(rowsEl, snapshot);
     } finally {
       if (button) {
@@ -428,13 +451,49 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     rowsEl.empty();
     this.renderNodeRuntimeRow(rowsEl, 'Node.js', snapshot?.node ?? null);
     this.renderNodeRuntimeRow(rowsEl, 'npm', snapshot?.npm ?? null);
-    this.renderNodeRuntimeRow(rowsEl, 'fnm', snapshot?.fnm ?? null);
 
     if (snapshot?.customNodePath) {
       rowsEl.createDiv({
         cls: 'node-runtime-custom-path-hint',
         text: t('settingsDetails.terminal.nodeRuntimeCustomPathActive'),
       });
+    }
+
+    this.renderEnrichedShellEnvHint(rowsEl);
+  }
+
+  private renderEnrichedShellEnvHint(rowsEl: HTMLElement): void {
+    const result = this.context.plugin.getEnrichedShellEnvSnapshot();
+    if (!result) return;
+
+    const sourceLabel = this.formatEnrichedShellEnvSource(result.source);
+    const text = result.error
+      ? t('settingsDetails.terminal.enrichedShellEnvHintError', {
+        source: sourceLabel,
+        error: result.error,
+      })
+      : t('settingsDetails.terminal.enrichedShellEnvHint', { source: sourceLabel });
+    rowsEl.createDiv({
+      cls: 'node-runtime-enriched-shell-hint',
+      text,
+    });
+  }
+
+  private formatEnrichedShellEnvSource(source: string): string {
+    switch (source) {
+      case 'login-shell':
+        return t('settingsDetails.terminal.enrichedShellEnvSourceLoginShell');
+      case 'powershell':
+        return t('settingsDetails.terminal.enrichedShellEnvSourcePowerShell');
+      case 'cmd':
+        return t('settingsDetails.terminal.enrichedShellEnvSourceCmd');
+      case 'process':
+        return t('settingsDetails.terminal.enrichedShellEnvSourceProcess');
+      case 'disabled':
+        return t('settingsDetails.terminal.enrichedShellEnvSourceDisabled');
+      case 'unavailable':
+      default:
+        return t('settingsDetails.terminal.enrichedShellEnvSourceUnavailable');
     }
   }
 

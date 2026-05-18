@@ -56,19 +56,12 @@ test('snapshot carries node runtime diagnostics for missing npm-backed launchers
         version: null,
         path: null,
       },
-      fnm: {
-        command: 'fnm',
-        availability: 'ready',
-        version: '1.38.1',
-        path: '/usr/local/bin/fnm',
-      },
-      fnmCurrent: 'none',
       customNodePath: null,
     },
   });
 
   assert.equal(snapshot.readiness, 'not-installed');
-  assert.equal(snapshot.nodeRuntime?.fnm.availability, 'ready');
+  assert.equal(snapshot.nodeRuntime?.npm.availability, 'not-installed');
 });
 
 test('readiness is update-available when local is older than the registry version', () => {

@@ -120,6 +120,17 @@ export interface TerminalSettings {
   // launcher diagnostics. When blank, Termy resolves node/npm from PATH.
   customNodePath: string;
 
+  // When true (default), Termy briefly spawns the user's login shell
+  // during plugin load to read its `PATH` and reuse it for AI launcher
+  // detection and Termy terminal sessions. This makes version managers
+  // like fnm, nvm, asdf, mise, and volta visible without requiring
+  // their shell-init hook to run before Obsidian. Users who prefer
+  // not to spawn their login shell can disable this from the Node.js
+  // runtime card in the settings.
+  // Stored as `boolean | undefined` so existing installs default to
+  // enabled without a migration step.
+  enrichedShellEnv?: boolean;
+
   // Latest version whose changelog modal has already been shown
   lastSeenChangelogVersion: string;
 
@@ -363,6 +374,7 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   hideUnavailableAiLaunchers: false,
   checkAiLauncherUpdates: true,
   customNodePath: '',
+  enrichedShellEnv: true,
   lastSeenChangelogVersion: '',
   enableDebugLog: false,
 };

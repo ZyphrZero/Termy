@@ -1,14 +1,26 @@
 /**
- * Node.js / npm / fnm readiness probing for npm-backed AI launchers.
+ * Node.js / npm readiness probing for npm-backed AI launchers.
  *
- * The probe stays intentionally local: it resolves executables from the
- * Obsidian process PATH, asks each tool for its version, and surfaces the
- * paths so the install modal can explain what Termy detected.
+ * The probe stays intentionally local and version-manager-agnostic:
+ *
+ *   - It resolves executables from the environment Termy actually
+ *     sees, which is the inherited Obsidian PATH plus the enriched
+ *     login-shell PATH harvested by {@link enrichedShellEnv}. This
+ *     covers users on fnm, nvm, asdf, mise, volta, scoop, brew, or
+ *     anything else without Termy needing per-tool knowledge.
+ *   - It asks each tool for its version via `--version` and surfaces
+ *     the resolved paths so the install modal can explain what Termy
+ *     detected.
+ *   - Termy never recommends a specific version manager. The runtime
+ *     snapshot only reports Node.js and npm readiness; choosing how
+ *     to install Node.js belongs to the user.
  */
 
+import { runProbeCommand } from './childProcessUtils.ts';
 import { extractVersionString } from './commandVersionProbe.ts';
-import { debugWarn } from '../../utils/logger.ts';
 import type { CommandAvailability } from './commandAvailability.ts';
+import { getCachedEnrichedShellPath } from './enrichedShellEnv.ts';
+import { getPathEnvKey } from './envHelpers.ts';
 
 export interface RuntimeCommandInfo {
   command: string;
@@ -20,17 +32,25 @@ export interface RuntimeCommandInfo {
 export interface NodeRuntimeSnapshot {
   node: RuntimeCommandInfo;
   npm: RuntimeCommandInfo;
-  fnm: RuntimeCommandInfo;
-  /** Output of `fnm current`, when fnm is available. */
-  fnmCurrent: string | null;
   /** User configured Node.js executable path, when provided. */
   customNodePath: string | null;
 }
 
+/**
+ * Outcome of a runtime probe, as far as the install modal is
+ * concerned. The modal renders one of two cards:
+ *
+ *   - 'npm-ready': Termy can already see npm; install command is
+ *     `npm install -g <package>`.
+ *   - 'node-missing': Termy cannot see Node.js / npm. The modal
+ *     points the user at the Node.js download page and explains how
+ *     to make Termy pick the install up afterwards.
+ *   - 'unknown': probes were inconclusive (sandbox, slow profile);
+ *     the modal falls back to the catalog's default install command.
+ */
 export type NodeRuntimeRecommendation =
   | 'npm-ready'
-  | 'fnm-ready'
-  | 'fnm-missing'
+  | 'node-missing'
   | 'unknown';
 
 export interface NodeRuntimeDetectionOptions {
@@ -46,26 +66,9 @@ interface CacheEntry {
   expiresAt: number;
 }
 
-interface ChildProcessLike {
-  stdout?: { on(event: 'data', listener: (chunk: Buffer | string) => void): void };
-  stderr?: { on(event: 'data', listener: (chunk: Buffer | string) => void): void };
-  on(event: 'error', listener: (error: Error) => void): void;
-  on(event: 'exit', listener: (code: number | null) => void): void;
-  kill(): void;
-}
-
-interface NodeChildProcess {
-  spawn: (
-    command: string,
-    args: string[],
-    options: Record<string, unknown>,
-  ) => ChildProcessLike;
-}
-
 const CACHE_TTL_MS = 10_000;
 const PROBE_TIMEOUT_MS = 2_000;
 const NODE_DOWNLOAD_URL = 'https://nodejs.org/en/download';
-const FNM_INSTALL_DOCS_URL = 'https://www.fnmnode.com/guide/install.html';
 
 let cache: CacheEntry | null = null;
 let cacheKey: string | null = null;
@@ -79,26 +82,19 @@ export async function detectNodeRuntime(
   options: NodeRuntimeDetectionOptions = {},
 ): Promise<NodeRuntimeSnapshot> {
   const customNodePath = normalizeCustomNodePath(options.customNodePath);
-  const nextCacheKey = customNodePath ?? '<path>';
+  const nextCacheKey = customNodePath ?? '<auto>';
   if (cache && cacheKey === nextCacheKey && cache.expiresAt > Date.now()) {
     return cache.result;
   }
 
-  const [node, fnm] = await Promise.all([
-    customNodePath
-      ? probeRuntimePath(customNodePath, 'node', ['--version'])
-      : probeRuntimeCommand('node', ['--version']),
-    probeRuntimeCommand('fnm', ['--version']),
-  ]);
+  const node = customNodePath
+    ? await probeBinary(customNodePath, 'node')
+    : await probeBinary('node', 'node');
   const npm = customNodePath
     ? await probeNpmForCustomNodePath(customNodePath)
-    : await probeRuntimeCommand('npm', ['--version']);
+    : await probeBinary('npm', 'npm');
 
-  const fnmCurrent = fnm.availability === 'ready'
-    ? normalizeProbeOutput(await runCommand('fnm', ['current']))
-    : null;
-
-  const result = { node, npm, fnm, fnmCurrent, customNodePath };
+  const result: NodeRuntimeSnapshot = { node, npm, customNodePath };
   cache = { result, expiresAt: Date.now() + CACHE_TTL_MS };
   cacheKey = nextCacheKey;
   return result;
@@ -109,13 +105,11 @@ export function getNodeRuntimeRecommendation(
 ): NodeRuntimeRecommendation {
   if (!snapshot) return 'unknown';
   if (snapshot.npm.availability === 'ready') return 'npm-ready';
-  if (snapshot.fnm.availability === 'ready') return 'fnm-ready';
   if (
     snapshot.node.availability === 'not-installed'
     && snapshot.npm.availability === 'not-installed'
-    && snapshot.fnm.availability === 'not-installed'
   ) {
-    return 'fnm-missing';
+    return 'node-missing';
   }
   return 'unknown';
 }
@@ -129,31 +123,8 @@ export function buildNpmPackageInstallCommand(
   return `${npmCommand} install -g ${packageName}`;
 }
 
-export function buildFnmPackageInstallCommand(packageName: string): string {
-  return `fnm install --lts --use && npm install -g ${packageName}`;
-}
-
-export function getFnmBootstrapCommandForPlatform(
-  platform: NodeJS.Platform = process.platform,
-): string | null {
-  switch (platform) {
-    case 'win32':
-      return 'winget install Schniz.fnm';
-    case 'darwin':
-      return 'brew install fnm';
-    case 'linux':
-      return 'curl -fsSL https://fnm.vercel.app/install | bash';
-    default:
-      return null;
-  }
-}
-
 export function getNodeDownloadUrl(): string {
   return NODE_DOWNLOAD_URL;
-}
-
-export function getFnmInstallDocsUrl(): string {
-  return FNM_INSTALL_DOCS_URL;
 }
 
 export function createEmptyRuntimeCommandInfo(command: string): RuntimeCommandInfo {
@@ -181,6 +152,21 @@ export function getNpmCandidatePathsForNodePath(nodePath: string): string[] {
   return [`${dir}/npm`];
 }
 
+/**
+ * Build the additional environment variables Termy injects into newly
+ * spawned terminal sessions.
+ *
+ * The result PATH is the union of:
+ *   1. The custom Node.js / npm directories, when the user pinned a
+ *      Node.js executable in settings.
+ *   2. The enriched login-shell PATH harvested at plugin load. This
+ *      covers any version manager (fnm, nvm, asdf, mise, volta, …)
+ *      or manual install — Termy treats them all the same.
+ *   3. The existing inherited PATH (from `process.env.PATH`).
+ *
+ * Duplicates are removed so the same directory never appears twice.
+ * The system PATH is never modified.
+ */
 export function buildNodeRuntimeEnvironment(
   snapshot: NodeRuntimeSnapshot | null | undefined,
   baseEnv: Record<string, string | undefined> = process.env,
@@ -188,79 +174,98 @@ export function buildNodeRuntimeEnvironment(
   const nodePath = snapshot?.node.path;
   const npmPath = snapshot?.npm.path;
   const customNodePath = snapshot?.customNodePath;
-  if (!customNodePath || !nodePath) {
-    return {};
+  const enrichedPath = customNodePath ? null : getCachedEnrichedShellPath();
+
+  if (!customNodePath && !enrichedPath) return {};
+  if (customNodePath && !nodePath) return {};
+
+  const dirs: string[] = [];
+  if (customNodePath && nodePath) {
+    const nodeDir = getParentDirectory(nodePath);
+    if (nodeDir) dirs.push(nodeDir);
+    if (npmPath) {
+      const npmDir = getParentDirectory(npmPath);
+      if (npmDir) dirs.push(npmDir);
+    }
   }
-
-  const dirs = [
-    getParentDirectory(nodePath),
-    npmPath ? getParentDirectory(npmPath) : null,
-  ].filter((value): value is string => value !== null);
-
-  if (dirs.length === 0) return {};
 
   const pathKey = getPathEnvKey(baseEnv);
   const existingPath = baseEnv[pathKey] ?? '';
   const delimiter = process.platform === 'win32' ? ';' : ':';
-  return {
-    PATH: [...new Set(dirs), existingPath].filter((part) => part.length > 0).join(delimiter),
-  };
-}
 
-async function probeRuntimeCommand(
-  command: string,
-  versionArgs: string[],
-): Promise<RuntimeCommandInfo> {
-  const resolved = await resolveCommandPath(command);
-  if (resolved.availability !== 'ready') {
-    return {
-      command,
-      availability: resolved.availability,
-      version: null,
-      path: resolved.path,
-    };
+  const parts = [...dirs];
+  if (!customNodePath && enrichedPath) parts.push(enrichedPath);
+  parts.push(existingPath);
+
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const part of parts) {
+    if (!part) continue;
+    for (const segment of part.split(delimiter)) {
+      const trimmed = segment.trim();
+      if (!trimmed || seen.has(trimmed)) continue;
+      seen.add(trimmed);
+      merged.push(trimmed);
+    }
   }
 
-  const rawVersion = await runCommand(command, versionArgs);
-  return {
-    command,
-    availability: 'ready',
-    version: extractVersionString(rawVersion ?? ''),
-    path: resolved.path,
-  };
+  if (merged.length === 0) return {};
+  return { PATH: merged.join(delimiter) };
 }
 
-async function probeRuntimePath(
-  path: string,
+/**
+ * Single-path probe for a runtime binary. Accepts either a bare
+ * command name (resolved against PATH + the enriched login-shell
+ * PATH) or an absolute path. Returns a fully populated
+ * {@link RuntimeCommandInfo}.
+ */
+async function probeBinary(
+  binary: string,
   commandName: string,
-  versionArgs: string[],
 ): Promise<RuntimeCommandInfo> {
-  const rawVersion = await runCommand(path, versionArgs);
-  if (rawVersion === null) {
+  const result = await runProbeCommand({
+    command: binary,
+    args: ['--version'],
+    timeoutMs: PROBE_TIMEOUT_MS,
+  });
+
+  if (!result) {
     return {
       command: commandName,
       availability: 'unknown',
       version: null,
-      path,
+      path: null,
     };
   }
 
+  if (result.code !== 0) {
+    return {
+      command: commandName,
+      availability: 'not-installed',
+      version: null,
+      path: null,
+    };
+  }
+
+  const merged = (result.stdout || result.stderr).trim();
+  const version = merged ? extractVersionString(merged) : null;
+  const resolvedPath = isAbsolutePath(binary)
+    ? binary
+    : await resolvePathFor(binary);
+
   return {
     command: commandName,
-    availability: rawVersion === '' ? 'not-installed' : 'ready',
-    version: extractVersionString(rawVersion),
-    path,
+    availability: 'ready',
+    version,
+    path: resolvedPath,
   };
 }
 
 async function probeNpmForCustomNodePath(nodePath: string): Promise<RuntimeCommandInfo> {
   for (const npmPath of getNpmCandidatePathsForNodePath(nodePath)) {
-    const info = await probeRuntimePath(npmPath, 'npm', ['--version']);
-    if (info.availability === 'ready') {
-      return info;
-    }
+    const info = await probeBinary(npmPath, 'npm');
+    if (info.availability === 'ready') return info;
   }
-
   return {
     command: 'npm',
     availability: 'not-installed',
@@ -269,125 +274,40 @@ async function probeNpmForCustomNodePath(nodePath: string): Promise<RuntimeComma
   };
 }
 
-async function resolveCommandPath(command: string): Promise<{
-  availability: CommandAvailability;
-  path: string | null;
-}> {
-  const isWindows = process.platform === 'win32';
-  const resolver = isWindows ? 'where' : 'which';
-  const output = await runCommand(resolver, [command], { direct: true });
-  if (output === null) {
-    return { availability: 'unknown', path: null };
-  }
+/**
+ * Resolve a bare command to an absolute path so the settings card
+ * can show users where Termy is actually picking up the binary.
+ * Best-effort; returns null when the resolver fails.
+ */
+async function resolvePathFor(command: string): Promise<string | null> {
+  const resolver = process.platform === 'win32' ? 'where' : 'which';
+  const result = await runProbeCommand({
+    command: resolver,
+    args: [command],
+    timeoutMs: 1_000,
+    useWindowsShell: false,
+  });
+  if (!result || result.code !== 0) return null;
 
-  const firstLine = output
+  return result.stdout
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find((line) => line.length > 0) ?? null;
-
-  return firstLine
-    ? { availability: 'ready', path: firstLine }
-    : { availability: 'not-installed', path: null };
 }
 
-function loadChildProcess(): NodeChildProcess | null {
-  try {
-    return window.require('child_process') as NodeChildProcess;
-  } catch (error) {
-    debugWarn('[nodeRuntime] child_process unavailable:', error);
-    return null;
+function isAbsolutePath(value: string): boolean {
+  if (process.platform === 'win32') {
+    return /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\');
   }
-}
-
-function runCommand(
-  command: string,
-  args: string[],
-  options: { direct?: boolean } = {},
-): Promise<string | null> {
-  return new Promise((resolve) => {
-    const childProcess = loadChildProcess();
-    if (!childProcess) {
-      resolve(null);
-      return;
-    }
-
-    let proc: ChildProcessLike;
-    try {
-      if (process.platform === 'win32' && options.direct !== true) {
-        proc = childProcess.spawn('cmd.exe', ['/C', formatWindowsCommand(command, args)], {
-          windowsHide: true,
-        });
-      } else {
-        proc = childProcess.spawn(command, args, {
-          windowsHide: true,
-        });
-      }
-    } catch (error) {
-      debugWarn(`[nodeRuntime] failed to spawn ${command}:`, error);
-      resolve(null);
-      return;
-    }
-
-    let stdout = '';
-    let stderr = '';
-    proc.stdout?.on('data', (chunk) => {
-      stdout += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-    });
-    proc.stderr?.on('data', (chunk) => {
-      stderr += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-    });
-
-    let settled = false;
-    const finish = (value: string | null): void => {
-      if (settled) return;
-      settled = true;
-      resolve(value);
-    };
-
-    const timer = window.setTimeout(() => {
-      try {
-        proc.kill();
-      } catch (error) {
-        debugWarn('[nodeRuntime] failed to kill probe process:', error);
-      }
-      finish(null);
-    }, PROBE_TIMEOUT_MS);
-
-    proc.on('error', () => {
-      window.clearTimeout(timer);
-      finish(null);
-    });
-
-    proc.on('exit', (code) => {
-      window.clearTimeout(timer);
-      if (code !== 0) {
-        finish('');
-        return;
-      }
-      finish(normalizeProbeOutput(stdout || stderr) ?? '');
-    });
-  });
-}
-
-function formatWindowsCommand(command: string, args: string[]): string {
-  return [command, ...args].map(quoteWindowsShellArg).join(' ');
+  return value.startsWith('/');
 }
 
 function quoteShellCommand(command: string): string {
-  if (/^[A-Za-z0-9._/@:+\\-]+$/.test(command)) {
-    return command;
-  }
+  if (/^[A-Za-z0-9._/@:+\\-]+$/.test(command)) return command;
   if (process.platform === 'win32') {
     return `"${command.replace(/"/g, '\\"')}"`;
   }
   return `'${command.replace(/'/g, "'\\''")}'`;
-}
-
-function quoteWindowsShellArg(arg: string): string {
-  if (/^[A-Za-z0-9._/@:-]+$/.test(arg)) {
-    return arg;
-  }
-  return `"${arg.replace(/"/g, '\\"')}"`;
 }
 
 function getParentDirectory(path: string): string | null {
@@ -397,18 +317,7 @@ function getParentDirectory(path: string): string | null {
   return path.slice(0, slashIndex);
 }
 
-function getPathEnvKey(env: Record<string, string | undefined>): string {
-  if (process.platform !== 'win32') return 'PATH';
-  const existingKey = Object.keys(env).find((key) => key.toLowerCase() === 'path');
-  return existingKey ?? 'PATH';
-}
-
 function normalizeCustomNodePath(value: string | null | undefined): string | null {
-  const trimmed = value?.trim() ?? '';
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function normalizeProbeOutput(value: string | null): string | null {
   const trimmed = value?.trim() ?? '';
   return trimmed.length > 0 ? trimmed : null;
 }
