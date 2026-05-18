@@ -315,16 +315,6 @@ export interface TranslationKeys {
       nodeRuntimePathAuto: string;
       nodeRuntimePathMissing: string;
       nodeRuntimePathUnknown: string;
-      enrichedShellEnv: string;
-      enrichedShellEnvDesc: string;
-      enrichedShellEnvHint: string;
-      enrichedShellEnvHintError: string;
-      enrichedShellEnvSourceLoginShell: string;
-      enrichedShellEnvSourcePowerShell: string;
-      enrichedShellEnvSourceCmd: string;
-      enrichedShellEnvSourceProcess: string;
-      enrichedShellEnvSourceDisabled: string;
-      enrichedShellEnvSourceUnavailable: string;
       // AI launcher catalog (status bar menu + settings list)
       aiLauncherCategoryCodingAgent: string;
       aiLauncherCategoryCodingAgentDesc: string;

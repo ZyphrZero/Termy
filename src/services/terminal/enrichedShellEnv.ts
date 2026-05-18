@@ -62,12 +62,11 @@ export type EnrichedShellEnvSource =
   | 'powershell'
   | 'cmd'
   | 'process'
-  | 'disabled'
   | 'unavailable';
 
 interface EnrichedProbeOptions {
-  /** When false, the harvest is skipped and the result is "disabled". */
-  enabled: boolean;
+  /** Reserved for future use. */
+  force?: boolean;
 }
 
 let cached: Promise<EnrichedShellEnvResult> | null = null;
@@ -79,12 +78,11 @@ let cachedValue: EnrichedShellEnvResult | null = null;
  * spawn; subsequent calls return the cached promise.
  */
 export function getEnrichedShellEnv(
-  options: EnrichedProbeOptions = { enabled: true },
+  options: EnrichedProbeOptions = {},
 ): Promise<EnrichedShellEnvResult> {
-  if (!options.enabled) {
-    const disabled: EnrichedShellEnvResult = { path: null, source: 'disabled' };
-    cachedValue = disabled;
-    return Promise.resolve(disabled);
+  if (options.force) {
+    cached = null;
+    cachedValue = null;
   }
   if (cached) return cached;
   cached = runEnrichedShellEnvProbe().then((result) => {
@@ -103,14 +101,6 @@ export function getEnrichedShellEnv(
  */
 export function getCachedEnrichedShellPath(): string | null {
   return cachedValue?.path ?? null;
-}
-
-/**
- * Sync read of the full cached result (path + source + error) for
- * settings diagnostics.
- */
-export function getCachedEnrichedShellEnv(): EnrichedShellEnvResult | null {
-  return cachedValue;
 }
 
 /**
