@@ -288,7 +288,7 @@ export const ko: TranslationKeys = {
       presetScriptRunInNewTerminal: '새 터미널에서 실행',
       presetScriptRunInNewTerminalDesc: '실행마다 새 터미널 인스턴스를 생성',
       nodeRuntimeSettings: 'Node.js runtime',
-      nodeRuntimeSettingsDesc: 'Obsidian에서 사용할 수 있는 Node.js, npm, fnm을 표시하고 AI 런처용 Node.js 실행 파일을 지정할 수 있습니다.',
+      nodeRuntimeSettingsDesc: '셸 환경에서 감지됨.',
       customNodePath: '사용자 지정 Node.js 경로',
       customNodePathDesc: '선택 사항입니다. 설정하면 Termy가 Codex/OpenCode 준비 시 이 node와 같은 폴더의 npm을 우선 사용합니다.',
       customNodePathPlaceholder: '예: C:\\Program Files\\nodejs\\node.exe 또는 /opt/homebrew/bin/node',

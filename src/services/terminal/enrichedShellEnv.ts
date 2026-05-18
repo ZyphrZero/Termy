@@ -44,7 +44,7 @@ import { runProbeCommand, type ProbeCommandResult } from './childProcessUtils.ts
 
 export { withEnrichedPath } from './envHelpers.ts';
 
-const PROBE_TIMEOUT_MS = 3_000;
+const PROBE_TIMEOUT_MS = 5_000;
 const BEGIN_MARKER = '<<<TERMY_ENRICHED_PATH_BEGIN>>>';
 const END_MARKER = '<<<TERMY_ENRICHED_PATH_END>>>';
 

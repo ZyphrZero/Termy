@@ -396,7 +396,12 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       void this.refreshNodeRuntimeRows(runtimeRowsEl, refreshButton);
     });
 
-    void this.refreshNodeRuntimeRows(runtimeRowsEl);
+    // Initial render: wait for the already-in-flight warm (kicked off
+    // during plugin load) rather than force-clearing and re-running.
+    void this.context.plugin.warmRuntimeAndLaunchers().then(() => {
+      const snapshot = this.context.plugin.getNodeRuntimeSnapshot();
+      this.renderNodeRuntimeSnapshot(runtimeRowsEl, snapshot);
+    });
     // Keep the setting visually grouped with the runtime list, while
     // still using Obsidian's native Setting component for accessibility.
     customPathSetting.settingEl.addClass('node-runtime-custom-path-setting');
@@ -456,10 +461,14 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       cls: `node-runtime-row-version is-${command?.availability ?? 'unknown'}`,
       text: this.formatRuntimeVersion(command),
     });
-    meta.createEl('code', {
+    const pathText = this.formatRuntimePath(command);
+    const pathEl = meta.createEl('code', {
       cls: 'node-runtime-row-path',
-      text: this.formatRuntimePath(command),
+      text: pathText,
     });
+    if (command?.path) {
+      pathEl.setAttr('title', command.path);
+    }
   }
 
   private formatRuntimeVersion(command: RuntimeCommandInfo | null): string {

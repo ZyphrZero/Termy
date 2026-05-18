@@ -38,6 +38,7 @@ import {
   type AiLauncherStatus,
 } from './services/terminal/aiLauncherCatalog';
 import {
+  clearCommandAvailabilityCache,
   detectCommandAvailability,
   type CommandAvailability,
 } from './services/terminal/commandAvailability';
@@ -2317,6 +2318,8 @@ export default class TerminalPlugin extends Plugin {
   async warmRuntimeAndLaunchers(options: { force?: boolean } = {}): Promise<void> {
     if (options.force) {
       clearEnrichedShellEnvCache();
+      clearCommandAvailabilityCache();
+      clearCommandVersionCache();
     }
     // Wait for the enriched PATH harvest before touching the launcher
     // probes; the timeout inside the harvest caps this at 3 s.

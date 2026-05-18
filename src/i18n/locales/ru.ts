@@ -288,7 +288,7 @@ export const ru: TranslationKeys = {
       presetScriptRunInNewTerminal: 'Запускать в новом терминале',
       presetScriptRunInNewTerminalDesc: 'Создавать новый экземпляр терминала для каждого запуска',
       nodeRuntimeSettings: 'Runtime Node.js',
-      nodeRuntimeSettingsDesc: 'Показывает Node.js, npm и fnm, доступные Obsidian, и позволяет указать исполняемый файл Node.js для AI-лаунчеров.',
+      nodeRuntimeSettingsDesc: 'Обнаружено из вашей оболочки.',
       customNodePath: 'Путь к Node.js',
       customNodePathDesc: 'Необязательно. Если задано, Termy предпочитает этот node и соседний npm для настройки Codex/OpenCode.',
       customNodePathPlaceholder: 'например: C:\\Program Files\\nodejs\\node.exe или /opt/homebrew/bin/node',
