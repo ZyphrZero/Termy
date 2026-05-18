@@ -118,8 +118,14 @@ export function buildNpmPackageInstallCommand(
   packageName: string,
   snapshot?: NodeRuntimeSnapshot | null,
 ): string {
-  const npmPath = snapshot?.npm.path;
-  const npmCommand = npmPath ? quoteShellCommand(npmPath) : 'npm';
+  // Only use the full resolved path when the user explicitly configured
+  // a custom Node.js path — in that case the sibling npm may not be on
+  // PATH and the absolute path is necessary. For auto-detected installs
+  // (fnm, nvm, system) the bare `npm` command is cleaner and avoids
+  // exposing internal shim directories to the user.
+  const npmCommand = snapshot?.customNodePath && snapshot.npm.path
+    ? quoteShellCommand(snapshot.npm.path)
+    : 'npm';
   return `${npmCommand} install -g ${packageName}`;
 }
 
