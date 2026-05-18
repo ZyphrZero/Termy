@@ -90,6 +90,12 @@ export interface AiLauncherCatalogEntry {
    * because some launchers may ship without a public registry entry.
    */
   versionRegistry?: LatestVersionRegistry;
+  /**
+   * npm package that can install this launcher. When present, Termy can
+   * explain missing Node.js/npm prerequisites and offer an fnm-backed
+   * preparation command instead of showing a raw npm command that would fail.
+   */
+  npmPackage?: string;
 }
 
 /**
@@ -135,6 +141,7 @@ export const AI_LAUNCHER_CATALOG: readonly AiLauncherCatalogEntry[] = [
       linux: 'npm install -g @openai/codex',
       win32: 'npm install -g @openai/codex',
     },
+    npmPackage: '@openai/codex',
     versionRegistry: { kind: 'npm', package: '@openai/codex' },
     // OpenAI does not ship a `codex update` subcommand yet, so we reuse
     // the install paths with `@latest` for npm and brew's upgrade verb.
@@ -156,6 +163,7 @@ export const AI_LAUNCHER_CATALOG: readonly AiLauncherCatalogEntry[] = [
       // npm works universally on Windows without requiring scoop.
       win32: 'npm install -g opencode-ai',
     },
+    npmPackage: 'opencode-ai',
     versionRegistry: { kind: 'github-release', repo: 'anomalyco/opencode' },
     // OpenCode's install script performs in-place upgrades on Unix.
     // On Windows, npm handles the upgrade via @latest.

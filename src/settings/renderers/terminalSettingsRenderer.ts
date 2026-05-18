@@ -33,6 +33,11 @@ import {
   type AiLauncherStatusSnapshot,
 } from '../../services/terminal/aiLauncherStatus';
 import { clearCommandVersionCache } from '../../services/terminal/commandVersionProbe';
+import {
+  clearNodeRuntimeCache,
+  type NodeRuntimeSnapshot,
+  type RuntimeCommandInfo,
+} from '../../services/terminal/nodeRuntime';
 import { clamp, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
 
 const NEW_INSTANCE_BEHAVIORS = [
@@ -223,6 +228,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     this.renderInstanceBehaviorSettings(containerEl);
 
     // Preset scripts settings card
+    this.renderNodeRuntimeSettings(containerEl);
     this.renderPresetScriptsSettings(containerEl);
 
     // Display settings card (unified theme + appearance)
@@ -340,6 +346,159 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         
         return text;
       });
+  }
+
+  private renderNodeRuntimeSettings(containerEl: HTMLElement): void {
+    const runtimeCard = containerEl.createDiv({ cls: 'settings-card node-runtime-settings-card' });
+
+    const header = runtimeCard.createDiv({ cls: 'node-runtime-header' });
+    const headerText = header.createDiv({ cls: 'node-runtime-header-text' });
+    headerText.createDiv({
+      cls: 'node-runtime-title',
+      text: t('settingsDetails.terminal.nodeRuntimeSettings'),
+    });
+    headerText.createDiv({
+      cls: 'node-runtime-desc',
+      text: t('settingsDetails.terminal.nodeRuntimeSettingsDesc'),
+    });
+
+    const headerActions = header.createDiv({ cls: 'node-runtime-header-actions' });
+    const refreshButton = headerActions.createEl('button', {
+      cls: 'node-runtime-refresh-btn',
+      text: t('settingsDetails.terminal.nodeRuntimeRefresh'),
+    });
+
+    const runtimeRowsEl = runtimeCard.createDiv({ cls: 'node-runtime-list' });
+    this.renderNodeRuntimeSnapshot(runtimeRowsEl, this.context.plugin.getNodeRuntimeSnapshot());
+
+    const customPath = this.context.plugin.settings.customNodePath ?? '';
+    const customPathSetting = new Setting(runtimeCard)
+      .setName(t('settingsDetails.terminal.customNodePath'))
+      .setDesc(t('settingsDetails.terminal.customNodePathDesc'))
+      .addText((text) => {
+        text
+          .setPlaceholder(t('settingsDetails.terminal.customNodePathPlaceholder'))
+          .setValue(customPath)
+          .onChange((value) => {
+            this.context.plugin.settings.customNodePath = value.trim();
+            clearNodeRuntimeCache();
+            void this.saveSettings().then(() => {
+              void this.refreshNodeRuntimeRows(runtimeRowsEl);
+              void this.context.plugin.refreshAiLauncherStatusFromSettings({ force: true });
+            });
+            this.validateCustomNodePath(runtimeCard, value);
+          });
+      });
+
+    this.validateCustomNodePath(runtimeCard, customPath);
+
+    refreshButton.addEventListener('click', () => {
+      void this.refreshNodeRuntimeRows(runtimeRowsEl, refreshButton);
+    });
+
+    void this.refreshNodeRuntimeRows(runtimeRowsEl);
+    // Keep the setting visually grouped with the runtime list, while
+    // still using Obsidian's native Setting component for accessibility.
+    customPathSetting.settingEl.addClass('node-runtime-custom-path-setting');
+  }
+
+  private async refreshNodeRuntimeRows(
+    rowsEl: HTMLElement,
+    button?: HTMLButtonElement,
+  ): Promise<void> {
+    if (button) {
+      button.disabled = true;
+      button.textContent = t('settingsDetails.terminal.nodeRuntimeRefreshing');
+    }
+    try {
+      const snapshot = await this.context.plugin.refreshNodeRuntimeSnapshot({ force: true });
+      this.renderNodeRuntimeSnapshot(rowsEl, snapshot);
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = t('settingsDetails.terminal.nodeRuntimeRefresh');
+      }
+    }
+  }
+
+  private renderNodeRuntimeSnapshot(
+    rowsEl: HTMLElement,
+    snapshot: NodeRuntimeSnapshot | null,
+  ): void {
+    rowsEl.empty();
+    this.renderNodeRuntimeRow(rowsEl, 'Node.js', snapshot?.node ?? null);
+    this.renderNodeRuntimeRow(rowsEl, 'npm', snapshot?.npm ?? null);
+    this.renderNodeRuntimeRow(rowsEl, 'fnm', snapshot?.fnm ?? null);
+
+    if (snapshot?.customNodePath) {
+      rowsEl.createDiv({
+        cls: 'node-runtime-custom-path-hint',
+        text: t('settingsDetails.terminal.nodeRuntimeCustomPathActive'),
+      });
+    }
+  }
+
+  private renderNodeRuntimeRow(
+    rowsEl: HTMLElement,
+    label: string,
+    command: RuntimeCommandInfo | null,
+  ): void {
+    const row = rowsEl.createDiv({ cls: 'node-runtime-row' });
+    row.createDiv({ cls: 'node-runtime-row-label', text: label });
+
+    const meta = row.createDiv({ cls: 'node-runtime-row-meta' });
+    meta.createDiv({
+      cls: `node-runtime-row-version is-${command?.availability ?? 'unknown'}`,
+      text: this.formatRuntimeVersion(command),
+    });
+    meta.createEl('code', {
+      cls: 'node-runtime-row-path',
+      text: this.formatRuntimePath(command),
+    });
+  }
+
+  private formatRuntimeVersion(command: RuntimeCommandInfo | null): string {
+    if (!command || command.availability === 'unknown') {
+      return t('settingsDetails.terminal.nodeRuntimePathUnknown');
+    }
+    if (command.availability === 'not-installed') {
+      return t('settingsDetails.terminal.nodeRuntimePathMissing');
+    }
+    return command.version ? `v${command.version}` : t('settingsDetails.terminal.nodeRuntimePathAuto');
+  }
+
+  private formatRuntimePath(command: RuntimeCommandInfo | null): string {
+    if (!command || command.availability === 'unknown') {
+      return t('settingsDetails.terminal.nodeRuntimePathUnknown');
+    }
+    if (command.availability === 'not-installed') {
+      return t('settingsDetails.terminal.nodeRuntimePathMissing');
+    }
+    return command.path ?? t('settingsDetails.terminal.nodeRuntimePathAuto');
+  }
+
+  private validateCustomNodePath(containerEl: HTMLElement, path: string): void {
+    const existingValidation = containerEl.querySelector('.node-path-validation');
+    existingValidation?.remove();
+
+    if (!path || path.trim() === '') {
+      return;
+    }
+
+    const validationEl = containerEl.createDiv({
+      cls: 'node-path-validation setting-item-description terminal-settings-validation',
+    });
+
+    const isValid = validateShellPath(path);
+    if (!validationEl.isConnected) return;
+
+    if (isValid) {
+      validationEl.setText(t('settingsDetails.terminal.pathValid'));
+      validationEl.addClass('is-valid');
+    } else {
+      validationEl.setText(t('settingsDetails.terminal.pathInvalid'));
+      validationEl.addClass('is-invalid');
+    }
   }
 
   /**

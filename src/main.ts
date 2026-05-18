@@ -44,6 +44,18 @@ import {
 import { clearCommandVersionCache, probeCommandVersion } from './services/terminal/commandVersionProbe';
 import { clearLatestVersionCache, fetchLatestVersion } from './services/terminal/latestVersionRegistry';
 import {
+  buildNodeRuntimeEnvironment,
+  buildFnmPackageInstallCommand,
+  buildNpmPackageInstallCommand,
+  clearNodeRuntimeCache,
+  detectNodeRuntime,
+  getFnmBootstrapCommandForPlatform,
+  getFnmInstallDocsUrl,
+  getNodeDownloadUrl,
+  getNodeRuntimeRecommendation,
+  type NodeRuntimeSnapshot,
+} from './services/terminal/nodeRuntime';
+import {
   buildAiLauncherStatusSnapshot,
   readinessToBadge,
   type AiLauncherStatusSnapshot,
@@ -121,6 +133,7 @@ export default class TerminalPlugin extends Plugin {
    * of truth that both the menu and the install modal consume.
    */
   private _aiLauncherSnapshots: Map<string, AiLauncherStatusSnapshot> = new Map();
+  private _nodeRuntimeSnapshot: NodeRuntimeSnapshot | null = null;
   /**
    * Listeners notified when a launcher snapshot is updated. The settings
    * page subscribes so its rows stay in sync when offline mode toggles
@@ -180,6 +193,7 @@ export default class TerminalPlugin extends Plugin {
           this.settings,
           serverManager,
           () => ({
+            ...this.getNodeRuntimeTerminalEnv(),
             ...(this._claudeCodeIdeBridge?.getTerminalEnv() ?? {}),
             ...(this._agentContextBridge?.getTerminalEnv() ?? {}),
           }),
@@ -244,6 +258,9 @@ export default class TerminalPlugin extends Plugin {
       });
       // Warm up the AI launcher availability snapshot so the first menu
       // open already shows accurate Ready / Not installed badges.
+      void this.refreshNodeRuntimeSnapshot().catch((error) => {
+        errorLog('[TerminalPlugin] Failed to refresh Node.js runtime status:', error);
+      });
       void this.refreshAiLauncherAvailability().catch((error) => {
         errorLog('[TerminalPlugin] Failed to refresh AI launcher availability:', error);
       });
@@ -1877,6 +1894,7 @@ export default class TerminalPlugin extends Plugin {
     try {
       if (options.force) {
         clearLatestVersionCache();
+        clearNodeRuntimeCache();
         for (const entry of AI_LAUNCHER_CATALOG) {
           if (entry.detectCommand) {
             clearCommandVersionCache(entry.detectCommand);
@@ -1996,6 +2014,7 @@ export default class TerminalPlugin extends Plugin {
           rawOutput: null,
         })),
       ]);
+      const nodeRuntime = await this.detectNodeRuntimeForLauncher(entry, pathAvailable, localVersion.version);
 
       this._aiLauncherAvailability.set(command, pathAvailable);
 
@@ -2013,6 +2032,7 @@ export default class TerminalPlugin extends Plugin {
         pathAvailable,
         local: { version: localVersion.version, resolvedFrom: localVersion.resolvedFrom },
         latest,
+        nodeRuntime,
       });
       this.setAiLauncherSnapshot(entry.presetId, snapshot);
     });
@@ -2193,6 +2213,7 @@ export default class TerminalPlugin extends Plugin {
         rawOutput: null,
       })),
     ]);
+    const nodeRuntime = await this.detectNodeRuntimeForLauncher(entry, pathAvailable, localVersion.version);
     this._aiLauncherAvailability.set(command, pathAvailable);
 
     let latest: { version: string | null; error?: string } | null = null;
@@ -2209,9 +2230,59 @@ export default class TerminalPlugin extends Plugin {
       pathAvailable,
       local: { version: localVersion.version, resolvedFrom: localVersion.resolvedFrom },
       latest,
+      nodeRuntime,
     });
     this.setAiLauncherSnapshot(entry.presetId, snapshot);
     return snapshot;
+  }
+
+  private async detectNodeRuntimeForLauncher(
+    entry: AiLauncherCatalogEntry,
+    pathAvailable: CommandAvailability,
+    localVersion: string | null,
+  ): Promise<NodeRuntimeSnapshot | null> {
+    if (!entry.npmPackage) return null;
+    if (pathAvailable === 'ready' || localVersion) return null;
+    try {
+      const snapshot = await detectNodeRuntime({
+        customNodePath: this.settings.customNodePath,
+      });
+      this._nodeRuntimeSnapshot = snapshot;
+      return snapshot;
+    } catch (error) {
+      errorLog('[TerminalPlugin] Failed to detect Node.js runtime:', error);
+      return null;
+    }
+  }
+
+  private getNodeRuntimeTerminalEnv(): Record<string, string> {
+    if (!this.settings.customNodePath) return {};
+    const snapshot = this._nodeRuntimeSnapshot;
+    if (!snapshot) return {};
+    const env = buildNodeRuntimeEnvironment(snapshot);
+    return Object.fromEntries(
+      Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+    );
+  }
+
+  async refreshNodeRuntimeSnapshot(options: { force?: boolean } = {}): Promise<NodeRuntimeSnapshot | null> {
+    try {
+      if (options.force) {
+        clearNodeRuntimeCache();
+      }
+      const snapshot = await detectNodeRuntime({
+        customNodePath: this.settings.customNodePath,
+      });
+      this._nodeRuntimeSnapshot = snapshot;
+      return snapshot;
+    } catch (error) {
+      errorLog('[TerminalPlugin] Failed to refresh Node.js runtime status:', error);
+      return null;
+    }
+  }
+
+  getNodeRuntimeSnapshot(): NodeRuntimeSnapshot | null {
+    return this._nodeRuntimeSnapshot;
   }
 
   /**
@@ -2289,17 +2360,20 @@ export default class TerminalPlugin extends Plugin {
     const latestVersion = isSnapshot(snapshot) ? snapshot.latest : null;
     const updateAvailable = isSnapshot(snapshot) && snapshot.readiness === 'update-available';
     const upgradeCommand = updateAvailable ? getUpgradeCommandForPlatform(entry) : null;
-    const installCommand = getInstallCommandForPlatform(entry);
+    const installPlan = this.resolveLauncherInstallPlan(entry, isSnapshot(snapshot) ? snapshot : null);
+    const installCommand = installPlan.command;
 
     const modal = new LauncherInstallModal(this.app, {
       name: script.name || t('settingsDetails.terminal.presetScriptsUnnamed'),
       command: entry.detectCommand ?? '',
-      docsUrl: entry.installDocsUrl,
+      docsUrl: installPlan.docsUrl,
       installCommand,
+      installCommandKind: installPlan.kind,
       upgradeCommand,
       localVersion,
       latestVersion,
       updateAvailable,
+      nodeRuntime: isSnapshot(snapshot) ? snapshot.nodeRuntime : null,
       onRunAnyway: () => {
         this.runPresetScript(script).catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
@@ -2323,6 +2397,53 @@ export default class TerminalPlugin extends Plugin {
         : undefined,
     });
     modal.open();
+  }
+
+  private resolveLauncherInstallPlan(
+    entry: AiLauncherCatalogEntry,
+    snapshot: AiLauncherStatusSnapshot | null,
+  ): {
+    command: string | null;
+    kind: 'launcher' | 'fnm-node' | 'fnm-bootstrap';
+    docsUrl?: string;
+  } {
+    const fallback = getInstallCommandForPlatform(entry);
+    if (!entry.npmPackage || snapshot?.readiness === 'update-available') {
+      return {
+        command: fallback,
+        kind: 'launcher',
+        docsUrl: entry.installDocsUrl,
+      };
+    }
+
+    const recommendation = getNodeRuntimeRecommendation(snapshot?.nodeRuntime);
+    if (recommendation === 'npm-ready') {
+      return {
+        command: buildNpmPackageInstallCommand(entry.npmPackage, snapshot?.nodeRuntime),
+        kind: 'launcher',
+        docsUrl: entry.installDocsUrl,
+      };
+    }
+    if (recommendation === 'fnm-ready') {
+      return {
+        command: buildFnmPackageInstallCommand(entry.npmPackage),
+        kind: 'fnm-node',
+        docsUrl: entry.installDocsUrl,
+      };
+    }
+    if (recommendation === 'fnm-missing') {
+      return {
+        command: getFnmBootstrapCommandForPlatform(),
+        kind: 'fnm-bootstrap',
+        docsUrl: getFnmInstallDocsUrl(),
+      };
+    }
+
+    return {
+      command: fallback,
+      kind: 'launcher',
+      docsUrl: entry.installDocsUrl ?? getNodeDownloadUrl(),
+    };
   }
 
   /**

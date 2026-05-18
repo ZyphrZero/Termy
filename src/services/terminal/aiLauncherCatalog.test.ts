@@ -160,3 +160,20 @@ test('version registry sources match the documented endpoints', () => {
     assert.equal(key, expected.get(entry.presetId));
   }
 });
+
+test('npm-backed launchers declare the package Termy can prepare through fnm', () => {
+  const expected = new Map([
+    ['codex', '@openai/codex'],
+    ['opencode', 'opencode-ai'],
+  ]);
+
+  for (const [presetId, packageName] of expected) {
+    const entry = getAiLauncherEntry(presetId);
+    assert.ok(entry, `${presetId} missing catalog entry`);
+    assert.equal(entry.npmPackage, packageName);
+  }
+
+  const claude = getAiLauncherEntry('claude-code');
+  assert.ok(claude);
+  assert.equal(claude.npmPackage, undefined);
+});

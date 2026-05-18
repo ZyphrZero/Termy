@@ -836,6 +836,133 @@
   color: var(--text-muted);
 }
 
+/* ==================== Node Runtime Settings ==================== */
+.node-runtime-settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.node-runtime-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.node-runtime-header-text {
+  display: flex;
+  flex: 1 1 260px;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.node-runtime-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.node-runtime-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.node-runtime-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.node-runtime-refresh-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.node-runtime-refresh-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+.node-runtime-refresh-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.node-runtime-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.node-runtime-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 96px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 8px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-secondary);
+}
+
+.node-runtime-row-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.node-runtime-row-meta {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.node-runtime-row-version {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.node-runtime-row-version.is-ready {
+  color: var(--text-success);
+}
+
+.node-runtime-row-version.is-not-installed {
+  color: var(--text-warning);
+}
+
+.node-runtime-row-path {
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.node-runtime-custom-path-hint {
+  padding: 8px 10px;
+  border-left: 3px solid var(--interactive-accent);
+  border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
+  font-size: 12px;
+  color: var(--text-normal);
+}
+
+.node-runtime-custom-path-setting {
+  padding-top: 4px;
+}
+
 /* ==================== Preset Scripts List ==================== */
 .preset-scripts-list {
   display: flex;
@@ -2140,6 +2267,69 @@
   font-family: var(--font-monospace);
   font-size: 13px;
   color: var(--text-normal);
+}
+
+.termy-launcher-install-modal .termy-launcher-runtime-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  margin-bottom: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary-alt);
+}
+
+.termy-launcher-install-modal .termy-launcher-runtime-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.termy-launcher-install-modal .termy-launcher-runtime-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.termy-launcher-install-modal .termy-launcher-runtime-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.termy-launcher-install-modal .termy-launcher-runtime-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.termy-launcher-install-modal .termy-launcher-runtime-label {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--text-normal);
+}
+
+.termy-launcher-install-modal .termy-launcher-runtime-status {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.termy-launcher-install-modal .termy-launcher-runtime-status.is-ready {
+  color: var(--text-success);
+}
+
+.termy-launcher-install-modal .termy-launcher-runtime-status.is-not-installed {
+  color: var(--text-warning);
 }
 
 /* Install command card — copy-paste friendly install one-liner. */
