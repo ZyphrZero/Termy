@@ -371,23 +371,6 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     const runtimeRowsEl = runtimeCard.createDiv({ cls: 'node-runtime-list' });
     this.renderNodeRuntimeSnapshot(runtimeRowsEl, this.context.plugin.getNodeRuntimeSnapshot());
 
-    const enrichedShellEnabled = this.context.plugin.settings.enrichedShellEnv !== false;
-    const enrichedToggleSetting = new Setting(runtimeCard)
-      .setName(t('settingsDetails.terminal.enrichedShellEnv'))
-      .setDesc(t('settingsDetails.terminal.enrichedShellEnvDesc'))
-      .addToggle((toggle) => {
-        toggle
-          .setValue(enrichedShellEnabled)
-          .onChange((value) => {
-            this.context.plugin.settings.enrichedShellEnv = value;
-            void this.saveSettings().then(() => {
-              void this.refreshNodeRuntimeRows(runtimeRowsEl);
-              void this.context.plugin.refreshAiLauncherStatusFromSettings({ force: true });
-            });
-          });
-      });
-    enrichedToggleSetting.settingEl.addClass('node-runtime-enriched-shell-setting');
-
     const customPath = this.context.plugin.settings.customNodePath ?? '';
     const customPathSetting = new Setting(runtimeCard)
       .setName(t('settingsDetails.terminal.customNodePath'))
@@ -457,43 +440,6 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         cls: 'node-runtime-custom-path-hint',
         text: t('settingsDetails.terminal.nodeRuntimeCustomPathActive'),
       });
-    }
-
-    this.renderEnrichedShellEnvHint(rowsEl);
-  }
-
-  private renderEnrichedShellEnvHint(rowsEl: HTMLElement): void {
-    const result = this.context.plugin.getEnrichedShellEnvSnapshot();
-    if (!result) return;
-
-    const sourceLabel = this.formatEnrichedShellEnvSource(result.source);
-    const text = result.error
-      ? t('settingsDetails.terminal.enrichedShellEnvHintError', {
-        source: sourceLabel,
-        error: result.error,
-      })
-      : t('settingsDetails.terminal.enrichedShellEnvHint', { source: sourceLabel });
-    rowsEl.createDiv({
-      cls: 'node-runtime-enriched-shell-hint',
-      text,
-    });
-  }
-
-  private formatEnrichedShellEnvSource(source: string): string {
-    switch (source) {
-      case 'login-shell':
-        return t('settingsDetails.terminal.enrichedShellEnvSourceLoginShell');
-      case 'powershell':
-        return t('settingsDetails.terminal.enrichedShellEnvSourcePowerShell');
-      case 'cmd':
-        return t('settingsDetails.terminal.enrichedShellEnvSourceCmd');
-      case 'process':
-        return t('settingsDetails.terminal.enrichedShellEnvSourceProcess');
-      case 'disabled':
-        return t('settingsDetails.terminal.enrichedShellEnvSourceDisabled');
-      case 'unavailable':
-      default:
-        return t('settingsDetails.terminal.enrichedShellEnvSourceUnavailable');
     }
   }
 

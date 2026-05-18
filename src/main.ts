@@ -59,9 +59,7 @@ import {
 } from './services/terminal/aiLauncherStatus';
 import {
   clearEnrichedShellEnvCache,
-  getCachedEnrichedShellEnv,
   getEnrichedShellEnv,
-  type EnrichedShellEnvResult,
 } from './services/terminal/enrichedShellEnv';
 import { LauncherInstallModal } from './ui/terminal/launcherInstallModal';
 import { resolveChangelogSection } from './utils/changelog';
@@ -1908,7 +1906,7 @@ export default class TerminalPlugin extends Plugin {
       // Re-warm the enriched login-shell PATH first; the launcher
       // probe in `refreshAiLauncherAvailability` reads it through the
       // shared cache.
-      await getEnrichedShellEnv({ enabled: this.isEnrichedShellEnvEnabled() }).catch(() => null);
+      await getEnrichedShellEnv().catch(() => null);
       await this.refreshAiLauncherAvailability();
     } catch (error) {
       errorLog('[TerminalPlugin] Failed to refresh AI launcher status:', error);
@@ -2310,15 +2308,6 @@ export default class TerminalPlugin extends Plugin {
   }
 
   /**
-   * Read the cached enriched shell env result so settings diagnostics
-   * can surface the source ("login-shell" / "powershell" / "cmd" /
-   * "disabled" / "unavailable") and any error message.
-   */
-  getEnrichedShellEnvSnapshot(): EnrichedShellEnvResult | null {
-    return getCachedEnrichedShellEnv();
-  }
-
-  /**
    * Pre-warm caches that the AI launcher menu and terminal env
    * injection rely on. The enriched login-shell PATH probe must
    * complete first so all subsequent probes — and the terminal env
@@ -2331,11 +2320,10 @@ export default class TerminalPlugin extends Plugin {
     }
     // Wait for the enriched PATH harvest before touching the launcher
     // probes; the timeout inside the harvest caps this at 3 s.
-    await getEnrichedShellEnv({ enabled: this.isEnrichedShellEnvEnabled() })
-      .catch((error) => {
-        errorLog('[TerminalPlugin] Enriched shell PATH probe failed:', error);
-        return null;
-      });
+    await getEnrichedShellEnv().catch((error) => {
+      errorLog('[TerminalPlugin] Enriched shell PATH probe failed:', error);
+      return null;
+    });
     await Promise.all([
       this.refreshNodeRuntimeSnapshot({ force: options.force }).catch((error) => {
         errorLog('[TerminalPlugin] Failed to refresh Node.js runtime status:', error);
@@ -2344,17 +2332,6 @@ export default class TerminalPlugin extends Plugin {
         errorLog('[TerminalPlugin] Failed to refresh AI launcher availability:', error);
       }),
     ]);
-  }
-
-  /**
-   * Whether the enriched-shell-PATH harvest is allowed. The harvest
-   * is on by default; users who do not want Termy to spawn their
-   * login shell during plugin load can opt out via the settings
-   * toggle. The toggle defaults to `true`/undefined so existing users
-   * see the new behaviour automatically.
-   */
-  private isEnrichedShellEnvEnabled(): boolean {
-    return this.settings.enrichedShellEnv !== false;
   }
 
   /**
