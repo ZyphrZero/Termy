@@ -840,23 +840,22 @@
 .node-runtime-settings-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .node-runtime-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
   gap: 12px;
 }
 
 .node-runtime-header-text {
   display: flex;
-  flex: 1 1 260px;
+  flex: 1 1 0;
   min-width: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .node-runtime-header-actions {
@@ -873,47 +872,49 @@
 
 .node-runtime-desc {
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.4;
   color: var(--text-muted);
 }
 
 .node-runtime-refresh-btn {
-  padding: 6px 12px;
-  border-radius: 6px;
+  padding: 4px 10px;
+  border-radius: 4px;
   border: 1px solid var(--background-modifier-border);
   background: var(--background-secondary);
-  color: var(--text-normal);
-  font-size: 12px;
+  color: var(--text-muted);
+  font-size: 11px;
   cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .node-runtime-refresh-btn:hover {
   background: var(--background-modifier-hover);
+  color: var(--text-normal);
 }
 
 .node-runtime-refresh-btn:disabled {
-  opacity: 0.65;
+  opacity: 0.5;
   cursor: wait;
 }
 
 .node-runtime-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .node-runtime-row {
-  display: grid;
-  grid-template-columns: minmax(72px, 96px) minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-  padding: 8px 10px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
   background: var(--background-secondary);
 }
 
 .node-runtime-row-label {
+  flex: 0 0 auto;
+  min-width: 52px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-normal);
@@ -921,13 +922,17 @@
 
 .node-runtime-row-meta {
   display: flex;
+  flex: 1 1 0;
   min-width: 0;
-  flex-direction: column;
-  gap: 4px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
 }
 
 .node-runtime-row-version {
+  flex: 0 0 auto;
   font-size: 12px;
+  font-weight: 500;
   color: var(--text-muted);
 }
 
@@ -936,31 +941,46 @@
 }
 
 .node-runtime-row-version.is-not-installed {
-  color: var(--text-warning);
+  color: var(--text-faint);
 }
 
 .node-runtime-row-path {
+  flex: 1 1 0;
   min-width: 0;
   padding: 0;
   background: transparent;
   font-family: var(--font-monospace);
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-faint);
   overflow-wrap: anywhere;
+  word-break: break-all;
   white-space: normal;
 }
 
 .node-runtime-custom-path-hint {
-  padding: 8px 10px;
-  border-left: 3px solid var(--interactive-accent);
-  border-radius: 0 6px 6px 0;
-  background: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
-  font-size: 12px;
-  color: var(--text-normal);
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--interactive-accent) 8%, transparent);
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .node-runtime-custom-path-setting {
   padding-top: 4px;
+  flex-wrap: wrap;
+}
+
+.node-runtime-custom-path-setting .setting-item-info {
+  flex: 1 1 100%;
+}
+
+.node-runtime-custom-path-setting .setting-item-control {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.node-runtime-custom-path-setting .setting-item-control input[type="text"] {
+  width: 100%;
 }
 
 /* ==================== Preset Scripts List ==================== */

@@ -288,7 +288,7 @@ export const zhCN: TranslationKeys = {
       presetScriptRunInNewTerminal: '在新终端执行',
       presetScriptRunInNewTerminalDesc: '每次触发时创建新的终端实例执行终端动作',
       nodeRuntimeSettings: 'Node.js 运行环境',
-      nodeRuntimeSettingsDesc: '显示 Obsidian 当前可用的 Node.js、npm 与 fnm，并可为 AI 启动器指定 Node.js 可执行文件路径。',
+      nodeRuntimeSettingsDesc: '从你的 Shell 环境中检测。',
       customNodePath: '自定义 Node.js 路径',
       customNodePathDesc: '可选。指定 node 可执行文件后，Termy 会优先用它及同目录的 npm 准备 Codex/OpenCode。',
       customNodePathPlaceholder: '例如：C:\\Program Files\\nodejs\\node.exe 或 /opt/homebrew/bin/node',

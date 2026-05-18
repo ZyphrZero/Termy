@@ -288,7 +288,7 @@ export const ja: TranslationKeys = {
       presetScriptRunInNewTerminal: '新しいターミナルで実行',
       presetScriptRunInNewTerminalDesc: '実行ごとに新しいターミナルインスタンスを作成',
       nodeRuntimeSettings: 'Node.js runtime',
-      nodeRuntimeSettingsDesc: 'Obsidian から利用できる Node.js、npm、fnm を表示し、AI ランチャー用の Node.js 実行ファイルを指定できます。',
+      nodeRuntimeSettingsDesc: 'シェル環境から検出。',
       customNodePath: 'カスタム Node.js パス',
       customNodePathDesc: '任意。指定すると、Termy は Codex/OpenCode の準備でこの node と同じフォルダーの npm を優先します。',
       customNodePathPlaceholder: '例: C:\\Program Files\\nodejs\\node.exe または /opt/homebrew/bin/node',

@@ -288,7 +288,7 @@ export const en: TranslationKeys = {
       presetScriptRunInNewTerminal: 'Run in new terminal',
       presetScriptRunInNewTerminalDesc: 'Create a new terminal instance for each run',
       nodeRuntimeSettings: 'Node.js runtime',
-      nodeRuntimeSettingsDesc: 'Show the Node.js, npm, and fnm executables available to Obsidian, and optionally pin a Node.js executable for AI launchers.',
+      nodeRuntimeSettingsDesc: 'Detected from your shell environment.',
       customNodePath: 'Custom Node.js path',
       customNodePathDesc: 'Optional. Termy uses this executable for launcher setup when it is set.',
       customNodePathPlaceholder: 'e.g. C:\\Program Files\\nodejs\\node.exe or /opt/homebrew/bin/node',
