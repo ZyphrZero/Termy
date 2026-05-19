@@ -12,7 +12,7 @@ import { renderPresetScriptIcon } from './ui/terminal/presetScriptIcons';
 import { TerminalSettingTab } from './settings/settingsTab';
 import type { TerminalService } from './services/terminal/terminalService';
 import type { ServerManager } from './services/server/serverManager';
-import type { ClaudeCodeIdeBridge } from './services/claudeCode/ideBridge';
+import type { IdeBridge } from './services/ideBridge/ideBridge';
 import type { AgentContextBridge } from './services/context/agentContextBridge';
 import { TERMINAL_VIEW_TYPE, TerminalView } from './ui/terminal/terminalView';
 import { ChangelogModal } from './ui/changelog/changelogModal';
@@ -109,7 +109,7 @@ export default class TerminalPlugin extends Plugin {
   // Lazily initialized services
   private _serverManager: ServerManager | null = null;
   private _terminalService: TerminalService | null = null;
-  private _claudeCodeIdeBridge: ClaudeCodeIdeBridge | null = null;
+  private _ideBridge: IdeBridge | null = null;
   private _agentContextBridge: AgentContextBridge | null = null;
   private _changelogContentCache: string | null = null;
   private _changelogSectionCache: Map<string, ChangelogDetails> = new Map();
@@ -181,7 +181,7 @@ export default class TerminalPlugin extends Plugin {
    * Get the terminal service (lazy initialization)
    */
   async getTerminalService(): Promise<TerminalService> {
-    await this.initializeClaudeCodeIdeBridge();
+    await this.initializeIdeBridge();
     await this.initializeAgentContextBridge();
 
     if (!this._terminalService) {
@@ -196,7 +196,7 @@ export default class TerminalPlugin extends Plugin {
           serverManager,
           () => ({
             ...this.getNodeRuntimeTerminalEnv(),
-            ...(this._claudeCodeIdeBridge?.getTerminalEnv() ?? {}),
+            ...(this._ideBridge?.getTerminalEnv() ?? {}),
             ...(this._agentContextBridge?.getTerminalEnv() ?? {}),
           }),
           () => this.saveSettings(),
@@ -242,8 +242,8 @@ export default class TerminalPlugin extends Plugin {
     // Register all commands
     this.registerCommands();
 
-    void this.initializeClaudeCodeIdeBridge().catch((error) => {
-      errorLog('[TerminalPlugin] Failed to initialize Claude Code IDE bridge:', error);
+    void this.initializeIdeBridge().catch((error) => {
+      errorLog('[TerminalPlugin] Failed to initialize IDE bridge:', error);
     });
     void this.initializeAgentContextBridge().catch((error) => {
       errorLog('[TerminalPlugin] Failed to initialize agent context bridge:', error);
@@ -319,13 +319,13 @@ export default class TerminalPlugin extends Plugin {
       }
     }
 
-    if (this._claudeCodeIdeBridge) {
+    if (this._ideBridge) {
       try {
-        debugLog('[TerminalPlugin] Shutting down Claude Code IDE bridge...');
-        await this._claudeCodeIdeBridge.stop();
-        debugLog('[TerminalPlugin] Claude Code IDE bridge stopped');
+        debugLog('[TerminalPlugin] Shutting down IDE bridge...');
+        await this._ideBridge.stop();
+        debugLog('[TerminalPlugin] IDE bridge stopped');
       } catch (error) {
-        errorLog('[TerminalPlugin] Failed to stop Claude Code IDE bridge:', error);
+        errorLog('[TerminalPlugin] Failed to stop IDE bridge:', error);
       }
     }
 
@@ -342,13 +342,13 @@ export default class TerminalPlugin extends Plugin {
     debugLog(t('plugin.unloadedMessage'));
   }
 
-  private async initializeClaudeCodeIdeBridge(): Promise<void> {
-    if (!this._claudeCodeIdeBridge) {
-      const { ClaudeCodeIdeBridge } = await import('./services/claudeCode/ideBridge');
-      this._claudeCodeIdeBridge = new ClaudeCodeIdeBridge(this.app, this.manifest.version);
+  private async initializeIdeBridge(): Promise<void> {
+    if (!this._ideBridge) {
+      const { IdeBridge } = await import('./services/ideBridge/ideBridge');
+      this._ideBridge = new IdeBridge(this.app, this.manifest.version);
     }
 
-    await this._claudeCodeIdeBridge.start();
+    await this._ideBridge.start();
   }
 
   private async initializeAgentContextBridge(): Promise<void> {
@@ -1330,7 +1330,7 @@ export default class TerminalPlugin extends Plugin {
           }
           const currentScript = this.getPresetScriptById(script.id);
           if (!currentScript) return false;
-          if (!(currentScript.showInStatusBar ?? true)) {
+          if (!currentScript.showInCommandPalette) {
             return false;
           }
           if (!checking) {
@@ -1618,6 +1618,7 @@ export default class TerminalPlugin extends Plugin {
       actions,
       terminalTitle: (script.terminalTitle || '').trim(),
       showInStatusBar: script.showInStatusBar !== false,
+      showInCommandPalette: script.showInCommandPalette !== false,
       autoOpenTerminal: script.autoOpenTerminal !== false,
       runInNewTerminal: script.runInNewTerminal === true,
     };
@@ -1658,6 +1659,7 @@ export default class TerminalPlugin extends Plugin {
       ],
       terminalTitle: '',
       showInStatusBar: true,
+      showInCommandPalette: true,
       autoOpenTerminal: true,
       runInNewTerminal: false,
     };
@@ -1804,7 +1806,7 @@ export default class TerminalPlugin extends Plugin {
 
   private buildPresetScriptsMenu(): HTMLElement | null {
     const scripts = (this.settings.presetScripts ?? []);
-    const visibleScripts = scripts.filter(script => script.showInStatusBar ?? true);
+    const visibleScripts = scripts.filter(script => script.showInStatusBar);
     const hideUnavailable = this.settings.hideUnavailableAiLaunchers === true;
     const menu = activeDocument.createElement('div');
     menu.className = 'preset-scripts-menu';

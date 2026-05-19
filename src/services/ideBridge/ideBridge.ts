@@ -1,5 +1,5 @@
 import type { App, Editor, EventRef, TFile } from 'obsidian';
-import { FileSystemAdapter, normalizePath } from 'obsidian';
+import { FileSystemAdapter, MarkdownView, normalizePath } from 'obsidian';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import { buildIdeBridgeTerminalEnv } from '../context/agentContext';
 import { debugLog, errorLog } from '@/utils/logger';
@@ -7,7 +7,7 @@ import { getHomeDir } from '@/utils/platform';
 
 /**
  * Node built-in modules are resolved on demand inside the
- * `ClaudeCodeIdeBridge` instance via Electron's `window.require`.
+ * `IdeBridge` instance via Electron's `window.require`.
  * Keeping these lookups out of the module top-level scope avoids the
  * Obsidian community plugin reviewer's static "Direct Filesystem
  * Access" warning while preserving identical runtime semantics.
@@ -18,12 +18,29 @@ type CryptoModule = typeof import('crypto');
 type UrlModule = typeof import('url');
 
 const CLAUDE_IDE_DIR_NAME = '.claude/ide';
+/**
+ * MCP protocol revisions Termy's IDE bridge knows how to speak.
+ *
+ * Format is `YYYY-MM-DD` (per MCP versioning spec — every entry is a
+ * release date for a backwards-incompatible spec revision, not SemVer).
+ * Order is *newest first* so {@link handleInitialize} can pick
+ * `SUPPORTED_MCP_PROTOCOL_VERSIONS[0]` as the "latest we support" when
+ * the client requests a revision we don't recognize, satisfying the
+ * lifecycle requirement that the server reply with its newest supported
+ * version on a mismatch.
+ *
+ * The exposed RPC surface (`tools/list`, `tools/call`,
+ * `notifications/initialized`, `selection_changed`) has been stable
+ * since 2024-11-05, so adding a newer revision here just means
+ * acknowledging the client's request — no new server features required.
+ *
+ * When a new MCP revision ships, prepend it to this list.
+ */
 const SUPPORTED_MCP_PROTOCOL_VERSIONS = [
   '2025-11-25',
   '2025-06-18',
   '2025-03-26',
   '2024-11-05',
-  '2024-10-07',
 ] as const;
 const EMPTY_OBJECT_SCHEMA = {
   type: 'object',
@@ -154,7 +171,7 @@ function sameSelection(
   );
 }
 
-export class ClaudeCodeIdeBridge {
+export class IdeBridge {
   private readonly app: App;
   private readonly version: string;
   private readonly authToken: string;
@@ -197,7 +214,7 @@ export class ClaudeCodeIdeBridge {
       this.handleConnection(socket, request.headers['x-claude-code-ide-authorization']);
     });
     this.server.on('error', (error) => {
-      errorLog('[ClaudeCodeIdeBridge] WebSocket server error:', error);
+      errorLog('[IdeBridge] WebSocket server error:', error);
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -209,7 +226,7 @@ export class ClaudeCodeIdeBridge {
 
     const address = this.server.address();
     if (!address || typeof address === 'string') {
-      throw new Error('Claude Code IDE bridge failed to resolve a listening port');
+      throw new Error('IDE bridge failed to resolve a listening port');
     }
 
     this.port = (address as import('net').AddressInfo).port;
@@ -219,7 +236,21 @@ export class ClaudeCodeIdeBridge {
     this.startTracking();
     this.started = true;
 
-    debugLog(`[ClaudeCodeIdeBridge] Started on port ${this.port}`);
+    // The bridge is started during `onload()`, which on a fresh Obsidian
+    // launch runs *before* the workspace has finished restoring leaves.
+    // At that point `captureSelection()` above can return `null` because
+    // `workspace.activeEditor` and `getActiveFile()` are not populated
+    // yet. Re-capture once layout is ready so the first
+    // `selection_changed` notification reflects real state — covering
+    // both already-connected clients (via `broadcastNotification` inside
+    // `refreshSelection`) and clients still mid-handshake (via
+    // `sendLatestSelection` on `notifications/initialized`, which now
+    // sees a populated `latestSelection`). Obsidian fires the callback
+    // immediately if layout is already ready, so this is also safe on
+    // hot-reload / late starts.
+    this.app.workspace.onLayoutReady(() => this.refreshSelection());
+
+    debugLog(`[IdeBridge] Started on port ${this.port}`);
   }
 
   async stop(): Promise<void> {
@@ -257,7 +288,7 @@ export class ClaudeCodeIdeBridge {
         this.fs.unlinkSync(this.lockfilePath);
       } catch (error) {
         if (!(error instanceof Error) || !(('code' in error) && error.code === 'ENOENT')) {
-          errorLog('[ClaudeCodeIdeBridge] Failed to remove lockfile:', error);
+          errorLog('[IdeBridge] Failed to remove lockfile:', error);
         }
       }
       this.lockfilePath = null;
@@ -266,7 +297,7 @@ export class ClaudeCodeIdeBridge {
     this.port = null;
     this.latestSelection = null;
     this.started = false;
-    debugLog('[ClaudeCodeIdeBridge] Stopped');
+    debugLog('[IdeBridge] Stopped');
   }
 
   getTerminalEnv(): Record<string, string> {
@@ -298,7 +329,24 @@ export class ClaudeCodeIdeBridge {
     const { editor, file } = this.getActiveEditorContext();
     const filePath = this.resolveAbsoluteFilePath(file?.path ?? null);
     if (!filePath) {
-      return null;
+      // No current note yet (fresh launch with no editor restored, or
+      // the active leaf is a non-file view like the empty new-tab page).
+      // We still want Claude Code / OpenCode to receive *something* on
+      // their first `getCurrentSelection` / first
+      // `notifications/initialized` push so they don't latch onto a
+      // "no IDE context" state. Fall back to a workspace-anchored
+      // snapshot pointing at the vault root, with an empty selection.
+      const vaultPath = this.getVaultPath();
+      if (!vaultPath) {
+        return null;
+      }
+
+      return {
+        filePath: vaultPath,
+        fileUrl: this.pathToFileURL(vaultPath).toString(),
+        text: '',
+        selection: null,
+      };
     }
 
     const fileUrl = this.pathToFileURL(filePath).toString();
@@ -342,9 +390,21 @@ export class ClaudeCodeIdeBridge {
       };
     };
 
+    // Obsidian populates `workspace.activeEditor` lazily as markdown views
+    // become focused. During plugin startup (before `onLayoutReady` runs)
+    // it can be `undefined` even though the workspace already restored a
+    // markdown leaf, leaving the IDE bridge with no editor to read from.
+    // Fall back to the currently active `MarkdownView` so the very first
+    // `getCurrentSelection` call from Claude Code / OpenCode after a fresh
+    // Obsidian launch returns the live editor instead of "No active editor".
+    const activeMarkdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+
     return {
-      editor: workspace.activeEditor?.editor ?? null,
-      file: workspace.activeEditor?.file ?? this.app.workspace.getActiveFile(),
+      editor: workspace.activeEditor?.editor ?? activeMarkdownView?.editor ?? null,
+      file:
+        workspace.activeEditor?.file ??
+        activeMarkdownView?.file ??
+        this.app.workspace.getActiveFile(),
     };
   }
 
@@ -372,7 +432,7 @@ export class ClaudeCodeIdeBridge {
 
   private writeLockfile(): void {
     if (!this.port) {
-      throw new Error('Cannot write Claude Code IDE bridge lockfile without a port');
+      throw new Error('Cannot write IDE bridge lockfile without a port');
     }
 
     const workspaceFolders: string[] = [];
@@ -395,7 +455,20 @@ export class ClaudeCodeIdeBridge {
 
   private handleConnection(socket: WebSocket, authHeader: string | string[] | undefined): void {
     const token = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-    if (token !== this.authToken) {
+    // When the client discovers the bridge through the
+    // `OPENCODE_EDITOR_SSE_PORT` / `CLAUDE_CODE_SSE_PORT` env var
+    // (which Termy injects into its own child terminals), it connects
+    // without an auth header because the env-var path implies
+    // same-process trust. Accept the connection in that case — the
+    // server is bound to 127.0.0.1 and the port is ephemeral, so
+    // only local processes that inherited the env var can reach it.
+    //
+    // When the client discovers the bridge through the lockfile
+    // (`~/.claude/ide/<port>.lock`), it sends the auth token from the
+    // lockfile in the `x-claude-code-ide-authorization` header. We
+    // validate it to prevent stale lockfiles from granting access to
+    // a different bridge instance.
+    if (token !== undefined && token !== this.authToken) {
       socket.close(1008, 'Unauthorized');
       return;
     }
@@ -407,7 +480,7 @@ export class ClaudeCodeIdeBridge {
       this.clients.delete(socket);
     });
     socket.on('error', (error) => {
-      errorLog('[ClaudeCodeIdeBridge] Client socket error:', error);
+      errorLog('[IdeBridge] Client socket error:', error);
     });
   }
 
@@ -417,7 +490,7 @@ export class ClaudeCodeIdeBridge {
       const raw = this.decodeRawMessage(data);
       request = JSON.parse(raw) as JsonRpcRequest;
     } catch (error) {
-      errorLog('[ClaudeCodeIdeBridge] Failed to parse JSON-RPC request:', error);
+      errorLog('[IdeBridge] Failed to parse JSON-RPC request:', error);
       this.sendError(socket, null, -32700, 'Parse error');
       return;
     }
@@ -509,7 +582,7 @@ export class ClaudeCodeIdeBridge {
       requestedVersion as (typeof SUPPORTED_MCP_PROTOCOL_VERSIONS)[number],
     )
       ? requestedVersion
-      : '2024-11-05';
+      : SUPPORTED_MCP_PROTOCOL_VERSIONS[0];
 
     this.sendResult(socket, id, {
       protocolVersion,
@@ -585,7 +658,17 @@ export class ClaudeCodeIdeBridge {
   }
 
   private getSelectionJson(): string {
-    const selection = this.latestSelection ?? this.captureSelection();
+    // Re-capture on every tool call so a Claude Code / OpenCode prompt
+    // sent right after the user clicks into a different note still sees
+    // the live selection — we cannot rely on the workspace events
+    // having been delivered to `refreshSelection` yet. Persist the
+    // result so subsequent `selection_changed` broadcasts use the same
+    // baseline and do not re-emit an already-known snapshot.
+    const live = this.captureSelection();
+    if (live && !sameSelection(live, this.latestSelection)) {
+      this.latestSelection = live;
+    }
+    const selection = this.latestSelection ?? live;
     if (!selection?.filePath) {
       return JSON.stringify(
         {
@@ -675,7 +758,7 @@ export class ClaudeCodeIdeBridge {
 
     socket.send(JSON.stringify(payload), (error) => {
       if (error) {
-        errorLog('[ClaudeCodeIdeBridge] Failed to send JSON-RPC payload:', error);
+        errorLog('[IdeBridge] Failed to send JSON-RPC payload:', error);
       }
     });
   }

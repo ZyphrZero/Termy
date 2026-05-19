@@ -53,7 +53,7 @@ Termy is built for people who already live in Obsidian and do real work in a ter
 - Combine terminal commands, Obsidian commands, and external links in a single workflow.
 - Launch workflows from the status bar menu, command palette, or built-in workflow commands.
 - Decide whether each workflow appears in the status bar, opens a terminal, starts a fresh terminal instance, or renames the target tab.
-- Start quickly with built-in launchers for Claude Code, Codex CLI, OpenCode, and Gemini CLI.
+- Start quickly with built-in launchers for Claude Code, Codex CLI, OpenCode, Gemini CLI, Hermes, and DeepSeek TUI.
 
 ### Obsidian Interactions
 
@@ -78,7 +78,7 @@ Termy is built for people who already live in Obsidian and do real work in a ter
 - Terminal sessions run local shell commands and user-configured workflows. Those commands may read files, modify files, or access the network according to the shell command or external CLI being run.
 - Termy starts local WebSocket connections for its PTY backend and optional IDE bridge. These connections are used for local terminal transport and editor-context handoff.
 - Context-aware AI launchers can pass the active note path, selection, editor context, and vault/workspace path to local CLI tools. The Codex integration writes a vault-local helper skill under `.agents/skills/termy-obsidian-context/`.
-- Optional: when **Check for AI launcher updates** is enabled in settings, Termy queries `https://registry.npmjs.org` for the latest Claude Code and Codex CLI releases, and `https://api.github.com` for the latest OpenCode release. The setting is **off by default** and offline mode disables it regardless of the toggle.
+- Optional: when **Check for AI launcher updates** is enabled in settings, Termy queries `https://registry.npmjs.org` for the latest Claude Code, Codex CLI, and DeepSeek TUI releases, and `https://api.github.com` for the latest OpenCode and Hermes releases. The setting is **off by default** and offline mode disables it regardless of the toggle.
 
 ### Appearance & Ergonomics
 
@@ -112,7 +112,7 @@ Termy is built for people who already live in Obsidian and do real work in a ter
       <sub>Status bar workflow launcher</sub>
     </td>
     <td width="66%" align="center">
-      <img src="assets/termy-settings-workflows.png" alt="Termy workflow settings with built-in Claude Code, Codex CLI, OpenCode, and Gemini CLI entries" />
+      <img src="assets/termy-settings-workflows.png" alt="Termy workflow settings with built-in Claude Code, Codex CLI, OpenCode, Gemini CLI, and Hermes entries" />
       <br />
       <sub>Workflow configuration, instance behavior, and built-in launchers</sub>
     </td>

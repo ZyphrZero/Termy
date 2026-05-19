@@ -300,6 +300,8 @@ export interface TranslationKeys {
       presetScriptTerminalTitlePlaceholder: string;
       presetScriptShowInStatusBar: string;
       presetScriptShowInStatusBarDesc: string;
+      presetScriptShowInCommandPalette: string;
+      presetScriptShowInCommandPaletteDesc: string;
       presetScriptAutoOpenTerminal: string;
       presetScriptAutoOpenTerminalDesc: string;
       presetScriptRunInNewTerminal: string;

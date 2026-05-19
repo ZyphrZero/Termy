@@ -29,13 +29,15 @@ test('partitionLaunchers groups catalog scripts and leaves regular ones in regul
     { id: 'claude-code' },
     { id: 'codex' },
     { id: 'opencode' },
+    { id: 'hermes' },
+    { id: 'deepseek-tui' },
     { id: 'my-custom-workflow' },
   ];
 
   const partition = partitionLaunchers(scripts);
   assert.deepEqual(
     partition.codingAgent.map((script) => script.id),
-    ['claude-code', 'codex', 'opencode'],
+    ['claude-code', 'codex', 'opencode', 'hermes', 'deepseek-tui'],
   );
   assert.deepEqual(partition.regular.map((script) => script.id), ['my-custom-workflow']);
 });
@@ -43,13 +45,15 @@ test('partitionLaunchers groups catalog scripts and leaves regular ones in regul
 test('partitionLaunchers preserves the original order within each bucket', () => {
   const scripts: FakeScript[] = [
     { id: 'opencode' },
+    { id: 'hermes' },
     { id: 'claude-code' },
+    { id: 'deepseek-tui' },
     { id: 'codex' },
   ];
   const partition = partitionLaunchers(scripts);
   assert.deepEqual(
     partition.codingAgent.map((script) => script.id),
-    ['opencode', 'claude-code', 'codex'],
+    ['opencode', 'hermes', 'claude-code', 'deepseek-tui', 'codex'],
   );
 });
 
@@ -67,8 +71,11 @@ test('AI_LAUNCHER_CATALOG only contains coding agent entries today', () => {
     .filter((entry) => entry.category === 'coding-agent')
     .map((entry) => entry.presetId)
     .sort();
-  assert.deepEqual(codingAgentIds, ['claude-code', 'codex', 'opencode']);
-  assert.equal(AI_LAUNCHER_CATALOG.length, 3);
+  assert.deepEqual(
+    codingAgentIds,
+    ['claude-code', 'codex', 'deepseek-tui', 'hermes', 'opencode'],
+  );
+  assert.equal(AI_LAUNCHER_CATALOG.length, 5);
 });
 
 test('commandAvailabilityToLauncherStatus maps probe results to badge statuses', () => {
@@ -150,6 +157,8 @@ test('version registry sources match the documented endpoints', () => {
     ['claude-code', 'npm:@anthropic-ai/claude-code'],
     ['codex', 'npm:@openai/codex'],
     ['opencode', 'github-release:anomalyco/opencode'],
+    ['hermes', 'github-release:NousResearch/hermes-agent'],
+    ['deepseek-tui', 'npm:deepseek-tui'],
   ]);
   for (const entry of AI_LAUNCHER_CATALOG) {
     const registry = entry.versionRegistry;
@@ -165,6 +174,7 @@ test('npm-backed launchers declare the package Termy can prepare through fnm', (
   const expected = new Map([
     ['codex', '@openai/codex'],
     ['opencode', 'opencode-ai'],
+    ['deepseek-tui', 'deepseek-tui'],
   ]);
 
   for (const [presetId, packageName] of expected) {
@@ -176,4 +186,10 @@ test('npm-backed launchers declare the package Termy can prepare through fnm', (
   const claude = getAiLauncherEntry('claude-code');
   assert.ok(claude);
   assert.equal(claude.npmPackage, undefined);
+
+  // Hermes ships through a Python/PyPI installer, not npm — no package
+  // means Termy will not offer the fnm-backed preparation flow for it.
+  const hermes = getAiLauncherEntry('hermes');
+  assert.ok(hermes);
+  assert.equal(hermes.npmPackage, undefined);
 });

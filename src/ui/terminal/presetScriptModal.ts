@@ -44,7 +44,7 @@ const ACTION_OPTIONS: ActionOption[] = [
 const COMMAND_SUGGESTION_LIMIT = 50;
 
 export class PresetScriptModal extends Modal {
-  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'opencode']);
+  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'opencode', 'hermes', 'deepseek-tui']);
   private draft: PresetScript;
   private onSubmit: (script: PresetScript) => void;
   private isNew: boolean;
@@ -181,6 +181,15 @@ export class PresetScriptModal extends Modal {
         .setValue(this.draft.showInStatusBar)
         .onChange((value) => {
           this.draft.showInStatusBar = value;
+        }));
+
+    new Setting(formEl)
+      .setName(t('settingsDetails.terminal.presetScriptShowInCommandPalette'))
+      .setDesc(t('settingsDetails.terminal.presetScriptShowInCommandPaletteDesc'))
+      .addToggle(toggle => toggle
+        .setValue(this.draft.showInCommandPalette)
+        .onChange((value) => {
+          this.draft.showInCommandPalette = value;
         }));
 
     new Setting(formEl)

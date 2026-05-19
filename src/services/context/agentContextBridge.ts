@@ -23,9 +23,12 @@ type UrlModule = typeof import("url");
 import {
   buildAgentContextTerminalEnv,
   renderTermyCodexSkill,
+  renderTermyDeepSeekSkill,
   serializeAgentContextSnapshotState,
   TERMY_CODEX_SKILL_MANAGED_MARKER,
   TERMY_CODEX_SKILL_RELATIVE_PATH,
+  TERMY_DEEPSEEK_SKILL_MANAGED_MARKER,
+  TERMY_DEEPSEEK_SKILL_RELATIVE_PATH,
 } from "./agentContext";
 import { debugLog, errorLog } from "@/utils/logger";
 
@@ -106,6 +109,7 @@ export class AgentContextBridge {
 
     this.fs.mkdirSync(this.contextDir, { recursive: true });
     this.syncCodexSkill();
+    this.syncDeepSeekSkill();
     this.refreshSnapshot(true);
 
     this.eventRefs.push(
@@ -227,6 +231,45 @@ export class AgentContextBridge {
     } catch (error) {
       errorLog(
         "[AgentContextBridge] Failed to sync Codex context skill:",
+        error,
+      );
+    }
+  }
+
+  private syncDeepSeekSkill(): void {
+    try {
+      const vaultRoot = this.getVaultRoot();
+      if (!vaultRoot) {
+        return;
+      }
+
+      const skillFilePath = this.path.join(
+        vaultRoot,
+        TERMY_DEEPSEEK_SKILL_RELATIVE_PATH,
+      );
+      const skillContent = renderTermyDeepSeekSkill(this.contextFilePath);
+
+      if (this.fs.existsSync(skillFilePath)) {
+        const currentContent = this.fs.readFileSync(skillFilePath, "utf8");
+        if (currentContent === skillContent) {
+          return;
+        }
+        if (!currentContent.includes(TERMY_DEEPSEEK_SKILL_MANAGED_MARKER)) {
+          debugLog(
+            `[AgentContextBridge] Existing unmanaged DeepSeek skill found at ${skillFilePath}; leaving it unchanged`,
+          );
+          return;
+        }
+      }
+
+      this.fs.mkdirSync(this.path.dirname(skillFilePath), { recursive: true });
+      this.fs.writeFileSync(skillFilePath, skillContent, "utf8");
+      debugLog(
+        `[AgentContextBridge] Wrote DeepSeek context skill to ${skillFilePath}`,
+      );
+    } catch (error) {
+      errorLog(
+        "[AgentContextBridge] Failed to sync DeepSeek context skill:",
         error,
       );
     }

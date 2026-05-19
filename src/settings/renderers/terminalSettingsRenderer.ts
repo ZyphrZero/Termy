@@ -191,7 +191,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
    * never accumulate listeners across re-renders.
    */
   private launcherSnapshotUnsubscribers: Array<() => void> = [];
-  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'opencode']);
+  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'opencode', 'hermes', 'deepseek-tui']);
   /**
    * Refresh hook for the "AI launcher update check is suppressed by
    * offline mode" hint. Set when the preset-scripts card mounts; called
@@ -776,6 +776,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
             ],
             terminalTitle: '',
             showInStatusBar: true,
+            showInCommandPalette: true,
             autoOpenTerminal: true,
             runInNewTerminal: false,
           };
@@ -905,10 +906,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     setIcon(dragHandle, 'grip-vertical');
 
     const toggleWrap = row.createDiv({ cls: 'preset-script-toggle' });
-    const showInStatusBar = script.showInStatusBar ?? true;
-    row.toggleClass('is-disabled', !showInStatusBar);
+    row.toggleClass('is-disabled', !script.showInStatusBar);
     const toggle = new ToggleComponent(toggleWrap);
-    toggle.setValue(showInStatusBar);
+    toggle.setValue(script.showInStatusBar);
     toggle.toggleEl.setAttribute('aria-label', t('settingsDetails.terminal.presetScriptShowInStatusBar'));
     toggle.onChange((value) => {
       script.showInStatusBar = value;
@@ -1896,7 +1896,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       .setDesc(t('settingsDetails.terminal.scrollbackDesc'))
       .addText(text => {
       const inputEl = text
-        .setPlaceholder('1000')
+        .setPlaceholder('5000')
         .setValue(String(this.context.plugin.settings.scrollback))
         .onChange((value) => {
           // Save only while typing, without validation
@@ -1914,10 +1914,10 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         const numValue = parseInt(value);
         if (isNaN(numValue) || numValue < 100 || numValue > 10000) {
           new Notice('⚠️ ' + t('notices.settings.scrollbackRangeError'));
-          this.context.plugin.settings.scrollback = 1000;
+          this.context.plugin.settings.scrollback = 5000;
           void this.saveSettings();
-          text.setValue('1000');
-          this.applyScrollbackToOpenTerminals(1000);
+          text.setValue('5000');
+          this.applyScrollbackToOpenTerminals(5000);
           return;
         }
         this.applyScrollbackToOpenTerminals(numValue);

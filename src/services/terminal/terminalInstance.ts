@@ -260,7 +260,7 @@ export class TerminalInstance {
         fontSize: this.currentFontSize,
         fontFamily: this.options.fontFamily ?? 'Consolas, "Courier New", monospace',
         theme: this.getTheme(),
-        scrollback: this.options.scrollback ?? 1000,
+        scrollback: this.options.scrollback ?? 5000,
         allowTransparency: this.shouldUseTransparentTerminalBackground(),
         convertEol: false,
         rightClickSelectsWord: true,

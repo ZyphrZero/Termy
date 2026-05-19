@@ -5,6 +5,7 @@ import {
   buildAgentContextTerminalEnv,
   buildIdeBridgeTerminalEnv,
   renderTermyCodexSkill,
+  renderTermyDeepSeekSkill,
   serializeAgentContextSnapshotState,
   CLAUDE_CODE_SSE_PORT_ENV,
   OPENCODE_EDITOR_SSE_PORT_ENV,
@@ -12,6 +13,9 @@ import {
   TERMY_CODEX_SKILL_NAME,
   TERMY_CODEX_SKILL_RELATIVE_PATH,
   TERMY_CONTEXT_PATH_ENV,
+  TERMY_DEEPSEEK_SKILL_MANAGED_MARKER,
+  TERMY_DEEPSEEK_SKILL_NAME,
+  TERMY_DEEPSEEK_SKILL_RELATIVE_PATH,
 } from './agentContext.ts';
 
 test('buildIdeBridgeTerminalEnv exposes compatible IDE bridge ports when available', () => {
@@ -70,4 +74,16 @@ test('serializeAgentContextSnapshotState ignores updatedAt for write change dete
       },
     })
   );
+});
+
+test('renderTermyDeepSeekSkill emits a discoverable managed DeepSeek skill with absolute path', () => {
+  const contextPath = 'C:\\Users\\example\\AppData\\Local\\Obsidian\\plugins\\termy\\agent-context\\obsidian-context.json';
+  const skill = renderTermyDeepSeekSkill(contextPath);
+
+  assert.match(skill, new RegExp(`^---\\nname: ${TERMY_DEEPSEEK_SKILL_NAME}\\n`));
+  assert.match(skill, /description: Use when a DeepSeek TUI session launched from the Termy Obsidian plugin needs/);
+  assert.ok(skill.includes(contextPath), 'skill should embed the absolute context file path');
+  assert.ok(skill.includes(TERMY_DEEPSEEK_SKILL_MANAGED_MARKER));
+  assert.ok(skill.includes('read_file'), 'skill should mention read_file as the preferred access method');
+  assert.equal(TERMY_DEEPSEEK_SKILL_RELATIVE_PATH, `.deepseek/skills/${TERMY_DEEPSEEK_SKILL_NAME}/SKILL.md`);
 });

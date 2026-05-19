@@ -755,15 +755,27 @@
   color: #ffffff;
 }
 
-.preset-script-themed-icon .preset-script-theme-svg-dark {
-  display: none;
+/*
+ * Engraving-style brand marks (e.g. Hermes Agent) carry a lot of
+ * fine line detail that disappears on a dark Obsidian theme. Wrap
+ * the SVG in a dedicated chip element with a fixed light surface and
+ * dark ink so the glyph reads identically in the status bar menu,
+ * settings list, icon picker grid, and preview button — all of
+ * which use different host backgrounds.
+ */
+.preset-script-solid-bg-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #ffffff;
+  border-radius: 4px;
+  padding: 1px;
+  box-sizing: content-box;
+  line-height: 0;
 }
 
-.theme-dark .preset-script-themed-icon .preset-script-theme-svg-light {
-  display: none;
-}
-
-.theme-dark .preset-script-themed-icon .preset-script-theme-svg-dark {
+.preset-script-solid-bg-chip svg {
+  color: #1f1f1f;
   display: block;
 }
 

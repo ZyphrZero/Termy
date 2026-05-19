@@ -157,6 +157,7 @@ export interface PresetScript {
   actions: PresetWorkflowAction[];
   terminalTitle: string;
   showInStatusBar: boolean;
+  showInCommandPalette: boolean;
   autoOpenTerminal: boolean;
   runInNewTerminal: boolean;
 }
@@ -186,6 +187,12 @@ export const CODEX_LAUNCH_COMMAND =
 export const OPENCODE_LAUNCH_COMMAND =
   'opencode';
 
+export const HERMES_LAUNCH_COMMAND =
+  'hermes';
+
+export const DEEPSEEK_TUI_LAUNCH_COMMAND =
+  'deepseek';
+
 const CONTEXT_AWARE_PRESET_SCRIPT_IDS = new Set(['claude-code', 'codex', 'opencode']);
 
 export function isContextAwarePresetScript(script: Pick<PresetScript, 'id'>): boolean {
@@ -208,13 +215,14 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
     ],
     terminalTitle: 'Claude Code',
     showInStatusBar: true,
+    showInCommandPalette: true,
     autoOpenTerminal: true,
     runInNewTerminal: false,
   },
   {
     id: 'codex',
     name: 'Codex CLI',
-    icon: 'openai',
+    icon: 'codex',
     actions: [
       {
         id: 'action-codex',
@@ -226,6 +234,7 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
     ],
     terminalTitle: 'Codex',
     showInStatusBar: true,
+    showInCommandPalette: true,
     autoOpenTerminal: true,
     runInNewTerminal: false,
   },
@@ -244,6 +253,45 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
     ],
     terminalTitle: 'OpenCode',
     showInStatusBar: true,
+    showInCommandPalette: true,
+    autoOpenTerminal: true,
+    runInNewTerminal: false,
+  },
+  {
+    id: 'hermes',
+    name: 'Hermes',
+    icon: 'hermes',
+    actions: [
+      {
+        id: 'action-hermes',
+        type: 'terminal-command',
+        value: HERMES_LAUNCH_COMMAND,
+        enabled: true,
+        note: 'Launch Hermes Agent in the current vault',
+      },
+    ],
+    terminalTitle: 'Hermes',
+    showInStatusBar: true,
+    showInCommandPalette: true,
+    autoOpenTerminal: true,
+    runInNewTerminal: false,
+  },
+  {
+    id: 'deepseek-tui',
+    name: 'DeepSeek TUI',
+    icon: 'deepseek',
+    actions: [
+      {
+        id: 'action-deepseek-tui',
+        type: 'terminal-command',
+        value: DEEPSEEK_TUI_LAUNCH_COMMAND,
+        enabled: true,
+        note: 'Launch DeepSeek TUI in the current vault',
+      },
+    ],
+    terminalTitle: 'DeepSeek TUI',
+    showInStatusBar: true,
+    showInCommandPalette: true,
     autoOpenTerminal: true,
     runInNewTerminal: false,
   },
@@ -344,7 +392,7 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   cursorBlink: true,
   useObsidianTheme: true,
   preferredRenderer: 'canvas',
-  scrollback: 1000,
+  scrollback: 5000,
   backgroundImageOpacity: 0.5,
   backgroundImageSize: 'cover',
   backgroundImagePosition: 'center',

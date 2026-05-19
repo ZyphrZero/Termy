@@ -3,20 +3,22 @@
  */
 
 import { setIcon } from 'obsidian';
-import geminiSvgMarkup from '../../../assets/google_gemini_icon.svg';
 import type { SimpleIcon } from 'simple-icons';
 import { isBlackWhiteSimpleIcon, resolveSimpleIconColor } from './simpleIconColors';
 import {
-  siAnthropic,
+  LOBE_ICON_PICKER_ORDER,
+  getLobeIconAsset,
+  isLobeIcon,
+  resolveLobeIconKey,
+} from './lobeIconAssets';
+import {
   siCloudflare,
-  siClaude,
   siDocker,
   siFirebase,
   siGit,
   siGithub,
   siGitlab,
   siGo,
-  siGoogle,
   siJavascript,
   siKubernetes,
   siLinux,
@@ -24,7 +26,6 @@ import {
   siMysql,
   siNodedotjs,
   siNpm,
-  siOpenai,
   siPnpm,
   siPostgresql,
   siPython,
@@ -41,12 +42,16 @@ import {
   siNextdotjs,
 } from 'simple-icons';
 
+/**
+ * Generic developer-tool icons sourced from `simple-icons`. AI / LLM
+ * brand logos (Claude, Codex, Gemini, OpenCode, Hermes, …) are served
+ * from `@lobehub/icons-static-svg` instead — see {@link lobeIconAssets}.
+ *
+ * Keeping the two sources separate means we can update AI brand marks
+ * (which change frequently) without re-pinning simple-icons, and we
+ * avoid the long tail of dev-tool logos that lobehub does not ship.
+ */
 const SIMPLE_ICON_MAP: Record<string, SimpleIcon> = {
-  openai: siOpenai,
-  openaiapi: siOpenai,
-  claude: siClaude,
-  anthropic: siAnthropic,
-  google: siGoogle,
   python: siPython,
   javascript: siJavascript,
   typescript: siTypescript,
@@ -77,26 +82,16 @@ const SIMPLE_ICON_MAP: Record<string, SimpleIcon> = {
   yarn: siYarn,
 };
 
-const OPENCODE_ICON_PATHS = {
-  light: [
-    { fill: '#CFCECD', d: 'M180 240H60V120H180V240Z' },
-    { fill: '#211E1E', d: 'M180 60H60V240H180V60ZM240 300H0V0H240V300Z' },
-  ],
-  dark: [
-    { fill: '#4B4646', d: 'M180 240H60V120H180V240Z' },
-    { fill: '#F1ECEC', d: 'M180 60H60V240H180V60ZM240 300H0V0H240V300Z' },
-  ],
-} as const;
-
-let geminiIconCounter = 0;
+/**
+ * Per-render counter used to scope `<defs>` ids in lobehub SVGs that
+ * declare gradients (Gemini, Codex, Claude Code). Without this, two
+ * preset rows rendering the same icon at the same time would clash on
+ * a duplicate id and the second icon would render with the first
+ * icon's gradient.
+ */
+let lobeIconInstanceCounter = 0;
 
 const SIMPLE_ICON_ORDER = [
-  'opencode',
-  'openai',
-  'claude',
-  'anthropic',
-  'gemini',
-  'google',
   'python',
   'javascript',
   'typescript',
@@ -202,6 +197,7 @@ const DEFAULT_ICON_OPTIONS = [
 
 export const PRESET_SCRIPT_ICON_OPTIONS = [
   'terminal',
+  ...LOBE_ICON_PICKER_ORDER,
   ...SIMPLE_ICON_ORDER,
   ...DEFAULT_ICON_OPTIONS.filter((iconName) => iconName !== 'terminal'),
 ];
@@ -212,51 +208,67 @@ function isEmojiIcon(iconName: string): boolean {
   return emojiRegex.test(iconName);
 }
 
-function isOpenCodeIcon(iconName: string): boolean {
-  return iconName.toLowerCase() === 'opencode';
-}
-
-function isGeminiIcon(iconName: string): boolean {
-  const lookup = iconName.toLowerCase();
-  return lookup === 'gemini' || lookup === 'google-gemini';
-}
-
 export function isCustomPresetScriptIcon(iconName: string): boolean {
   const lookup = iconName.toLowerCase();
-  return isOpenCodeIcon(lookup) || isGeminiIcon(lookup) || lookup in SIMPLE_ICON_MAP;
+  return isLobeIcon(lookup) || lookup in SIMPLE_ICON_MAP;
 }
 
-function createOpenCodeSvg(variant: keyof typeof OPENCODE_ICON_PATHS): SVGSVGElement {
-  const svg = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 240 300');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.classList.add('preset-script-theme-svg', `preset-script-theme-svg-${variant}`);
-
-  for (const { d, fill } of OPENCODE_ICON_PATHS[variant]) {
-    const path = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('fill', fill);
-    path.setAttribute('d', d);
-    svg.appendChild(path);
+/**
+ * Parse an inline SVG string into an isolated DOM node ready for
+ * insertion. Returns null when parsing fails — callers fall back to
+ * the lucide icon path.
+ */
+function parseSvgMarkup(markup: string): SVGSVGElement | null {
+  const trimmed = markup.trim();
+  if (!trimmed) return null;
+  const parsed = new DOMParser().parseFromString(trimmed, 'image/svg+xml');
+  const root = parsed.documentElement;
+  if (!root.instanceOf(SVGSVGElement)) {
+    return null;
   }
-
-  return svg;
+  // `importNode` re-binds the element to the active document so it can
+  // be inserted without "wrong document" errors.
+  return activeDocument.importNode(root, true);
 }
 
-function createGeminiSvg(): SVGSVGElement {
-  geminiIconCounter += 1;
-  const idPrefix = `termy-preset-gemini-${geminiIconCounter}`;
-  const markup = geminiSvgMarkup
-    .replace(/\bmaskme\b/g, `${idPrefix}-mask`)
-    .replace(/\bprefix__/g, `${idPrefix}-`);
-  const parsed = new DOMParser().parseFromString(markup.trim(), 'image/svg+xml');
-  const svg = parsed.documentElement;
+/**
+ * Lobehub SVGs that declare gradients use ids like
+ * `lobe-icons-codex-_R_0_`. Two rows rendering the same icon will
+ * collide on those ids; we scope every id with a fresh prefix per
+ * render call so each instance owns its own gradient definitions.
+ */
+function scopeLobeIconMarkup(markup: string, iconKey: string): string {
+  if (!markup.includes('id=')) return markup;
+  lobeIconInstanceCounter += 1;
+  const suffix = `${iconKey}-${lobeIconInstanceCounter}`;
+  return markup.replace(/lobe-icons-([A-Za-z0-9_-]+)/g, `lobe-icons-$1-${suffix}`);
+}
 
-  if (!(svg.instanceOf(SVGSVGElement))) {
-    throw new Error('Failed to parse Gemini SVG asset');
-  }
-
+function renderLobeIcon(el: HTMLElement, iconKey: string): boolean {
+  const asset = getLobeIconAsset(iconKey);
+  if (!asset) return false;
+  const markup = scopeLobeIconMarkup(asset.color ?? asset.mono, asset.key);
+  const svg = parseSvgMarkup(markup);
+  if (!svg) return false;
   svg.setAttribute('aria-hidden', 'true');
-  return activeDocument.importNode(svg, true);
+  el.addClass('preset-script-custom-icon');
+  el.setAttr('data-icon', asset.key);
+  if (asset.solidBackground) {
+    // Engraving-style brand marks (Hermes) only read clearly on a
+    // light surface. Wrap the SVG in a dedicated chip span so the
+    // white surface and dark ink stay the *same* fixed size in every
+    // host (icon picker tile, preview button, settings row, status
+    // bar menu). Styling the host element directly leaks the chip
+    // onto whatever 36×36 button frame it lands in, which made the
+    // icon look inconsistent across surfaces.
+    const chip = activeDocument.createElement('span');
+    chip.className = 'preset-script-solid-bg-chip';
+    chip.appendChild(svg);
+    el.appendChild(chip);
+  } else {
+    el.appendChild(svg);
+  }
+  return true;
 }
 
 export function renderPresetScriptIcon(el: HTMLElement, iconName: string): void {
@@ -267,7 +279,6 @@ export function renderPresetScriptIcon(el: HTMLElement, iconName: string): void 
 
   el.removeClass('preset-script-custom-icon');
   el.removeClass('preset-script-emoji-icon');
-  el.removeClass('preset-script-themed-icon');
   el.removeClass('preset-script-black-white-icon');
   el.removeAttribute('data-icon');
   el.style.removeProperty('--preset-script-icon-color');
@@ -278,23 +289,17 @@ export function renderPresetScriptIcon(el: HTMLElement, iconName: string): void 
     return;
   }
 
-  if (isOpenCodeIcon(lookup)) {
-    el.addClass('preset-script-custom-icon');
-    el.addClass('preset-script-themed-icon');
-    el.setAttr('data-icon', lookup);
-    el.appendChild(createOpenCodeSvg('light'));
-    el.appendChild(createOpenCodeSvg('dark'));
-    return;
+  // AI / LLM brand marks — sourced from @lobehub/icons-static-svg.
+  // Lobehub takes precedence over simple-icons so brand updates land
+  // by bumping the lobehub package alone.
+  const lobeKey = resolveLobeIconKey(raw);
+  if (lobeKey) {
+    if (renderLobeIcon(el, lobeKey)) {
+      return;
+    }
   }
 
-  if (isGeminiIcon(lookup)) {
-    el.addClass('preset-script-custom-icon');
-    el.setAttr('data-icon', lookup);
-    el.appendChild(createGeminiSvg());
-    return;
-  }
-
-  if (isCustomPresetScriptIcon(raw)) {
+  if (lookup in SIMPLE_ICON_MAP) {
     const icon = SIMPLE_ICON_MAP[lookup];
     el.addClass('preset-script-custom-icon');
     el.setAttr('data-icon', lookup);

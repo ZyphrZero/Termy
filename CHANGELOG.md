@@ -5,6 +5,12 @@ All notable changes to Termy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Added a built-in Hermes Agent launcher to the workflow gallery, status bar menu, and command palette. The launcher detects the `hermes` CLI on PATH, surfaces install / update guidance for macOS, Linux, and Windows, and queries `https://api.github.com` for the latest `NousResearch/hermes-agent` release when **Check for AI launcher updates** is opted in.
+- Added a built-in DeepSeek TUI launcher. The launcher detects the `deepseek` dispatcher on PATH, surfaces install / update guidance via `npm install -g deepseek-tui`, and queries `https://registry.npmjs.org` for the latest `deepseek-tui` release when update checks are opted in.
+
 ## [1.4.1] - 2026-05-16
 
 ### Fixed
