@@ -24,7 +24,7 @@ import { ChangelogModal } from './ui/changelog/changelogModal';
 import { i18n, t } from './i18n';
 import { debugLog, errorLog } from './utils/logger';
 import { createTermyLogoSvg, createTermyLogoSvgMarkup, TERMY_RIBBON_ICON_ID } from './ui/icons';
-import { FeatureVisibilityManager } from './services/visibility';
+import { FeatureVisibilityManager, EditorSelectionHighlightManager, createEditorSelectionPersistenceExtension } from './services/visibility';
 import { shell } from 'electron';
 import type { TerminalInstance } from './services/terminal/terminalInstance';
 import {
@@ -110,6 +110,7 @@ type ElectronRemoteRuntime = {
 export default class TerminalPlugin extends Plugin {
   settings!: TerminalSettings;
   featureVisibilityManager!: FeatureVisibilityManager;
+  private editorSelectionHighlightManager: EditorSelectionHighlightManager | null = null;
   
   // Lazily initialized services
   private _serverManager: ServerManager | null = null;
@@ -250,6 +251,14 @@ export default class TerminalPlugin extends Plugin {
 
     // Initialize the feature visibility manager
     this.featureVisibilityManager = new FeatureVisibilityManager(this);
+    this.editorSelectionHighlightManager = new EditorSelectionHighlightManager(
+      this.app,
+      TERMINAL_VIEW_TYPE,
+    );
+    // Paint our own selection decoration on top of CM6 ranges. The
+    // CSS that colours it is gated by the body class managed above,
+    // so this only becomes visible while a Termy terminal is open.
+    this.registerEditorExtension(createEditorSelectionPersistenceExtension());
     this.registerCustomIcons();
 
     // Register feature visibility configuration
@@ -292,6 +301,16 @@ export default class TerminalPlugin extends Plugin {
       if (this.settings.visibility.showInNewTab) {
         this.registerNewTabTerminalAction();
       }
+      // Reflect the current terminal-leaf count onto the body class so
+      // the editor-selection persistence CSS only applies while Termy
+      // is actually showing a terminal pane. Re-evaluated on every
+      // layout change (terminal opened, closed, popped out, …).
+      this.editorSelectionHighlightManager?.syncBodyClass();
+      this.registerEvent(
+        this.app.workspace.on('layout-change', () => {
+          this.editorSelectionHighlightManager?.syncBodyClass();
+        }),
+      );
       void this.maybeShowChangelogOnFirstOpen().catch((error) => {
         errorLog('[TerminalPlugin] Failed to show changelog on first open:', error);
       });
@@ -331,6 +350,11 @@ export default class TerminalPlugin extends Plugin {
     if (this.featureVisibilityManager) {
       this.featureVisibilityManager.cleanup();
     }
+
+    // Drop the editor-selection persistence body class so it never
+    // outlives the plugin lifecycle (uninstall / disable / reload).
+    this.editorSelectionHighlightManager?.removeBodyClass();
+    this.editorSelectionHighlightManager = null;
 
     this.closePresetScriptsMenu();
 

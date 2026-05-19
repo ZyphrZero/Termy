@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a built-in Hermes Agent launcher to the workflow gallery, status bar menu, and command palette. The launcher detects the `hermes` CLI on PATH, surfaces install / update guidance for macOS, Linux, and Windows, and queries `https://api.github.com` for the latest `NousResearch/hermes-agent` release when **Check for AI launcher updates** is opted in.
 - Added a built-in DeepSeek TUI launcher. The launcher detects the `deepseek` dispatcher on PATH, surfaces install / update guidance via `npm install -g deepseek-tui`, and queries `https://registry.npmjs.org` for the latest `deepseek-tui` release when update checks are opted in.
 
+### Fixed
+- Preserved the visible editor selection rectangle when focus moves from a CodeMirror 6 editor to a Termy terminal pane. xterm.js focuses its hidden helper textarea on every terminal click, which previously made Chromium collapse the document selection so the editor's native `::selection` rendering disappeared even though the underlying selection state was unchanged. Termy now registers a small CM6 view plugin that paints its own decoration over each non-empty selection range, gated behind a `body` marker class that is only set while at least one Termy terminal leaf is open — so the highlight stays visible without touching non-Termy DOM.
+
 ## [1.4.1] - 2026-05-16
 
 ### Fixed

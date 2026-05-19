@@ -2982,3 +2982,28 @@
 .termy-agent-cancel-btn:hover {
   background: var(--background-modifier-hover);
 }
+
+
+/* ==================== Editor selection persistence ==================== */
+/*
+ * Keep the visible text-selection rectangle in Obsidian's CodeMirror 6
+ * editors when focus moves to a Termy terminal. Without this, clicking
+ * a Termy pane shifts focus to xterm.js's hidden helper textarea, which
+ * makes Chromium collapse `window.getSelection()`. Obsidian's CM6
+ * editors render their selection via the browser's native `::selection`
+ * pseudo-class, so the highlight disappears even though
+ * `EditorState.selection` is unchanged.
+ *
+ * To restore the visual cue we register a CM6 view plugin that paints
+ * `<span class="termy-persisted-selection">` over each non-empty
+ * selection range. This rule colours that span only while the editor
+ * is unfocused, so the native rendering wins for the focused editor.
+ *
+ * Scoped behind `body.termy-preserve-editor-selection`, which the
+ * plugin adds only while at least one terminal leaf is open. This
+ * keeps the rule from leaking into vaults / sessions that have no
+ * terminal, and avoids touching non-Termy DOM on plugin unload.
+ */
+body.termy-preserve-editor-selection .cm-editor:not(.cm-focused) .termy-persisted-selection {
+  background-color: var(--text-selection);
+}

@@ -3,6 +3,8 @@
  */
 
 export { FeatureVisibilityManager } from './featureVisibilityManager';
+export { EditorSelectionHighlightManager } from './editorSelectionHighlight';
+export { createEditorSelectionPersistenceExtension } from './editorSelectionPersistenceExtension';
 export type { 
   VisibilityConfig, 
   RibbonConfig, 
