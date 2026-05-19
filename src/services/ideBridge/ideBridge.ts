@@ -1,5 +1,5 @@
-import type { App, Editor, EventRef, TFile } from 'obsidian';
-import { FileSystemAdapter, MarkdownView, normalizePath } from 'obsidian';
+import type { App, Editor, EventRef } from 'obsidian';
+import { FileSystemAdapter, MarkdownView, normalizePath, TFile } from 'obsidian';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import { buildIdeBridgeTerminalEnv } from '../context/agentContext';
 import { debugLog, errorLog } from '@/utils/logger';
@@ -48,6 +48,38 @@ const EMPTY_OBJECT_SCHEMA = {
 } as const;
 const SELECTION_POLL_INTERVAL_MS = 250;
 
+/**
+ * Lifecycle and tool-call events the bridge surfaces to subscribers.
+ *
+ * The bridge is dual-purpose: it serves the MCP protocol Claude Code /
+ * OpenCode use to discover Termy's editor state, *and* it doubles as a
+ * read-only audit feed so the agent panel can render "Claude Code is
+ * connected" / "Claude Code asked us to open a file" cards without
+ * having to re-implement the protocol.
+ *
+ * We only surface signals that an agent **actively** sent — selection
+ * polling (`getCurrentSelection` called every keystroke) is filtered
+ * out at the bridge, so subscribers do not have to debounce noise.
+ */
+export type IdeBridgeEvent =
+  | { kind: 'client-connected'; clientId: string; clientName?: string }
+  | { kind: 'client-disconnected'; clientId: string }
+  | {
+      kind: 'tool-invoked';
+      clientId: string;
+      toolName: string;
+      arguments: Record<string, unknown>;
+    };
+
+/**
+ * Stable id assigned to every connecting client so disconnect /
+ * tool-invocation events can be correlated even when the same client
+ * reconnects later. We deliberately do not expose the WebSocket
+ * instance — keeping the surface narrow makes it impossible for the
+ * agent panel to accidentally muck with the protocol.
+ */
+let nextBridgeClientId = 1;
+
 type JsonRpcId = string | number | null;
 
 type JsonRpcRequest = {
@@ -82,6 +114,8 @@ type BridgeToolResult = {
 
 type BridgeClientState = {
   initialized: boolean;
+  clientId: string;
+  clientName?: string;
 };
 
 const IDE_TOOLS = [
@@ -138,6 +172,26 @@ const IDE_TOOLS = [
       idempotentHint: true,
     },
   },
+  {
+    name: 'openFile',
+    description:
+      'Open a file in the Obsidian editor. The path may be vault-relative or an absolute path inside the vault. Lines outside the vault are rejected.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        filePath: {
+          type: 'string',
+          description: 'Vault-relative or absolute path of the file to open.',
+        },
+        startText: {
+          type: 'string',
+          description:
+            'Optional text snippet that, if found in the opened file, will be used to scroll the editor to the matching line.',
+        },
+      },
+      required: ['filePath'],
+    },
+  },
 ] as const;
 
 function createToolResult(text: string, isError = false): BridgeToolResult {
@@ -177,6 +231,13 @@ export class IdeBridge {
   private readonly authToken: string;
   private readonly clients = new Map<WebSocket, BridgeClientState>();
   private readonly eventRefs: EventRef[] = [];
+  /**
+   * Active subscribers receiving sanitized lifecycle / tool-call
+   * events. Subscribers added before {@link start} simply receive
+   * events once the bridge starts emitting them, no replay is offered
+   * because clients only matter while connected.
+   */
+  private readonly listeners = new Set<(event: IdeBridgeEvent) => void>();
 
   private readonly fs: FsModule;
   private readonly path: PathModule;
@@ -297,11 +358,42 @@ export class IdeBridge {
     this.port = null;
     this.latestSelection = null;
     this.started = false;
+    // Drop subscribers so any listener that holds back-references
+    // does not keep the bridge alive across hot reloads.
+    this.listeners.clear();
     debugLog('[IdeBridge] Stopped');
   }
 
   getTerminalEnv(): Record<string, string> {
     return buildIdeBridgeTerminalEnv(this.port);
+  }
+
+  /**
+   * Subscribe to the sanitized lifecycle / tool-call event feed.
+   *
+   * The bridge filters out the high-frequency selection polling so
+   * subscribers only see events that an agent **actively** produced —
+   * connect, disconnect, and tool invocations the agent fired by name.
+   *
+   * Returns a function that removes the subscription. Multiple
+   * subscribers are supported; throwing from a listener is caught and
+   * isolated so other listeners still see the event.
+   */
+  onEvent(listener: (event: IdeBridgeEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private emitEvent(event: IdeBridgeEvent): void {
+    for (const listener of [...this.listeners]) {
+      try {
+        listener(event);
+      } catch (error) {
+        errorLog('[IdeBridge] Event listener threw:', error);
+      }
+    }
   }
 
   private startTracking(): void {
@@ -473,11 +565,18 @@ export class IdeBridge {
       return;
     }
 
-    this.clients.set(socket, { initialized: false });
+    this.clients.set(socket, {
+      initialized: false,
+      clientId: `client-${nextBridgeClientId++}`,
+    });
 
     socket.on('message', (data) => this.handleMessage(socket, data));
     socket.on('close', () => {
+      const state = this.clients.get(socket);
       this.clients.delete(socket);
+      if (state) {
+        this.emitEvent({ kind: 'client-disconnected', clientId: state.clientId });
+      }
     });
     socket.on('error', (error) => {
       errorLog('[IdeBridge] Client socket error:', error);
@@ -584,6 +683,29 @@ export class IdeBridge {
       ? requestedVersion
       : SUPPORTED_MCP_PROTOCOL_VERSIONS[0];
 
+    // Capture the agent's self-reported name so the agent panel can
+    // label the session. MCP clients send `clientInfo: { name, version }`
+    // per spec; we tolerate the field being absent (e.g. older Claude
+    // Code builds) and fall back to a generic label downstream.
+    const clientInfo = this.isRecord(params.clientInfo) ? params.clientInfo : null;
+    const clientName = clientInfo && typeof clientInfo.name === 'string' ? clientInfo.name : undefined;
+
+    const state = this.clients.get(socket);
+    if (state) {
+      state.clientName = clientName;
+      // Defer the `client-connected` notification until the client
+      // completes the handshake (`notifications/initialized`). MCP
+      // explicitly forbids sending non-handshake traffic before that
+      // point, and emitting a "connected" event would be misleading
+      // if the client immediately closes the socket on a version
+      // mismatch.
+      this.emitEvent({
+        kind: 'client-connected',
+        clientId: state.clientId,
+        clientName,
+      });
+    }
+
     this.sendResult(socket, id, {
       protocolVersion,
       capabilities: {
@@ -609,6 +731,31 @@ export class IdeBridge {
         ? (params.arguments as Record<string, unknown>)
         : {};
 
+    // Read-only IDE introspection tools fire on every keystroke (the
+    // selection-poll loop, plus the agent re-asking for context every
+    // turn). They drown out the agent panel feed, so we suppress them
+    // here. The active-write tools — currently just `openFile` — are
+    // surfaced because they represent an explicit agent action the
+    // user can act on or scroll back to.
+    const READ_ONLY_TOOLS = new Set([
+      'closeAllDiffTabs',
+      'getWorkspaceFolders',
+      'getCurrentSelection',
+      'getLatestSelection',
+      'getDiagnostics',
+    ]);
+    if (!READ_ONLY_TOOLS.has(name)) {
+      const state = this.clients.get(socket);
+      if (state) {
+        this.emitEvent({
+          kind: 'tool-invoked',
+          clientId: state.clientId,
+          toolName: name,
+          arguments: args,
+        });
+      }
+    }
+
     switch (name) {
       case 'closeAllDiffTabs':
         this.sendResult(socket, id, createToolResult('CLOSED_0_DIFF_TABS'));
@@ -623,6 +770,9 @@ export class IdeBridge {
       case 'getDiagnostics':
         this.sendResult(socket, id, createToolResult(this.getDiagnosticsJson(args)));
         return;
+      case 'openFile':
+        void this.handleOpenFileTool(socket, id, args);
+        return;
       default:
         this.sendResult(
           socket,
@@ -630,6 +780,87 @@ export class IdeBridge {
           createToolResult(`Tool not found: ${name}`, true),
         );
     }
+  }
+
+  /**
+   * Resolve the requested path against the vault root, open it in a
+   * new leaf, and report success / failure back to the agent. We
+   * intentionally avoid the `startText` argument's "scroll into view"
+   * semantics for now — Obsidian's editor positioning APIs are
+   * markdown-view-specific and not all agent-visible files are
+   * markdown. The argument is accepted but unused so future agents
+   * that send it do not get a hard error.
+   */
+  private async handleOpenFileTool(
+    socket: WebSocket,
+    id: JsonRpcId,
+    args: Record<string, unknown>,
+  ): Promise<void> {
+    const filePath = typeof args.filePath === 'string' ? args.filePath : '';
+    if (!filePath) {
+      this.sendResult(
+        socket,
+        id,
+        createToolResult('openFile: missing required `filePath` argument', true),
+      );
+      return;
+    }
+
+    try {
+      const file = this.resolveVaultFileForOpen(filePath);
+      if (!file) {
+        this.sendResult(
+          socket,
+          id,
+          createToolResult(`openFile: ${filePath} not found in vault`, true),
+        );
+        return;
+      }
+
+      const leaf = this.app.workspace.getLeaf(false);
+      await leaf.openFile(file);
+      this.app.workspace.setActiveLeaf(leaf, { focus: true });
+      this.sendResult(socket, id, createToolResult(`Opened ${file.path}`));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errorLog('[IdeBridge] openFile failed:', error);
+      this.sendResult(socket, id, createToolResult(`openFile failed: ${message}`, true));
+    }
+  }
+
+  private resolveVaultFileForOpen(requested: string): TFile | null {
+    const vaultPath = this.getVaultPath();
+
+    // Convert an absolute or `file://` path to vault-relative when we
+    // can; reject if it points outside the vault. Cross-vault opens
+    // would require user-visible navigation that the agent does not
+    // own.
+    let candidate = requested;
+    if (candidate.startsWith('file://')) {
+      try {
+        candidate = decodeURIComponent(new URL(candidate).pathname);
+      } catch {
+        return null;
+      }
+    }
+
+    if (vaultPath && this.path.isAbsolute(candidate)) {
+      const relative = this.path.relative(vaultPath, candidate);
+      if (relative.startsWith('..') || this.path.isAbsolute(relative)) {
+        return null;
+      }
+      candidate = relative;
+    }
+
+    const normalized = normalizePath(candidate);
+    const found = this.app.vault.getAbstractFileByPath(normalized);
+    if (found instanceof TFile) {
+      return found;
+    }
+
+    const activePath = this.app.workspace.getActiveFile()?.path ?? '';
+    const linked = this.app.metadataCache.getFirstLinkpathDest(normalized, activePath);
+    return linked ?? null;
   }
 
   private getWorkspaceFoldersJson(): string {
