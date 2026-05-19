@@ -36,6 +36,8 @@
   "author": "ZyphrZero",
   "license": "GPL-3.0",
   "devDependencies": {
+    "@codemirror/state": "^6.5.0",
+    "@codemirror/view": "^6.38.6",
     "@eslint/js": "^9.39.4",
     "@types/node": "^24.0.0",
     "esbuild": "^0.28.0",
