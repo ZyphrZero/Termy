@@ -2464,3 +2464,521 @@
 .preset-script-row .preset-scripts-menu-status-badge {
   margin-left: 8px;
 }
+
+
+/* ==================== Agent Output View ==================== */
+/* Renders structured agent events (text, tool calls, plan, errors)
+ * as Markdown next to the xterm.js view. Visual language stays
+ * deliberately close to Obsidian's native panes — no custom radii or
+ * shadows that would clash with the user's theme. */
+.termy-agent-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+}
+
+.termy-agent-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: color-mix(in srgb, var(--background-secondary) 70%, transparent);
+}
+
+.termy-agent-header-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.termy-agent-header-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: var(--interactive-accent);
+  flex-shrink: 0;
+}
+
+.termy-agent-header-title-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.termy-agent-header-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.termy-agent-header-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.termy-agent-header-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.termy-agent-state {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: color-mix(in srgb, var(--background-modifier-border) 50%, transparent);
+  color: var(--text-muted);
+}
+
+.termy-agent-state.termy-agent-state-running {
+  background: color-mix(in srgb, var(--interactive-accent) 18%, transparent);
+  color: var(--interactive-accent);
+}
+
+.termy-agent-state.termy-agent-state-finished {
+  background: color-mix(in srgb, var(--text-success) 18%, transparent);
+  color: var(--text-success);
+}
+
+.termy-agent-state.termy-agent-state-errored {
+  background: color-mix(in srgb, var(--text-error) 18%, transparent);
+  color: var(--text-error);
+}
+
+.termy-agent-state.termy-agent-state-awaiting-input {
+  background: color-mix(in srgb, var(--text-warning) 18%, transparent);
+  color: var(--text-warning);
+}
+
+.termy-agent-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.termy-agent-header-action {
+  width: 28px;
+  height: 28px;
+}
+
+.termy-agent-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 18px 22px;
+}
+
+.termy-agent-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 16px;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 10px;
+  color: var(--text-muted);
+}
+
+.termy-agent-empty-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.termy-agent-empty-body {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.termy-agent-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.termy-agent-plan {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--background-modifier-border);
+  background: color-mix(in srgb, var(--background-secondary) 65%, transparent);
+}
+
+.termy-agent-plan-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.termy-agent-plan-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.termy-agent-plan-step {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-normal);
+}
+
+.termy-agent-plan-step.is-completed {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.termy-agent-plan-step.is-failed {
+  color: var(--text-error);
+}
+
+.termy-agent-plan-marker {
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  width: 14px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.termy-agent-plan-step.is-completed .termy-agent-plan-marker {
+  color: var(--text-success);
+}
+
+.termy-agent-plan-step.is-in-progress .termy-agent-plan-marker {
+  color: var(--interactive-accent);
+}
+
+.termy-agent-permissions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.termy-agent-permission {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--text-warning) 40%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--text-warning) 10%, transparent);
+}
+
+.termy-agent-permission-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-warning);
+  margin-bottom: 6px;
+}
+
+.termy-agent-permission-message {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-normal);
+}
+
+.termy-agent-permission-options {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.termy-agent-permission-option {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--background-modifier-border) 60%, transparent);
+  color: var(--text-muted);
+}
+
+.termy-agent-permission-option.is-allow,
+.termy-agent-permission-option.is-allow-once {
+  background: color-mix(in srgb, var(--interactive-accent) 18%, transparent);
+  color: var(--interactive-accent);
+}
+
+.termy-agent-permission-option.is-deny,
+.termy-agent-permission-option.is-cancel {
+  background: color-mix(in srgb, var(--text-error) 18%, transparent);
+  color: var(--text-error);
+}
+
+.termy-agent-text-block {
+  position: relative;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-normal);
+}
+
+.termy-agent-text-block.is-thought {
+  opacity: 0.78;
+  border-left: 2px solid color-mix(in srgb, var(--text-muted) 50%, transparent);
+  padding-left: 10px;
+}
+
+.termy-agent-text-block .termy-agent-markdown > :first-child {
+  margin-top: 0;
+}
+
+.termy-agent-text-block .termy-agent-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.termy-agent-cursor {
+  display: inline-block;
+  margin-left: 2px;
+  font-weight: 700;
+  color: var(--interactive-accent);
+  animation: termy-agent-cursor-blink 1s step-end infinite;
+}
+
+@keyframes termy-agent-cursor-blink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
+.termy-agent-tool-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--background-secondary) 60%, transparent);
+  overflow: hidden;
+}
+
+.termy-agent-tool-card.status-running {
+  border-color: color-mix(in srgb, var(--interactive-accent) 38%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--interactive-accent) 6%, var(--background-secondary));
+}
+
+.termy-agent-tool-card.status-completed {
+  border-color: color-mix(in srgb, var(--text-success) 38%, var(--background-modifier-border));
+}
+
+.termy-agent-tool-card.status-failed {
+  border-color: color-mix(in srgb, var(--text-error) 38%, var(--background-modifier-border));
+}
+
+.termy-agent-tool-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--background-secondary) 80%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--background-modifier-border) 75%, transparent);
+}
+
+.termy-agent-tool-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-normal);
+  flex: 0 0 auto;
+}
+
+.termy-agent-tool-subtitle {
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  color: var(--text-muted);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.termy-agent-tool-status {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--background-modifier-border) 60%, transparent);
+  color: var(--text-muted);
+}
+
+.termy-agent-tool-status.status-running {
+  background: color-mix(in srgb, var(--interactive-accent) 18%, transparent);
+  color: var(--interactive-accent);
+}
+
+.termy-agent-tool-status.status-completed {
+  background: color-mix(in srgb, var(--text-success) 18%, transparent);
+  color: var(--text-success);
+}
+
+.termy-agent-tool-status.status-failed {
+  background: color-mix(in srgb, var(--text-error) 18%, transparent);
+  color: var(--text-error);
+}
+
+.termy-agent-tool-exit-code {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.termy-agent-tool-body {
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.termy-agent-tool-body > :first-child {
+  margin-top: 0;
+}
+
+.termy-agent-tool-body > :last-child {
+  margin-bottom: 0;
+}
+
+.termy-agent-tool-output {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.termy-agent-error-card {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--text-error) 40%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--text-error) 12%, transparent);
+}
+
+.termy-agent-error-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-error);
+  margin-bottom: 6px;
+}
+
+.termy-agent-error-message {
+  font-size: 13px;
+  color: var(--text-normal);
+  line-height: 1.5;
+}
+
+.termy-agent-error-details {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.termy-agent-error-details summary {
+  cursor: pointer;
+}
+
+.termy-agent-error-details pre {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+
+/* Agent panel input bar (shown only when a prompt-capable source is
+ * wired up — e.g. an active ACP agent). */
+.termy-agent-input-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.termy-agent-input {
+  flex: 1 1 auto;
+  min-height: 38px;
+  max-height: 160px;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.termy-agent-input:focus {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.termy-agent-input-actions {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.termy-agent-send-btn,
+.termy-agent-cancel-btn {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.termy-agent-cancel-btn {
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.termy-agent-cancel-btn:hover {
+  background: var(--background-modifier-hover);
+}

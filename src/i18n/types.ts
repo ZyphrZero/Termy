@@ -539,5 +539,49 @@ export interface TranslationKeys {
     canvas: string;
     webgl: string;
   };
+
+  // Agent output panel (preview of ACP / IDE bridge structured replies)
+  agent: {
+    viewTitle: string;
+    headerIdle: string;
+    headerSubtitleIdle: string;
+    stateIdle: string;
+    stateRunning: string;
+    stateAwaitingInput: string;
+    stateFinished: string;
+    stateErrored: string;
+    emptyTitle: string;
+    emptyBody: string;
+    clearTooltip: string;
+    moreActions: string;
+    menuClear: string;
+    menuCopyTranscript: string;
+    noticeNothingToCopy: string;
+    noticeTranscriptCopied: string;
+    noticeCopyFailed: string;
+    planTitle: string;
+    permissionTitle: string;
+    errorTitle: string;
+    errorDetailsLabel: string;
+    toolStatusPending: string;
+    toolStatusRunning: string;
+    toolStatusCompleted: string;
+    toolStatusFailed: string;
+    toolStatusCancelled: string;
+    openCommand: string;
+    runDemoCommand: string;
+    stopDemoCommand: string;
+    noticeDemoStarted: string;
+    noticeDemoStopped: string;
+    inputPlaceholder: string;
+    sendButton: string;
+    cancelButton: string;
+    noticeSubmitFailed: string;
+    connectAcpCommand: string;
+    disconnectAcpCommand: string;
+    noticeAcpConnected: string;
+    noticeAcpDisconnected: string;
+    noticeAcpFailed: string;
+  };
 }
 
