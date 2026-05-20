@@ -582,6 +582,26 @@ export interface TranslationKeys {
     noticeAcpConnected: string;
     noticeAcpDisconnected: string;
     noticeAcpFailed: string;
+    /** Provider tab labels */
+    providerOpenCode: string;
+    providerClaudeCode: string;
+    /** Sessions sidebar */
+    sessionsHeading: string;
+    sessionsRefresh: string;
+    sessionsNewSession: string;
+    sessionsLoading: string;
+    sessionsEmpty: string;
+    sessionsLoadFailed: string;
+    sessionsProviderUnavailable: string;
+    sessionsComingSoon: string;
+    sessionItemUntitled: string;
+    sessionTimeJustNow: string;
+    sessionTimeMinutes: string;
+    sessionTimeHours: string;
+    sessionTimeDays: string;
+    /** Loading state for transcript area */
+    transcriptLoading: string;
+    transcriptLoadFailed: string;
   };
 }
 

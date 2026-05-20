@@ -3007,3 +3007,178 @@
 body.termy-preserve-editor-selection .cm-editor:not(.cm-focused) .termy-persisted-selection {
   background-color: var(--text-selection);
 }
+
+
+/* ==================== Agent panel: provider tabs + sessions sidebar ==================== */
+
+.termy-agent-provider-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+}
+
+.termy-agent-provider-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.termy-agent-provider-tab:hover:not(.is-disabled) {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.termy-agent-provider-tab.is-active {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+
+.termy-agent-provider-tab.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.termy-agent-provider-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.termy-agent-provider-tab-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.termy-agent-layout {
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.termy-agent-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 220px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+}
+
+.termy-agent-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.termy-agent-sidebar-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.termy-agent-sidebar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.termy-agent-sidebar-action {
+  width: 24px;
+  height: 24px;
+}
+
+.termy-agent-sessions-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.termy-agent-sidebar-status {
+  padding: 12px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.termy-agent-sidebar-status.is-error {
+  color: var(--text-error);
+}
+
+.termy-agent-session-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+
+.termy-agent-session-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+.termy-agent-session-item.is-active {
+  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+  border-left-color: var(--interactive-accent);
+}
+
+.termy-agent-session-title {
+  font-size: 13px;
+  color: var(--text-normal);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.termy-agent-session-meta {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.termy-agent-main {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.termy-agent-busy-hint {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+
+/* Lobehub brand SVGs in the agent panel — keep gradients alive even
+   on the active accent background, and ensure 1:1 sizing so colored
+   marks (Claude Code, OpenCode) read crisply on the small tab. */
+.termy-agent-brand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.termy-agent-brand-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}

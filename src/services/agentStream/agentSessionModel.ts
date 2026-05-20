@@ -9,6 +9,7 @@
  */
 
 import type {
+  AgentEvent,
   AgentEventEnvelope,
   AgentPlanStep,
   AgentSessionId,
@@ -105,10 +106,31 @@ export class AgentSessionModel {
    * can decide whether to re-render.
    */
   apply(envelope: AgentEventEnvelope): AgentSessionId {
-    const event = envelope.event;
+    return this.applyEvent(envelope.event);
+  }
+
+  /**
+   * Apply a raw event without an envelope. Used by callers that
+   * synthesize transcripts from a non-bus source (e.g. loading an
+   * OpenCode session's stored messages into the panel) — they own
+   * the events directly so wrapping them in envelopes just to
+   * unwrap them again would be ceremony.
+   *
+   * The mutation logic is identical to {@link apply}; that method
+   * is kept as a thin alias so existing call sites that subscribe
+   * to the bus do not have to change.
+   */
+  applyEvent(event: AgentEvent): AgentSessionId {
     const sessionId = event.sessionId;
     const session = this.ensureSession(sessionId);
 
+    const result = this.processEvent(event, session);
+    this.notify(sessionId);
+    return result;
+  }
+
+  private processEvent(event: AgentEvent, session: MutableSession): AgentSessionId {
+    const sessionId = session.sessionId;
     switch (event.kind) {
       case 'session-state':
         session.state = event.state;
@@ -228,7 +250,6 @@ export class AgentSessionModel {
       }
     }
 
-    this.notify(sessionId);
     return sessionId;
   }
 
@@ -239,6 +260,22 @@ export class AgentSessionModel {
     if (this.sessions.delete(sessionId)) {
       this.notify(sessionId);
     }
+  }
+
+  /**
+   * Convenience helper for callers that need to apply a batch of
+   * events to a single session in one shot — e.g. loading a stored
+   * OpenCode transcript. Listeners are notified once at the end so
+   * the renderer paints the result as a single frame.
+   */
+  applyEventsBatch(sessionId: AgentSessionId, events: ReadonlyArray<AgentEvent>): void {
+    if (events.length === 0) return;
+    const session = this.ensureSession(sessionId);
+    for (const event of events) {
+      if (event.sessionId !== sessionId) continue;
+      this.processEvent(event, session);
+    }
+    this.notify(sessionId);
   }
 
   /** Drop every session. */

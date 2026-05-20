@@ -87,7 +87,10 @@ export default [
           // ACP is the Agent Client Protocol and is conventionally
           // written in caps; allow the bare token in agent-related
           // command labels and notices.
-          ignoreRegex: ['\\bcursor\\b', '\\bACP\\b'],
+          // OpenCode and Claude Code are agent brand names that the
+          // panel surfaces verbatim — sentence-casing them would be
+          // wrong.
+          ignoreRegex: ['\\bcursor\\b', '\\bACP\\b', '\\bOpenCode\\b', '\\bClaude Code\\b'],
         },
       ],
     },

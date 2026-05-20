@@ -21,7 +21,7 @@
     "repro:scrollback:sync-ed3": "node scripts/repro-scrollback.js --mode sync-ed3",
     "test:scripts": "node --test scripts/*.test.js",
     "upload:r2": "node scripts/upload-r2-assets.js --bucket termy-binaries-apac",
-    "test:terminal": "tsc -p tsconfig.test.json --pretty false && node --experimental-strip-types --experimental-specifier-resolution=node --test src/services/terminal/*.test.ts src/services/agentStream/*.test.ts src/services/agentStream/acp/*.test.ts src/ui/agent/*.test.ts",
+    "test:terminal": "tsc -p tsconfig.test.json --pretty false && node --experimental-strip-types --experimental-specifier-resolution=node --test src/services/terminal/*.test.ts src/services/agentStream/*.test.ts src/services/agentStream/acp/*.test.ts src/services/agent/opencode/*.test.ts src/services/agent/claudeCode/*.test.ts src/ui/agent/*.test.ts",
     "verify:bundle": "node scripts/verify-build.js",
     "release": "pnpm build && pnpm build:rust && pnpm package:zip",
     "install:dev": "node scripts/install-dev.js"

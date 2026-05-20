@@ -16,6 +16,8 @@ import type { IdeBridge } from './services/ideBridge/ideBridge';
 import type { IdeBridgeAgentSource } from './services/agentStream/ideBridgeAgentSource';
 import type { AcpAgentSource } from './services/agentStream/acp/acpAgentSource';
 import type { AgentContextBridge } from './services/context/agentContextBridge';
+import { OpenCodeHistoryService } from './services/agent/opencode/opencodeHistoryService';
+import { ClaudeCodeHistoryService } from './services/agent/claudeCode/claudeCodeHistoryService';
 import { TERMINAL_VIEW_TYPE, TerminalView } from './ui/terminal/terminalView';
 import { AGENT_OUTPUT_VIEW_TYPE, AgentOutputView } from './ui/agent/agentOutputView';
 import { AgentEventBus } from './services/agentStream/agentEventBus';
@@ -137,6 +139,17 @@ export default class TerminalPlugin extends Plugin {
    * never needs to load when the user doesn't open the panel.
    */
   private _mockAgentSource: MockAgentSourceType | null = null;
+  /**
+   * OpenCode HTTP daemon + history bridge. Lazily started the first
+   * time the user opens the agent panel so cold start cost stays
+   * with the feature that pays for it.
+   */
+  private _opencodeHistoryService: OpenCodeHistoryService | null = null;
+  /**
+   * Claude Code history bridge. Lightweight — no daemon, just reads
+   * JSONL files and spawns `claude` per-turn.
+   */
+  private _claudeCodeHistoryService: ClaudeCodeHistoryService | null = null;
   private _changelogContentCache: string | null = null;
   private _changelogSectionCache: Map<string, ChangelogDetails> = new Map();
   
@@ -282,6 +295,8 @@ export default class TerminalPlugin extends Plugin {
         bus: this.getAgentEventBus(),
         submitPrompt: (text) => this.submitPromptToActiveAcpAgent(text),
         cancelTurn: () => this.cancelActiveAcpAgentTurn(),
+        getOpenCodeHistoryService: () => this.getOpenCodeHistoryService(),
+        getClaudeCodeHistoryService: () => this.getClaudeCodeHistoryService(),
       }),
     );
 
@@ -413,6 +428,17 @@ export default class TerminalPlugin extends Plugin {
       this._activeAcpAgentSource = null;
     }
 
+    if (this._opencodeHistoryService) {
+      try {
+        debugLog('[TerminalPlugin] Shutting down OpenCode daemon...');
+        await this._opencodeHistoryService.stop();
+        debugLog('[TerminalPlugin] OpenCode daemon stopped');
+      } catch (error) {
+        errorLog('[TerminalPlugin] Failed to stop OpenCode daemon:', error);
+      }
+      this._opencodeHistoryService = null;
+    }
+
     debugLog(t('plugin.unloadedMessage'));
   }
 
@@ -427,6 +453,47 @@ export default class TerminalPlugin extends Plugin {
       this._agentEventBus = new AgentEventBus();
     }
     return this._agentEventBus;
+  }
+
+  /**
+   * Lazily start the OpenCode history bridge. The first caller pays
+   * the cost of spawning `opencode serve`; everyone else gets the
+   * cached instance. The daemon is shut down in `onunload`.
+   *
+   * Returns `null` when the vault adapter cannot be resolved to a
+   * filesystem path — callers should treat this as "OpenCode is not
+   * available right now" rather than retrying indefinitely.
+   */
+  getOpenCodeHistoryService(): OpenCodeHistoryService | null {
+    if (this._opencodeHistoryService) {
+      return this._opencodeHistoryService;
+    }
+    const adapter = this.app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) {
+      return null;
+    }
+    this._opencodeHistoryService = new OpenCodeHistoryService({
+      vaultRoot: adapter.getBasePath(),
+    });
+    return this._opencodeHistoryService;
+  }
+
+  /**
+   * Lazily create the Claude Code history bridge. No daemon needed —
+   * it reads JSONL directly and spawns `claude` per-turn.
+   */
+  getClaudeCodeHistoryService(): ClaudeCodeHistoryService | null {
+    if (this._claudeCodeHistoryService) {
+      return this._claudeCodeHistoryService;
+    }
+    const adapter = this.app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) {
+      return null;
+    }
+    this._claudeCodeHistoryService = new ClaudeCodeHistoryService({
+      vaultPath: adapter.getBasePath(),
+    });
+    return this._claudeCodeHistoryService;
   }
 
   /**
