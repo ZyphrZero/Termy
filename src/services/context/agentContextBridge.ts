@@ -67,7 +67,7 @@ type OpenFileContext = FileContext & {
   isActive: boolean;
 };
 
-type AgentContextSnapshot = {
+export type AgentContextSnapshot = {
   schemaVersion: 1;
   source: "termy";
   updatedAt: string;
@@ -165,6 +165,10 @@ export class AgentContextBridge {
 
   getContextFilePath(): string {
     return this.contextFilePath;
+  }
+
+  getCurrentSnapshot(): AgentContextSnapshot {
+    return this.captureSnapshot();
   }
 
   private scheduleRefreshSnapshot(): void {

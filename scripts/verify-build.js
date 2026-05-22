@@ -24,4 +24,13 @@ if (brokenRequestModePattern.test(requestModeWindow)) {
 	process.exit(1);
 }
 
+// Verify ACP identifiers are present in the bundle
+const requiredIdentifiers = ['AgentManager', 'PermissionQueue', 'claude-code'];
+for (const id of requiredIdentifiers) {
+	if (!bundle.includes(id)) {
+		console.error(`[verify-build] Missing expected identifier in bundle: ${id}`);
+		process.exit(1);
+	}
+}
+
 console.log('[verify-build] Bundle smoke check passed');

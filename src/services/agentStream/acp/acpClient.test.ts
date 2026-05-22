@@ -206,9 +206,12 @@ test('AcpClient routes session/update notifications to the callback', async () =
   assert.equal(notification.sessionId, 'sess-1');
 });
 
-test('AcpClient auto-allows permission requests with the first allow option', async () => {
+test('AcpClient rejects permission requests when no onPermissionRequest handler is provided', async () => {
   const transport = new FakeTransport();
-  const client = makeClient(transport);
+  const errors: Error[] = [];
+  const client = makeClient(transport, {
+    onError: (err) => errors.push(err),
+  });
 
   const startPromise = client.start();
   await new Promise((resolve) => setImmediate(resolve));
@@ -236,9 +239,11 @@ test('AcpClient auto-allows permission requests with the first allow option', as
 
   const sent = transport.popLastSent();
   assert.equal(sent?.id, 99);
-  const result = sent?.result as { outcome?: { kind?: string; optionId?: string } } | undefined;
-  assert.equal(result?.outcome?.kind, 'selected');
-  assert.equal(result?.outcome?.optionId, 'allow');
+  const result = sent?.result as { outcome?: { kind?: string } } | undefined;
+  assert.equal(result?.outcome?.kind, 'cancelled');
+  // Error event should have been emitted
+  assert.equal(errors.length, 1);
+  assert.ok(errors[0].message.includes('no onPermissionRequest handler'));
 });
 
 test('AcpClient surfaces JSON-RPC errors through pending request rejections', async () => {

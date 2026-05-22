@@ -7,21 +7,35 @@ import {
   type PresetWorkflowAction,
   type TerminalSettings,
 } from './settings/settings';
+import { applyDefaults } from './settings/settingsDefaults';
+import {
+  DefaultSettingsAccessor,
+  type SettingsAccessor,
+} from './settings/settingsAccessor';
 import { PresetScriptModal } from './ui/terminal/presetScriptModal';
 import { renderPresetScriptIcon } from './ui/terminal/presetScriptIcons';
 import { TerminalSettingTab } from './settings/settingsTab';
 import type { TerminalService } from './services/terminal/terminalService';
 import type { ServerManager } from './services/server/serverManager';
 import type { IdeBridge } from './services/ideBridge/ideBridge';
-import type { IdeBridgeAgentSource } from './services/agentStream/ideBridgeAgentSource';
-import type { AcpAgentSource } from './services/agentStream/acp/acpAgentSource';
 import type { AgentContextBridge } from './services/context/agentContextBridge';
-import { OpenCodeHistoryService } from './services/agent/opencode/opencodeHistoryService';
-import { ClaudeCodeHistoryService } from './services/agent/claudeCode/claudeCodeHistoryService';
+import type { AgentManager } from './services/agentStream/agentManager';
+import type { PermissionQueue } from './services/agentStream/permissionQueue';
+import type { FsCapabilityHandler } from './services/agentStream/acp/fsCapabilityHandler';
+import type { TerminalCapabilityHandler } from './services/agentStream/acp/terminalCapabilityHandler';
+import { DefaultPermissionQueue } from './services/agentStream/permissionQueue';
+import { DefaultFsCapabilityHandler } from './services/agentStream/acp/fsCapabilityHandler';
+import { DefaultTerminalCapabilityHandler } from './services/agentStream/acp/terminalCapabilityHandler';
+import { AgentManager as AgentManagerImpl } from './services/agentStream/agentManager';
+import { PermissionModalImpl } from './ui/agent/permissionModal';
+import * as path from 'path';
+import { OpenCodeReadOnlyHistoryService } from './services/agent/opencode/opencodeReadOnlyHistoryService';
+import { ClaudeCodeReadOnlyHistoryService } from './services/agent/claudeCode/claudeCodeReadOnlyHistoryService';
+import { CodexReadOnlyHistoryService } from './services/agent/codex/codexReadOnlyHistoryService';
 import { TERMINAL_VIEW_TYPE, TerminalView } from './ui/terminal/terminalView';
 import { AGENT_OUTPUT_VIEW_TYPE, AgentOutputView } from './ui/agent/agentOutputView';
 import { AgentEventBus } from './services/agentStream/agentEventBus';
-import type { MockAgentSource as MockAgentSourceType } from './services/agentStream/mockAgentSource';
+
 import { ChangelogModal } from './ui/changelog/changelogModal';
 import { i18n, t } from './i18n';
 import { debugLog, errorLog } from './utils/logger';
@@ -113,19 +127,37 @@ export default class TerminalPlugin extends Plugin {
   settings!: TerminalSettings;
   featureVisibilityManager!: FeatureVisibilityManager;
   private editorSelectionHighlightManager: EditorSelectionHighlightManager | null = null;
+
+  /**
+   * Accessor for the ACP agent / permission slice of settings. Lazily
+   * created on first access so test harnesses that stub the plugin
+   * before `loadSettings()` runs see a stable instance.
+   */
+  private _settingsAccessor: SettingsAccessor | null = null;
   
   // Lazily initialized services
   private _serverManager: ServerManager | null = null;
   private _terminalService: TerminalService | null = null;
   private _ideBridge: IdeBridge | null = null;
-  private _ideBridgeAgentSource: IdeBridgeAgentSource | null = null;
   private _agentContextBridge: AgentContextBridge | null = null;
   /**
-   * Active ACP agent source, if any. The agent panel's input box
-   * routes prompts here; the bus already broadcasts the source's
-   * events to the panel's renderer.
+   * ACP agent lifecycle manager. Instantiated in `onload` and torn
+   * down via `stopAll()` in `onunload`.
    */
-  private _activeAcpAgentSource: AcpAgentSource | null = null;
+  private _agentManager: AgentManager | null = null;
+  /**
+   * FIFO permission approval queue. Instantiated in `onload` and
+   * disposed in `onunload`.
+   */
+  private _permissionQueue: PermissionQueue | null = null;
+  /**
+   * ACP fs capability handler. Instantiated in `onload`.
+   */
+  private _fsHandler: FsCapabilityHandler | null = null;
+  /**
+   * ACP terminal capability handler. Instantiated in `onload`.
+   */
+  private _terminalHandler: TerminalCapabilityHandler | null = null;
   /**
    * Bus that fans out structured agent events ({@link AgentEventBus})
    * to the {@link AgentOutputView}. Created lazily on first access so
@@ -133,23 +165,21 @@ export default class TerminalPlugin extends Plugin {
    */
   private _agentEventBus: AgentEventBus | null = null;
   /**
-   * The mock source backing the "Agent: run demo stream" command.
-   * Held so the matching stop command can detach it without juggling
-   * any handles. Lazily imported because the renderer-side script
-   * never needs to load when the user doesn't open the panel.
-   */
-  private _mockAgentSource: MockAgentSourceType | null = null;
-  /**
    * OpenCode HTTP daemon + history bridge. Lazily started the first
    * time the user opens the agent panel so cold start cost stays
    * with the feature that pays for it.
    */
-  private _opencodeHistoryService: OpenCodeHistoryService | null = null;
+  private _opencodeHistoryService: OpenCodeReadOnlyHistoryService | null = null;
   /**
    * Claude Code history bridge. Lightweight — no daemon, just reads
-   * JSONL files and spawns `claude` per-turn.
+   * JSONL files on disk.
    */
-  private _claudeCodeHistoryService: ClaudeCodeHistoryService | null = null;
+  private _claudeCodeHistoryService: ClaudeCodeReadOnlyHistoryService | null = null;
+  /**
+   * Codex CLI read-only history bridge. Spawns `codex app-server`
+   * lazily for listing and transcript loading only.
+   */
+  private _codexHistoryService: CodexReadOnlyHistoryService | null = null;
   private _changelogContentCache: string | null = null;
   private _changelogSectionCache: Map<string, ChangelogDetails> = new Map();
   
@@ -286,6 +316,9 @@ export default class TerminalPlugin extends Plugin {
       }
     );
 
+    // Instantiate ACP dependencies (Req 1 / Req 3 / Req 5 / Req 7)
+    this.initializeAcpDependencies();
+
     // Register the Agent output view. Cheap to register — the view
     // does not subscribe to the event bus or load Markdown until it
     // is opened. Users who never open it pay nothing.
@@ -293,10 +326,13 @@ export default class TerminalPlugin extends Plugin {
       AGENT_OUTPUT_VIEW_TYPE,
       (leaf: WorkspaceLeaf) => new AgentOutputView(leaf, {
         bus: this.getAgentEventBus(),
-        submitPrompt: (text) => this.submitPromptToActiveAcpAgent(text),
-        cancelTurn: () => this.cancelActiveAcpAgentTurn(),
+        settings: this.getSettingsAccessor(),
+        agentManager: this._agentManager ?? undefined,
+        permissionQueue: this._permissionQueue ?? undefined,
         getOpenCodeHistoryService: () => this.getOpenCodeHistoryService(),
         getClaudeCodeHistoryService: () => this.getClaudeCodeHistoryService(),
+        getCodexHistoryService: () => this.getCodexHistoryService(),
+        getAgentContextBridge: () => this._agentContextBridge,
       }),
     );
 
@@ -424,19 +460,41 @@ export default class TerminalPlugin extends Plugin {
         errorLog('[TerminalPlugin] Failed to stop agent event sources:', error);
       }
       this._agentEventBus = null;
-      this._mockAgentSource = null;
-      this._activeAcpAgentSource = null;
+    }
+
+    // Tear down ACP agent manager and permission queue (Req 1 AC 5)
+    if (this._agentManager) {
+      try {
+        debugLog('[TerminalPlugin] Stopping AgentManager...');
+        await this._agentManager.stopAll();
+        debugLog('[TerminalPlugin] AgentManager stopped');
+      } catch (error) {
+        errorLog('[TerminalPlugin] Failed to stop AgentManager:', error);
+      }
+      this._agentManager = null;
+    }
+
+    if (this._permissionQueue) {
+      this._permissionQueue.dispose();
+      this._permissionQueue = null;
     }
 
     if (this._opencodeHistoryService) {
-      try {
-        debugLog('[TerminalPlugin] Shutting down OpenCode daemon...');
-        await this._opencodeHistoryService.stop();
-        debugLog('[TerminalPlugin] OpenCode daemon stopped');
-      } catch (error) {
-        errorLog('[TerminalPlugin] Failed to stop OpenCode daemon:', error);
-      }
+      debugLog('[TerminalPlugin] Shutting down OpenCode history service...');
+      this._opencodeHistoryService.stop();
+      debugLog('[TerminalPlugin] OpenCode history service stopped');
       this._opencodeHistoryService = null;
+    }
+
+    if (this._codexHistoryService) {
+      try {
+        debugLog('[TerminalPlugin] Shutting down Codex daemon...');
+        await this._codexHistoryService.stop();
+        debugLog('[TerminalPlugin] Codex daemon stopped');
+      } catch (error) {
+        errorLog('[TerminalPlugin] Failed to stop Codex daemon:', error);
+      }
+      this._codexHistoryService = null;
     }
 
     debugLog(t('plugin.unloadedMessage'));
@@ -464,7 +522,7 @@ export default class TerminalPlugin extends Plugin {
    * filesystem path — callers should treat this as "OpenCode is not
    * available right now" rather than retrying indefinitely.
    */
-  getOpenCodeHistoryService(): OpenCodeHistoryService | null {
+  getOpenCodeHistoryService(): OpenCodeReadOnlyHistoryService | null {
     if (this._opencodeHistoryService) {
       return this._opencodeHistoryService;
     }
@@ -472,7 +530,7 @@ export default class TerminalPlugin extends Plugin {
     if (!(adapter instanceof FileSystemAdapter)) {
       return null;
     }
-    this._opencodeHistoryService = new OpenCodeHistoryService({
+    this._opencodeHistoryService = new OpenCodeReadOnlyHistoryService({
       vaultRoot: adapter.getBasePath(),
     });
     return this._opencodeHistoryService;
@@ -480,9 +538,9 @@ export default class TerminalPlugin extends Plugin {
 
   /**
    * Lazily create the Claude Code history bridge. No daemon needed —
-   * it reads JSONL directly and spawns `claude` per-turn.
+   * it reads JSONL directly from disk.
    */
-  getClaudeCodeHistoryService(): ClaudeCodeHistoryService | null {
+  getClaudeCodeHistoryService(): ClaudeCodeReadOnlyHistoryService | null {
     if (this._claudeCodeHistoryService) {
       return this._claudeCodeHistoryService;
     }
@@ -490,10 +548,44 @@ export default class TerminalPlugin extends Plugin {
     if (!(adapter instanceof FileSystemAdapter)) {
       return null;
     }
-    this._claudeCodeHistoryService = new ClaudeCodeHistoryService({
+    this._claudeCodeHistoryService = new ClaudeCodeReadOnlyHistoryService({
       vaultPath: adapter.getBasePath(),
     });
     return this._claudeCodeHistoryService;
+  }
+
+  /**
+   * Lazily create the Codex read-only history bridge. Spawns the
+   * daemon only for listing and transcript loading.
+   */
+  getCodexHistoryService(): CodexReadOnlyHistoryService | null {
+    if (this._codexHistoryService) {
+      return this._codexHistoryService;
+    }
+    const adapter = this.app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) {
+      return null;
+    }
+    this._codexHistoryService = new CodexReadOnlyHistoryService(adapter.getBasePath());
+    return this._codexHistoryService;
+  }
+
+  /**
+   * Lazily build the {@link SettingsAccessor} for the ACP slice of
+   * settings. The accessor reads through `this.settings` so it picks
+   * up any in-place mutations made elsewhere (for example by the
+   * existing settings UI), and persists via `saveSettings()` which
+   * never re-applies defaults — see `settingsDefaults.ts` for the
+   * load/save asymmetry that makes that safe.
+   */
+  getSettingsAccessor(): SettingsAccessor {
+    if (!this._settingsAccessor) {
+      this._settingsAccessor = new DefaultSettingsAccessor({
+        getSettings: () => this.settings,
+        persist: () => this.saveSettings(),
+      });
+    }
+    return this._settingsAccessor;
   }
 
   /**
@@ -517,93 +609,6 @@ export default class TerminalPlugin extends Plugin {
     workspace.setActiveLeaf(leaf, { focus: true });
   }
 
-  async startMockAgentStream(): Promise<void> {
-    if (this._mockAgentSource) {
-      return;
-    }
-    const { MockAgentSource } = await import('./services/agentStream/mockAgentSource');
-    this._mockAgentSource = new MockAgentSource();
-    await this.getAgentEventBus().addSource(this._mockAgentSource);
-  }
-
-  async stopMockAgentStream(): Promise<void> {
-    if (!this._mockAgentSource || !this._agentEventBus) {
-      return;
-    }
-    await this._agentEventBus.removeSource(this._mockAgentSource.name);
-    this._mockAgentSource = null;
-  }
-
-  /**
-   * Spawn an ACP agent (currently hardcoded to OpenCode's
-   * `opencode acp` subcommand) and register it with the agent
-   * panel's event bus. The session is bound to the vault root so
-   * the agent's `cwd` matches what Termy already uses for AI launcher
-   * terminals.
-   */
-  async startAcpAgent(): Promise<void> {
-    if (this._activeAcpAgentSource) {
-      return;
-    }
-    const { AcpAgentSource } = await import('./services/agentStream/acp/acpAgentSource');
-    const { AcpChildProcessTransport } = await import('./services/agentStream/acp/childProcessTransport');
-
-    const cwd = this.getVaultRootForAgent();
-    const command = 'opencode';
-    // OpenCode exposes ACP as a dedicated subcommand: `opencode acp`.
-    // The earlier draft used `--acp`, which OpenCode silently treats
-    // as a project path and falls through to its `tui` default,
-    // leaving us with the help screen and an exit-code-1 close.
-    const args = ['acp'];
-
-    const source = new AcpAgentSource({
-      name: 'acp:opencode',
-      agentLabel: 'OpenCode',
-      cwd,
-      transportFactory: () => new AcpChildProcessTransport({ command, args, cwd }),
-      clientInfo: {
-        name: 'termy-obsidian',
-        title: 'Termy (Obsidian)',
-        version: this.manifest.version,
-      },
-    });
-
-    this._activeAcpAgentSource = source;
-    try {
-      await this.getAgentEventBus().addSource(source);
-    } catch (error) {
-      // Surface a friendly error to the user; the bus has already
-      // attempted to stop the source on failure, so we just need to
-      // forget the reference here so the next "connect" command
-      // tries again from scratch.
-      this._activeAcpAgentSource = null;
-      throw error instanceof Error ? error : new Error(String(error));
-    }
-  }
-
-  async stopAcpAgent(): Promise<void> {
-    if (!this._activeAcpAgentSource || !this._agentEventBus) {
-      return;
-    }
-    const source = this._activeAcpAgentSource;
-    this._activeAcpAgentSource = null;
-    await this._agentEventBus.removeSource(source.name);
-  }
-
-  private async submitPromptToActiveAcpAgent(text: string): Promise<void> {
-    const source = this._activeAcpAgentSource;
-    if (!source) {
-      // No connected agent — surface a friendly hint rather than a stack trace.
-      new Notice(t('agent.noticeAcpFailed', { message: 'No agent connected' }));
-      return;
-    }
-    await source.submitPrompt(text);
-  }
-
-  private cancelActiveAcpAgentTurn(): void {
-    this._activeAcpAgentSource?.cancelTurn();
-  }
-
   private getVaultRootForAgent(): string {
     const adapter = this.app.vault.adapter;
     if (adapter instanceof FileSystemAdapter) {
@@ -615,6 +620,89 @@ export default class TerminalPlugin extends Plugin {
     return process.cwd();
   }
 
+  /**
+   * Instantiate ACP dependencies: PermissionQueue, FsCapabilityHandler,
+   * TerminalCapabilityHandler, and AgentManager. Called synchronously
+   * during `onload` so the view registration closure can capture them.
+   *
+   * The TerminalCapabilityHandler receives a lazy proxy for the
+   * terminal service since it is async-initialized on first use.
+   */
+  private initializeAcpDependencies(): void {
+    const vaultRoot = this.getVaultRootForAgent();
+    const settingsAccessor = this.getSettingsAccessor();
+
+    // Permission modal driver backed by Obsidian Modal
+    const modalDriver = new PermissionModalImpl({
+      app: this.app,
+      i18n: { t: (key: string, params?: Record<string, string | number>) => t(key, params) },
+      resolveAgentLabel: (agentId: string) => {
+        const agent = settingsAccessor.getAgent(agentId);
+        return agent?.label ?? agentId;
+      },
+      toVaultRelative: (absolutePath: string) => {
+        const resolved = path.resolve(absolutePath);
+        const normalizedRoot = path.resolve(vaultRoot);
+        if (resolved === normalizedRoot) return '';
+        const prefix = normalizedRoot + path.sep;
+        if (resolved.startsWith(prefix)) {
+          return resolved.slice(prefix.length).replace(/\\/g, '/');
+        }
+        return null;
+      },
+    });
+
+    // Permission queue
+    this._permissionQueue = new DefaultPermissionQueue({
+      publishEvent: (_event) => {
+        // Audit events are informational; the bus does not expose a
+        // public publish API so we log them via debugLog for now.
+        debugLog('[PermissionQueue] audit event emitted');
+      },
+      modalDriver,
+      getPermissionApprovalEnabled: () => this.settings.permissionApprovalEnabled,
+      getPermissionRules: () => settingsAccessor.getPermissionRules(),
+    });
+
+    // Fs capability handler
+    this._fsHandler = new DefaultFsCapabilityHandler({
+      app: this.app,
+      permissionQueue: this._permissionQueue,
+      vaultRoot,
+    });
+
+    // Terminal capability handler — uses a lazy proxy for terminalService
+    // since it is async-initialized on first use.
+    const lazyTerminalService = new Proxy({} as TerminalService, {
+      get: (_target, prop) => {
+        if (!this._terminalService) {
+          throw new Error('TerminalService not yet initialized');
+        }
+        return (this._terminalService as unknown as Record<string, unknown>)[prop as string];
+      },
+    });
+    this._terminalHandler = new DefaultTerminalCapabilityHandler({
+      permissionQueue: this._permissionQueue,
+      terminalService: lazyTerminalService,
+      vaultRoot,
+    });
+
+    // Agent manager
+    this._agentManager = new AgentManagerImpl({
+      bus: this.getAgentEventBus(),
+      settings: settingsAccessor,
+      vaultAdapter: this.app.vault.adapter,
+      permissionQueue: this._permissionQueue,
+      fsHandler: this._fsHandler,
+      terminalHandler: this._terminalHandler,
+      clientInfo: {
+        name: 'termy-obsidian',
+        title: 'Termy (Obsidian)',
+        version: this.manifest.version,
+      },
+    });
+  }
+
   private async initializeIdeBridge(): Promise<void> {
     if (!this._ideBridge) {
       const { IdeBridge } = await import('./services/ideBridge/ideBridge');
@@ -622,25 +710,9 @@ export default class TerminalPlugin extends Plugin {
     }
 
     await this._ideBridge.start();
-    await this.attachIdeBridgeAgentSource();
   }
 
-  /**
-   * Wire the bridge's sanitized event feed into the agent panel's
-   * event bus. Idempotent — calling twice is a no-op because the bus
-   * tracks sources by name.
-   *
-   * Lazy-loaded for the same reason the rest of the agent stream is:
-   * users who never open the panel never pay the import cost.
-   */
-  private async attachIdeBridgeAgentSource(): Promise<void> {
-    if (!this._ideBridge || this._ideBridgeAgentSource) {
-      return;
-    }
-    const { IdeBridgeAgentSource } = await import('./services/agentStream/ideBridgeAgentSource');
-    this._ideBridgeAgentSource = new IdeBridgeAgentSource(this._ideBridge);
-    await this.getAgentEventBus().addSource(this._ideBridgeAgentSource);
-  }
+
 
   private async initializeAgentContextBridge(): Promise<void> {
     if (!this._agentContextBridge) {
@@ -713,14 +785,22 @@ export default class TerminalPlugin extends Plugin {
   }
 
   /**
-   * Load settings
+   * Load settings.
+   *
+   * The load path runs every persisted record through
+   * {@link applyDefaults} first so the ACP-related fields (`agents`,
+   * `permissionRules`, `permissionApprovalEnabled`) are seeded from
+   * {@link BUILT_IN_AGENTS} on a fresh or pre-ACP install. The save
+   * path deliberately does NOT call `applyDefaults`, which keeps
+   * user-edited records on disk from being silently overwritten by
+   * future built-in changes.
    */
   async loadSettings() {
     const loaded = (await this.loadData()) as Partial<TerminalSettings> | null;
+    const seeded = applyDefaults(loaded ?? undefined);
     const normalizedPresetScripts = this.normalizePresetScripts(loaded?.presetScripts);
     this.settings = {
-      ...DEFAULT_TERMINAL_SETTINGS,
-      ...loaded,
+      ...seeded,
       // Ensure the visibility config exists
       visibility: {
         ...DEFAULT_TERMINAL_SETTINGS.visibility,
@@ -1306,70 +1386,6 @@ export default class TerminalPlugin extends Plugin {
       name: t('agent.openCommand'),
       callback: () => {
         void this.activateAgentOutputView();
-      },
-    });
-
-    this.addCommand({
-      id: 'agent-run-demo-stream',
-      name: t('agent.runDemoCommand'),
-      callback: () => {
-        void (async () => {
-          try {
-            await this.activateAgentOutputView();
-            await this.startMockAgentStream();
-            new Notice(t('agent.noticeDemoStarted'));
-          } catch (error) {
-            errorLog('[TerminalPlugin] Failed to start demo agent stream:', error);
-          }
-        })();
-      },
-    });
-
-    this.addCommand({
-      id: 'agent-stop-demo-stream',
-      name: t('agent.stopDemoCommand'),
-      callback: () => {
-        void (async () => {
-          try {
-            await this.stopMockAgentStream();
-            new Notice(t('agent.noticeDemoStopped'));
-          } catch (error) {
-            errorLog('[TerminalPlugin] Failed to stop demo agent stream:', error);
-          }
-        })();
-      },
-    });
-
-    this.addCommand({
-      id: 'agent-connect-acp',
-      name: t('agent.connectAcpCommand'),
-      callback: () => {
-        void (async () => {
-          try {
-            await this.activateAgentOutputView();
-            await this.startAcpAgent();
-            new Notice(t('agent.noticeAcpConnected'));
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            errorLog('[TerminalPlugin] Failed to start ACP agent:', error);
-            new Notice(t('agent.noticeAcpFailed', { message }));
-          }
-        })();
-      },
-    });
-
-    this.addCommand({
-      id: 'agent-disconnect-acp',
-      name: t('agent.disconnectAcpCommand'),
-      callback: () => {
-        void (async () => {
-          try {
-            await this.stopAcpAgent();
-            new Notice(t('agent.noticeAcpDisconnected'));
-          } catch (error) {
-            errorLog('[TerminalPlugin] Failed to stop ACP agent:', error);
-          }
-        })();
       },
     });
 

@@ -4,6 +4,8 @@
  */
 
 import type { VisibilityConfig } from '@/services/visibility';
+import type { AgentConfig } from '@/services/agentStream/agentConfig';
+import type { PermissionRule } from './types';
 
 /** Terminal programs that can be launched from the shell selector when installed */
 export type TerminalShellType = 'tmux';
@@ -125,6 +127,32 @@ export interface TerminalSettings {
 
   // Debug settings
   enableDebugLog: boolean;
+
+  // ACP (Agent Client Protocol) — multi-agent panel configuration.
+  //
+  // These fields are populated lazily by the settings defaults helper
+  // when a fresh install (or a pre-ACP install) loads its data: any
+  // missing/empty value is filled with the built-in defaults via a
+  // pure `applyDefaults` pass that never reads or mutates the legacy
+  // `presetScripts` array. There is no `settingsSchemaVersion`
+  // counter and no `vN -> vN+1` migration helper — absence of an ACP
+  // field is the signal that defaults must be supplied.
+  //
+  // - `agents` — ordered list of ACP-compatible agents shown in the
+  //   panel. Editing happens through `SettingsAccessor` which validates
+  //   against `validateAgentConfig` and dispatches `AgentDiff` events
+  //   to the `AgentManager`.
+  // - `permissionRules` — persisted decisions from the permission
+  //   modal's `allow_always` / `reject_always` outcomes; matched by
+  //   `(agentId, op, pathPrefix)` to short-circuit future prompts.
+  // - `permissionApprovalEnabled` — when `true` (default) the
+  //   permission queue surfaces a modal for every
+  //   `session/request_permission`; when `false` the queue falls back
+  //   to auto-approving the first allow-style option for parity with
+  //   pre-ACP behavior.
+  agents: readonly AgentConfig[];
+  permissionRules: readonly PermissionRule[];
+  permissionApprovalEnabled: boolean;
 }
 
 /**
@@ -413,4 +441,12 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   customNodePath: '',
   lastSeenChangelogVersion: '',
   enableDebugLog: false,
+  // ACP defaults: leave both arrays empty so that the dedicated
+  // `applyDefaults` pass (task 2.2) can detect a fresh/pre-ACP install
+  // and inject the built-in agent list. `permissionApprovalEnabled`
+  // is on by default so users see the permission modal until they
+  // opt out explicitly.
+  agents: [],
+  permissionRules: [],
+  permissionApprovalEnabled: true,
 };

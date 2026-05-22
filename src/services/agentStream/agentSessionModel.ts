@@ -278,6 +278,32 @@ export class AgentSessionModel {
     this.notify(sessionId);
   }
 
+  /**
+   * Move all session state from `fromId` to `toId`. Used by providers
+   * that mint their session id asynchronously (e.g. Codex returns a
+   * threadId only after `thread/start`): the panel renders the user
+   * echo into a placeholder id like `'codex:new'`, then renames the
+   * session to `'codex:<threadId>'` once the daemon resolves it. The
+   * destination id must not already exist; if it does, this is a
+   * no-op (the placeholder is dropped instead). Listeners for both
+   * ids are notified so the renderer can re-bind to the new id.
+   */
+  renameSession(fromId: AgentSessionId, toId: AgentSessionId): void {
+    if (fromId === toId) return;
+    const session = this.sessions.get(fromId);
+    if (!session) return;
+    if (this.sessions.has(toId)) {
+      this.sessions.delete(fromId);
+      this.notify(fromId);
+      return;
+    }
+    this.sessions.delete(fromId);
+    session.sessionId = toId;
+    this.sessions.set(toId, session);
+    this.notify(fromId);
+    this.notify(toId);
+  }
+
   /** Drop every session. */
   resetAll(): void {
     if (this.sessions.size === 0) {

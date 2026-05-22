@@ -4,3 +4,4 @@
 
 export { BaseSettingsRenderer } from './baseRenderer';
 export { TerminalSettingsRenderer } from './terminalSettingsRenderer';
+export { AgentSettingsRenderer } from './agentSettingsRenderer';

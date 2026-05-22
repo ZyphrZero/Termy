@@ -18,16 +18,14 @@
  *   tests we plug in an in-memory transport with hand-fed frames so
  *   we never touch a real shell.
  *
- * - **Termy advertises a tiny client capability surface for now.**
- *   No `fs`, no `terminal`. The agent is expected to use its own
- *   filesystem and process APIs. We can opt in once the vault-as-cwd
- *   semantics is settled.
+ * - **Client capabilities are fully enabled** (`fs.readTextFile`,
+ *   `fs.writeTextFile`, `terminal`). Actual execution is gated by
+ *   the injected handlers and the PermissionQueue modal (Req 3/7).
  *
- * - **`session/request_permission` is auto-allowed in this iteration.**
- *   This is a deliberate, narrow trade-off: the alternative is
- *   blocking the prompt indefinitely until UI lands. The choice is
- *   logged via a permission-request event so the user *sees* what the
- *   agent did. A future iteration will turn this into a real modal.
+ * - **`session/request_permission` is delegated to the caller.**
+ *   If no `onPermissionRequest` handler is injected, all permission
+ *   requests are rejected and an error event is emitted. This
+ *   ensures no silent auto-allow path exists (Property 3.1).
  *
  * - **All inbound messages are validated permissively.** We never
  *   crash on a missing or malformed field; we either log via the
@@ -48,6 +46,8 @@ import {
   type AcpSessionUpdateNotification,
   type AcpStopReason,
 } from './acpProtocol.ts';
+import type { AcpFsHandlers, AcpFsReadRequest, AcpFsWriteRequest } from './fsCapabilityHandler.ts';
+import type { AcpTerminalHandlers, AcpTerminalCreateRequest } from './terminalCapabilityHandler.ts';
 
 /* -----------------------------------------------------------------
  * Transport abstraction
@@ -76,13 +76,17 @@ export interface AcpClientCallbacks {
   /** Invoked once per `session/update` notification. */
   onSessionUpdate?: (notification: AcpSessionUpdateNotification) => void;
   /**
-   * Invoked when the agent requests permission for a tool call. The
-   * default implementation auto-allows the first option — see the
-   * design notes at the top of the file for why.
+   * Invoked when the agent requests permission for a tool call.
+   * If not provided, all permission requests are rejected with
+   * `cancelled` and an error event is emitted (Property 3.1).
    */
   onPermissionRequest?: (
     params: AcpPermissionRequestParams,
   ) => Promise<AcpPermissionResult> | AcpPermissionResult;
+  /** Injected fs capability handlers for read/write routing. */
+  fsHandler?: AcpFsHandlers;
+  /** Injected terminal capability handler for terminal/create routing. */
+  terminalHandler?: AcpTerminalHandlers;
   /** Invoked for diagnostic / stderr text that should reach the user. */
   onLog?: (text: string) => void;
   /** Invoked on transport / protocol errors that the client could not recover from. */
@@ -181,9 +185,10 @@ export class AcpClient {
     const result = await this.request<AcpInitializeResult>(ACP_METHODS.initialize, {
       protocolVersion: ACP_LATEST_PROTOCOL_VERSION,
       clientCapabilities: {
-        // Conservative defaults; see the file header for rationale.
-        fs: { readTextFile: false, writeTextFile: false },
-        terminal: false,
+        // All capabilities enabled; actual execution gated by
+        // injected handlers + PermissionQueue (Req 3 AC 8 / Req 7).
+        fs: { readTextFile: true, writeTextFile: true },
+        terminal: true,
       },
       clientInfo: this.clientInfo,
     });
@@ -357,6 +362,21 @@ export class AcpClient {
       void this.respondToPermission(message.id, params);
       return;
     }
+    // fs/read_text_file routing (Req 7 AC 7)
+    if (message.method === 'fs/read_text_file' && message.id !== undefined && message.id !== null) {
+      void this.handleFsRead(message.id, message.params);
+      return;
+    }
+    // fs/write_text_file routing (Req 7 AC 8)
+    if (message.method === 'fs/write_text_file' && message.id !== undefined && message.id !== null) {
+      void this.handleFsWrite(message.id, message.params);
+      return;
+    }
+    // terminal/create routing (Req 3 AC 8)
+    if (message.method === 'terminal/create' && message.id !== undefined && message.id !== null) {
+      void this.handleTerminalCreate(message.id, message.params);
+      return;
+    }
     // Unknown methods get a method-not-found response if they expect one.
     if (message.id !== undefined && message.id !== null) {
       this.transport.send(encodeJsonRpcFrame({
@@ -377,7 +397,11 @@ export class AcpClient {
       if (handler) {
         result = await handler(params);
       } else {
-        result = defaultPermissionDecision(params);
+        // No handler injected — reject all requests and emit error (Property 3.1)
+        this.callbacks.onError?.(
+          new Error('Permission request received but no onPermissionRequest handler is configured'),
+        );
+        result = { outcome: { kind: 'cancelled' } };
       }
     } catch (error) {
       this.callbacks.onError?.(error instanceof Error ? error : new Error(String(error)));
@@ -390,6 +414,81 @@ export class AcpClient {
     }));
   }
 
+  private async handleFsRead(id: number | string, params: unknown): Promise<void> {
+    const handler = this.callbacks.fsHandler;
+    if (!handler) {
+      this.transport.send(encodeJsonRpcFrame({
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32601, message: 'fs/read_text_file: no handler configured' },
+      }));
+      return;
+    }
+    try {
+      const req = (params ?? {}) as AcpFsReadRequest;
+      const result = await handler.readTextFile(req);
+      this.transport.send(encodeJsonRpcFrame({ jsonrpc: '2.0', id, result }));
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const code = (error as { code?: number }).code ?? -32000;
+      this.transport.send(encodeJsonRpcFrame({
+        jsonrpc: '2.0',
+        id,
+        error: { code, message: err.message },
+      }));
+    }
+  }
+
+  private async handleFsWrite(id: number | string, params: unknown): Promise<void> {
+    const handler = this.callbacks.fsHandler;
+    if (!handler) {
+      this.transport.send(encodeJsonRpcFrame({
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32601, message: 'fs/write_text_file: no handler configured' },
+      }));
+      return;
+    }
+    try {
+      const req = (params ?? {}) as AcpFsWriteRequest;
+      const result = await handler.writeTextFile(req);
+      this.transport.send(encodeJsonRpcFrame({ jsonrpc: '2.0', id, result }));
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const code = (error as { code?: number }).code ?? -32000;
+      this.transport.send(encodeJsonRpcFrame({
+        jsonrpc: '2.0',
+        id,
+        error: { code, message: err.message },
+      }));
+    }
+  }
+
+  private async handleTerminalCreate(id: number | string, params: unknown): Promise<void> {
+    const handler = this.callbacks.terminalHandler;
+    if (!handler) {
+      this.transport.send(encodeJsonRpcFrame({
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32601, message: 'terminal/create: no handler configured' },
+      }));
+      return;
+    }
+    try {
+      const req = (params ?? {}) as AcpTerminalCreateRequest;
+      const result = await handler.create(req);
+      this.transport.send(encodeJsonRpcFrame({ jsonrpc: '2.0', id, result }));
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const code = (error as { code?: number }).code ?? -32000;
+      this.transport.send(encodeJsonRpcFrame({
+        jsonrpc: '2.0',
+        id,
+        error: { code, message: err.message },
+      }));
+    }
+  }
+
   private handleClose(reason: string): void {
     if (this.closed) return;
     this.closed = true;
@@ -400,19 +499,4 @@ export class AcpClient {
     this.pending.clear();
     this.callbacks.onClose?.(reason);
   }
-}
-
-/**
- * Default permission decision used when the host has not supplied
- * UI yet: pick the first `allow_*` option, or fall back to cancel
- * if no allow option is on offer. The decision is conservative on
- * the *upstream* side of the call — the agent panel surfaces a
- * permission-request card so the user always sees what was decided.
- */
-function defaultPermissionDecision(params: AcpPermissionRequestParams): AcpPermissionResult {
-  const allow = params.options?.find((option) => option.kind === 'allow_once' || option.kind === 'allow_always');
-  if (allow) {
-    return { outcome: { kind: 'selected', optionId: allow.optionId } };
-  }
-  return { outcome: { kind: 'cancelled' } };
 }

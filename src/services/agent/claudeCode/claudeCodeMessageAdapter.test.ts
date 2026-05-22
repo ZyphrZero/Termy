@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { adaptClaudeTranscriptToEvents, adaptClaudeStreamLine } from './claudeCodeMessageAdapter.ts';
+import { adaptClaudeTranscriptToEvents } from './claudeCodeMessageAdapter.ts';
 import type { ClaudeNativeMessage } from './claudeCodeTypes.ts';
 
 const SESSION = 'claude-code:test-session';
@@ -89,67 +89,4 @@ test('unknown message types are silently skipped', () => {
   ];
   const events = adaptClaudeTranscriptToEvents(SESSION, messages);
   assert.equal(events.length, 0);
-});
-
-test('adaptClaudeStreamLine handles text_delta stream events', () => {
-  const msg: ClaudeNativeMessage = {
-    type: 'stream_event',
-    event: {
-      type: 'content_block_delta',
-      index: 1,
-      delta: { type: 'text_delta', text: 'hello' },
-    },
-  };
-  const events = adaptClaudeStreamLine(SESSION, msg);
-  assert.equal(events.length, 1);
-  if (events[0].kind === 'text') {
-    assert.equal(events[0].channel, 'final');
-    assert.equal(events[0].delta, 'hello');
-  }
-});
-
-test('adaptClaudeStreamLine handles thinking_delta stream events', () => {
-  const msg: ClaudeNativeMessage = {
-    type: 'stream_event',
-    event: {
-      type: 'content_block_delta',
-      index: 0,
-      delta: { type: 'thinking_delta', thinking: 'pondering' },
-    },
-  };
-  const events = adaptClaudeStreamLine(SESSION, msg);
-  assert.equal(events.length, 1);
-  if (events[0].kind === 'text') {
-    assert.equal(events[0].channel, 'thought');
-    assert.equal(events[0].delta, 'pondering');
-  }
-});
-
-test('adaptClaudeStreamLine emits awaiting-input on result', () => {
-  const msg: ClaudeNativeMessage = {
-    type: 'result',
-    subtype: 'success',
-    is_error: false,
-    stop_reason: 'end_turn',
-  };
-  const events = adaptClaudeStreamLine(SESSION, msg);
-  assert.equal(events.length, 1);
-  assert.equal(events[0].kind, 'session-state');
-  if (events[0].kind === 'session-state') {
-    assert.equal(events[0].state, 'awaiting-input');
-  }
-});
-
-test('adaptClaudeStreamLine emits errored on error result', () => {
-  const msg: ClaudeNativeMessage = {
-    type: 'result',
-    subtype: 'error',
-    is_error: true,
-    result: 'API error',
-  };
-  const events = adaptClaudeStreamLine(SESSION, msg);
-  assert.equal(events.length, 1);
-  if (events[0].kind === 'session-state') {
-    assert.equal(events[0].state, 'errored');
-  }
 });

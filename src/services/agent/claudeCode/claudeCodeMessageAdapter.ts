@@ -1,11 +1,9 @@
 /**
  * Pure adapter: Claude Code native messages → AgentEvent[].
  *
- * Two entry points:
+ * Entry point:
  *   - {@link adaptClaudeTranscriptToEvents}: batch-converts a full
  *     JSONL transcript (for "load history into panel").
- *   - {@link adaptClaudeStreamLine}: converts a single stream-json
- *     stdout line (for live streaming during a resume/new turn).
  *
  * The adapter is intentionally permissive: unknown message types are
  * silently skipped so a CLI upgrade never breaks the panel.
@@ -17,7 +15,7 @@ import type {
   AgentToolKind,
   AgentToolStatus,
 } from '../../agentStream/agentEventTypes.ts';
-import type { ClaudeContentBlock, ClaudeNativeMessage, ClaudeStreamEvent } from './claudeCodeTypes.ts';
+import type { ClaudeContentBlock, ClaudeNativeMessage } from './claudeCodeTypes.ts';
 
 /**
  * Convert a full on-disk transcript into events suitable for
@@ -31,39 +29,6 @@ export function adaptClaudeTranscriptToEvents(
   for (const msg of messages) {
     pushMessageEvents(events, sessionId, msg);
   }
-  return events;
-}
-
-/**
- * Convert a single stream-json stdout line into zero or more events.
- * Called on every line the child process emits during a live turn.
- */
-export function adaptClaudeStreamLine(
-  sessionId: AgentSessionId,
-  msg: ClaudeNativeMessage,
-): AgentEvent[] {
-  const events: AgentEvent[] = [];
-
-  if (msg.type === 'stream_event' && msg.event) {
-    pushStreamEvent(events, sessionId, msg.event);
-    return events;
-  }
-
-  if (msg.type === 'result') {
-    events.push({
-      kind: 'session-state',
-      sessionId,
-      state: msg.is_error ? 'errored' : 'awaiting-input',
-      detail: msg.is_error ? (msg.result ?? 'Turn failed') : 'Turn complete',
-    });
-    return events;
-  }
-
-  // During --include-partial-messages, the CLI also emits full
-  // `assistant` messages after each content block completes. We
-  // skip these because the stream_event deltas already fed the
-  // model incrementally — re-applying the full message would
-  // duplicate text.
   return events;
 }
 
@@ -159,58 +124,6 @@ function pushToolUseBlock(
     subtitle,
     status: 'completed' as AgentToolStatus,
   });
-}
-
-function pushStreamEvent(
-  events: AgentEvent[],
-  sessionId: AgentSessionId,
-  streamEvent: ClaudeStreamEvent,
-): void {
-  switch (streamEvent.type) {
-    case 'content_block_delta': {
-      const delta = streamEvent.delta;
-      if (!delta) return;
-      if (delta.type === 'text_delta' && delta.text) {
-        events.push({ kind: 'text', sessionId, channel: 'final', delta: delta.text });
-      } else if (delta.type === 'thinking_delta' && delta.thinking) {
-        events.push({ kind: 'text', sessionId, channel: 'thought', delta: delta.thinking });
-      }
-      return;
-    }
-    case 'content_block_stop': {
-      // We don't know which channel just stopped from the event
-      // alone, but emitting text-done on both is safe — the model
-      // ignores done events for channels that have no active block.
-      events.push({ kind: 'text-done', sessionId, channel: 'final' });
-      events.push({ kind: 'text-done', sessionId, channel: 'thought' });
-      return;
-    }
-    case 'content_block_start': {
-      const block = streamEvent.content_block;
-      if (block?.type === 'tool_use') {
-        // Tool use blocks are announced at start; we emit a pending
-        // tool-call card. The CLI will later emit the full assistant
-        // message with the completed tool, but we skip that (see
-        // adaptClaudeStreamLine).
-        const toolCallId = (block as { id?: string }).id ?? `tool-stream-${Date.now()}`;
-        const toolName = (block as { name?: string }).name ?? 'tool';
-        events.push({
-          kind: 'tool-call',
-          sessionId,
-          toolCallId,
-          toolName,
-          toolKind: mapToolKind(toolName),
-          title: toolName,
-          status: 'running',
-        });
-      }
-      return;
-    }
-    default:
-      // message_start, message_delta, message_stop — lifecycle
-      // signals we don't need to surface in the transcript.
-      return;
-  }
 }
 
 function extractTextFromBlocks(content: unknown): string {

@@ -338,6 +338,26 @@ export interface TranslationKeys {
       checkAiLauncherUpdatesDesc: string;
       aiLauncherOfflineHint: string;
     };
+    agents: {
+      heading: string;
+      addAgent: string;
+      editAgent: string;
+      deleteAgent: string;
+      moveUp: string;
+      moveDown: string;
+      resetAgent: string;
+      cannotDeleteBuiltIn: string;
+      editAgentTitle: string;
+      addAgentTitle: string;
+      fieldId: string;
+      fieldLabel: string;
+      fieldCommand: string;
+      fieldArgs: string;
+      fieldEnv: string;
+      fieldIcon: string;
+      fieldDescription: string;
+      fieldEnabled: string;
+    };
     advanced: {
       performanceAndDebug: string;
       debugMode: string;
@@ -545,6 +565,12 @@ export interface TranslationKeys {
     viewTitle: string;
     headerIdle: string;
     headerSubtitleIdle: string;
+    error: {
+      idFormat: string;
+      idDuplicate: string;
+      commandEmpty: string;
+      labelEmpty: string;
+    };
     stateIdle: string;
     stateRunning: string;
     stateAwaitingInput: string;
@@ -569,22 +595,21 @@ export interface TranslationKeys {
     toolStatusFailed: string;
     toolStatusCancelled: string;
     openCommand: string;
-    runDemoCommand: string;
-    stopDemoCommand: string;
-    noticeDemoStarted: string;
-    noticeDemoStopped: string;
     inputPlaceholder: string;
     sendButton: string;
     cancelButton: string;
     noticeSubmitFailed: string;
-    connectAcpCommand: string;
-    disconnectAcpCommand: string;
-    noticeAcpConnected: string;
-    noticeAcpDisconnected: string;
     noticeAcpFailed: string;
+    permission: {
+      title: string;
+    };
+    statusConnected: string;
+    statusRunning: string;
+    statusPending: string;
     /** Provider tab labels */
     providerOpenCode: string;
     providerClaudeCode: string;
+    providerCodex: string;
     /** Sessions sidebar */
     sessionsHeading: string;
     sessionsRefresh: string;
@@ -602,6 +627,11 @@ export interface TranslationKeys {
     /** Loading state for transcript area */
     transcriptLoading: string;
     transcriptLoadFailed: string;
+    openSettings: string;
+    agentRemoved: string;
+    readOnlyBadge: string;
+    resumeSessionButton: string;
+    restartButton: string;
   };
 }
 

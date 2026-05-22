@@ -110,6 +110,46 @@ test('AgentSessionModel.resetAll clears every session', () => {
   assert.equal(model.getAllSnapshots().length, 0);
 });
 
+test('AgentSessionModel.renameSession moves blocks to the new id', () => {
+  const model = new AgentSessionModel();
+  model.apply(envelope({ kind: 'text', sessionId: 'placeholder', channel: 'final', delta: 'hi' }));
+  model.apply(envelope({ kind: 'text-done', sessionId: 'placeholder', channel: 'final' }));
+
+  const seen: string[] = [];
+  model.subscribe((id) => seen.push(id));
+
+  model.renameSession('placeholder', 'real-id');
+
+  assert.equal(model.getSnapshot('placeholder'), null);
+  const snap = model.getSnapshot('real-id');
+  assert.ok(snap);
+  assert.equal(snap?.blocks.length, 1);
+  assert.deepEqual(seen, ['placeholder', 'real-id']);
+});
+
+test('AgentSessionModel.renameSession is a no-op when source is missing', () => {
+  const model = new AgentSessionModel();
+  let notified = 0;
+  model.subscribe(() => notified++);
+  model.renameSession('missing', 'other');
+  assert.equal(notified, 0);
+  assert.equal(model.getSnapshot('other'), null);
+});
+
+test('AgentSessionModel.renameSession drops placeholder when destination exists', () => {
+  const model = new AgentSessionModel();
+  model.apply(envelope({ kind: 'text', sessionId: 'placeholder', channel: 'final', delta: 'a' }));
+  model.apply(envelope({ kind: 'text', sessionId: 'real', channel: 'final', delta: 'b' }));
+
+  model.renameSession('placeholder', 'real');
+
+  assert.equal(model.getSnapshot('placeholder'), null);
+  const realSnap = model.getSnapshot('real');
+  assert.ok(realSnap);
+  // The destination keeps its original blocks; the placeholder is dropped.
+  assert.equal(realSnap?.blocks[0].kind, 'text');
+});
+
 test('AgentSessionModel deep-copies snapshots', () => {
   const model = new AgentSessionModel();
   model.apply(envelope({

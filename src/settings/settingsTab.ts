@@ -7,6 +7,7 @@ import type { App } from 'obsidian';
 import { PluginSettingTab, setIcon } from 'obsidian';
 import type TerminalPlugin from '../main';
 import { TerminalSettingsRenderer } from './renderers/terminalSettingsRenderer';
+import { AgentSettingsRenderer } from './renderers/agentSettingsRenderer';
 import type { RendererContext } from './types';
 import { t } from '../i18n';
 import { createTermyLogoSvg } from '../ui/icons';
@@ -17,12 +18,14 @@ import { createTermyLogoSvg } from '../ui/icons';
 export class TerminalSettingTab extends PluginSettingTab {
   plugin: TerminalPlugin;
   private terminalRenderer: TerminalSettingsRenderer;
+  private agentRenderer: AgentSettingsRenderer;
   private expandedSections: Set<string> = new Set();
 
   constructor(app: App, plugin: TerminalPlugin) {
     super(app, plugin);
     this.plugin = plugin;
     this.terminalRenderer = new TerminalSettingsRenderer();
+    this.agentRenderer = new AgentSettingsRenderer();
   }
 
   display(): void {
@@ -48,6 +51,9 @@ export class TerminalSettingTab extends PluginSettingTab {
 
     // Render terminal settings
     this.terminalRenderer.render(context);
+
+    // Render agent settings
+    this.agentRenderer.render(context);
   }
 
   /**

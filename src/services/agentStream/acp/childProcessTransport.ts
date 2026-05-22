@@ -284,7 +284,7 @@ export class AcpChildProcessTransport implements AcpTransport {
  * already an absolute or rooted path that exists on disk, it is
  * returned unchanged.
  */
-function resolveExecutableOnPath(
+export function resolveExecutableOnPath(
   command: string,
   env: NodeJS.ProcessEnv,
   fs: FsModule,
@@ -330,7 +330,7 @@ function existsAsFile(fs: FsModule, candidate: string): boolean {
   }
 }
 
-function isWindowsBatch(executable: string): boolean {
+export function isWindowsBatch(executable: string): boolean {
   const lower = executable.toLowerCase();
   return lower.endsWith('.cmd') || lower.endsWith('.bat');
 }
@@ -348,7 +348,7 @@ function isWindowsBatch(executable: string): boolean {
  * quoting bugs we are trying to avoid by switching to `shell: true`
  * in the first place.
  */
-function wrapWindowsArg(arg: string): string {
+export function wrapWindowsArg(arg: string): string {
   if (arg.length === 0) return '""';
   if (!/\s/.test(arg)) return arg;
   return `"${arg}"`;

@@ -10,15 +10,19 @@
  *     `session/cancel` and tear the transport down.
  *  2. **`session/update` notifications**: pipe through
  *     {@link adaptAcpUpdate} into {@link AgentEvent}s.
- *  3. **Permissions**: emit an `permission-request` event for the
- *     panel to surface; the actual decision is auto-allow for now
- *     (configurable when the modal lands).
+ *  3. **Permissions**: delegated to the injected `onPermissionRequest`
+ *     handler (typically backed by {@link PermissionQueue}). If no
+ *     handler is provided, AcpClient rejects all requests.
  *  4. **Errors / process exit**: emit `error` and `session-state`
- *     events so the user always sees something happened.
+ *     events so the user always sees something happened. The `onExit`
+ *     callback notifies AgentManager for active-map cleanup.
  *
  * `submitPrompt` is exposed for the host to call when the user types
  * a message into the panel input. The bus stays read-only; control
  * flow goes the other direction through this source.
+ *
+ * The source name is injected by the caller (default convention:
+ * `acp:<agentId>`) to avoid multi-agent naming conflicts on the bus.
  */
 
 import type { AgentEventPublisher, AgentEventSource } from '../agentEventSource.ts';
@@ -29,7 +33,16 @@ import {
   type AcpClientOptions,
   type AcpTransport,
 } from './acpClient.ts';
+import type { AcpFsHandlers } from './fsCapabilityHandler.ts';
 import type { AcpPermissionRequestParams, AcpPermissionResult } from './acpProtocol.ts';
+import type { AcpTerminalHandlers } from './terminalCapabilityHandler.ts';
+
+/** Info about a child process exit, forwarded to AgentManager. */
+export interface AcpExitInfo {
+  readonly code: number | null;
+  readonly signal: string | null;
+  readonly reason: string;
+}
 
 export interface AcpAgentSourceOptions {
   /** Stable name used by the bus. Pick something readable, e.g. `acp:opencode`. */
@@ -48,6 +61,23 @@ export interface AcpAgentSourceOptions {
    * `initialize` handshake.
    */
   clientInfo: AcpClientOptions['clientInfo'];
+  /**
+   * External permission handler. Delegates to PermissionQueue so
+   * the modal UI can present the request to the user. If omitted,
+   * AcpClient will reject all permission requests (Property 3.1).
+   */
+  onPermissionRequest?: (
+    params: AcpPermissionRequestParams,
+  ) => Promise<AcpPermissionResult>;
+  /** Injected fs capability handlers for read/write routing. */
+  fsHandler?: AcpFsHandlers;
+  /** Injected terminal capability handler for terminal/create routing. */
+  terminalHandler?: AcpTerminalHandlers;
+  /**
+   * Called when the underlying child process exits. Used by
+   * AgentManager for active-map cleanup and error event emission.
+   */
+  onExit?: (info: AcpExitInfo) => void;
 }
 
 export class AcpAgentSource implements AgentEventSource {
@@ -56,11 +86,16 @@ export class AcpAgentSource implements AgentEventSource {
   private readonly cwd: string;
   private readonly transportFactory: () => AcpTransport;
   private readonly clientInfo: AcpClientOptions['clientInfo'];
+  private readonly onPermissionRequest?: (
+    params: AcpPermissionRequestParams,
+  ) => Promise<AcpPermissionResult>;
+  private readonly fsHandler?: AcpFsHandlers;
+  private readonly terminalHandler?: AcpTerminalHandlers;
+  private readonly onExit?: (info: AcpExitInfo) => void;
 
   private client: AcpClient | null = null;
   private publish: AgentEventPublisher | null = null;
   private sessionId: AgentSessionId | null = null;
-  private nextPermissionRequestId = 1;
 
   constructor(options: AcpAgentSourceOptions) {
     this.name = options.name;
@@ -68,6 +103,10 @@ export class AcpAgentSource implements AgentEventSource {
     this.cwd = options.cwd;
     this.transportFactory = options.transportFactory;
     this.clientInfo = options.clientInfo;
+    this.onPermissionRequest = options.onPermissionRequest;
+    this.fsHandler = options.fsHandler;
+    this.terminalHandler = options.terminalHandler;
+    this.onExit = options.onExit;
   }
 
   async start(publish: AgentEventPublisher): Promise<void> {
@@ -108,10 +147,14 @@ export class AcpAgentSource implements AgentEventSource {
             this.publish(event);
           }
         },
-        onPermissionRequest: (params) => this.handlePermissionRequest(params),
+        onPermissionRequest: this.onPermissionRequest
+          ? (params) => this.onPermissionRequest!(params)
+          : undefined,
+        fsHandler: this.fsHandler,
+        terminalHandler: this.terminalHandler,
         onLog: (text) => this.emitLog(text),
         onError: (error) => this.emitError(error.message),
-        onClose: (reason) => this.emitClose(reason),
+        onClose: (reason) => this.handleClose(reason),
       },
     });
     this.client = client;
@@ -218,37 +261,30 @@ export class AcpAgentSource implements AgentEventSource {
    * Internals
    * ---------------------------------------------------------------*/
 
-  private handlePermissionRequest(
-    params: AcpPermissionRequestParams,
-  ): AcpPermissionResult {
-    if (this.publish && this.sessionId) {
-      const requestId = `${this.sessionId}:perm:${this.nextPermissionRequestId++}`;
-      this.publish({
-        kind: 'permission-request',
-        sessionId: this.sessionId,
-        requestId,
-        toolCallId: params.toolCall?.toolCallId,
-        message: params.toolCall?.title ?? 'Agent is requesting permission',
-        options: (params.options ?? []).map((option) => ({
-          id: option.optionId,
-          label: option.name,
-          kind: option.kind === 'allow_once' || option.kind === 'allow_always'
-            ? 'allow-once'
-            : option.kind === 'reject_once'
-              ? 'deny'
-              : option.kind === 'reject_always'
-                ? 'deny'
-                : 'allow',
-        })),
+  /**
+   * Handle transport close. Emits a session-state event and invokes
+   * the onExit callback so AgentManager can clean up the active map.
+   */
+  private handleClose(reason: string): void {
+    if (!this.publish || !this.sessionId) return;
+    this.publish({
+      kind: 'session-state',
+      sessionId: this.sessionId,
+      state: 'finished',
+      detail: reason,
+    });
+    if (this.onExit) {
+      // Parse exit code/signal from the reason string if available.
+      // The transport typically formats as "process exited (code N)"
+      // or "process killed (signal SIGTERM)".
+      const codeMatch = /exited?\s*\((?:code\s*)?(\d+)\)/i.exec(reason);
+      const signalMatch = /killed?\s*\((?:signal\s*)?(\w+)\)/i.exec(reason);
+      this.onExit({
+        code: codeMatch ? parseInt(codeMatch[1], 10) : null,
+        signal: signalMatch ? signalMatch[1] : null,
+        reason,
       });
     }
-    const allow = params.options?.find(
-      (option) => option.kind === 'allow_once' || option.kind === 'allow_always',
-    );
-    if (allow) {
-      return { outcome: { kind: 'selected', optionId: allow.optionId } };
-    }
-    return { outcome: { kind: 'cancelled' } };
   }
 
   private emitError(message: string): void {
@@ -270,16 +306,6 @@ export class AcpAgentSource implements AgentEventSource {
       sessionId: this.sessionId,
       channel: 'thought',
       delta: `${text}\n`,
-    });
-  }
-
-  private emitClose(reason: string): void {
-    if (!this.publish || !this.sessionId) return;
-    this.publish({
-      kind: 'session-state',
-      sessionId: this.sessionId,
-      state: 'finished',
-      detail: reason,
     });
   }
 }
