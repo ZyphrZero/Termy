@@ -13,13 +13,7 @@ import type { PermissionQueue } from '../../services/agentStream/permissionQueue
 import type { AgentSessionSnapshot } from '../../services/agentStream/agentSessionModel';
 import { renderAgentBrandIcon } from './agentBrandIcon';
 import { t } from '../../i18n';
-
-export interface ProviderTabConfig {
-  readonly id: string;
-  readonly label: string;
-  readonly icon?: string;
-  readonly fallbackIcon?: string;
-}
+import type { ProviderTabConfig } from './agentProviderTabs';
 
 export interface TabRenderContext {
   readonly providerTabsEl: HTMLElement;

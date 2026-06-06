@@ -42,7 +42,12 @@ import { renderAgentSnapshot, type AgentSnapshotRenderer } from './agentMarkdown
 import { createAgentSnapshotRenderer } from './agentMarkdownRendererFactory';
 import { enrichPromptWithContext } from '../../services/agent/panelContextEncoder';
 import type { AgentContextBridge } from '../../services/context/agentContextBridge';
-import { renderProviderTabs, renderStatusIndicator, type ProviderTabConfig, type TabRenderContext } from './agentOutputView.tabs';
+import {
+  renderProviderTabs,
+  renderStatusIndicator,
+  type TabRenderContext,
+} from './agentOutputView.tabs';
+import { buildProviderTabs, type ProviderTabConfig } from './agentProviderTabs';
 import { renderInputBar } from './agentOutputView.input';
 import { t } from '../../i18n';
 import { errorLog } from '../../utils/logger';
@@ -779,6 +784,7 @@ export class AgentOutputView extends ItemView {
       this.emptyStateEl = this.bodyEl.createDiv({ cls: 'termy-agent-empty' });
       this.emptyStateEl.createDiv({ cls: 'termy-agent-empty-title', text: t('agent.emptyTitle') });
       this.emptyStateEl.createDiv({ cls: 'termy-agent-empty-body', text: t('agent.emptyBody') });
+      this.updateInputDisabledState();
       return;
     }
 
@@ -949,19 +955,17 @@ export class AgentOutputView extends ItemView {
 
   private getProviderTabs(): ProviderTabConfig[] {
     const agents = this.settings?.getEnabledAgents() ?? [];
-    const tabs: ProviderTabConfig[] = this.terminalThreads
-      ? [{
+    return buildProviderTabs({
+      enabledAgents: agents,
+      terminalProvider: this.terminalThreads
+      ? {
         id: TERMINAL_PROVIDER_ID,
         label: t('agent.terminalProvider'),
         icon: 'terminal',
         fallbackIcon: 'terminal',
-      }]
-      : [];
-    return tabs.concat(agents.map((agent) => ({
-      id: agent.id,
-      label: agent.label,
-      icon: agent.icon,
-    })));
+      }
+      : null,
+    });
   }
 
   private isTerminalProviderSelected(): boolean {
