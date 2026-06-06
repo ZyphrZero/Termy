@@ -199,35 +199,6 @@ export const AI_LAUNCHER_CATALOG: readonly AiLauncherCatalogEntry[] = [
       win32: 'irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1 | iex',
     },
   },
-  {
-    presetId: 'deepseek-tui',
-    category: 'coding-agent',
-    // The CLI dispatcher binary is named `deepseek` (not
-    // `deepseek-tui` — that is the npm package name and the
-    // companion runtime binary). Detect by the dispatcher.
-    detectCommand: 'deepseek',
-    installDocsUrl: 'https://github.com/Hmbown/DeepSeek-TUI#install',
-    installCommands: {
-      // Upstream's recommended cross-platform path is the npm wrapper
-      // that downloads the matching prebuilt Rust binaries from the
-      // GitHub release. It works identically on macOS, Linux, and
-      // Windows, which keeps the install modal one-liner across the
-      // three desktop platforms Termy supports.
-      darwin: 'npm install -g deepseek-tui',
-      linux: 'npm install -g deepseek-tui',
-      win32: 'npm install -g deepseek-tui',
-    },
-    npmPackage: 'deepseek-tui',
-    versionRegistry: { kind: 'npm', package: 'deepseek-tui' },
-    // The dispatcher exposes `deepseek update` for in-place release
-    // binary updates regardless of how the user installed initially,
-    // matching DeepSeek TUI's documented update path.
-    upgradeCommands: {
-      darwin: 'deepseek update',
-      linux: 'deepseek update',
-      win32: 'deepseek update',
-    },
-  },
 ];
 
 const CATALOG_INDEX = new Map<string, AiLauncherCatalogEntry>(
