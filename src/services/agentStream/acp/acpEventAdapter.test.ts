@@ -125,6 +125,35 @@ test('adaptAcpUpdate maps tool_call_update with diff to a unified diff payload',
   }
 });
 
+test('adaptAcpUpdate accepts diff content with empty newText', () => {
+  const events = adaptAcpUpdate({
+    sessionId: 's1',
+    update: {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 't1',
+      status: 'completed',
+      content: [
+        {
+          type: 'diff',
+          path: 'src/deleted.ts',
+          oldText: 'old',
+          newText: '',
+        },
+      ],
+    },
+  });
+  assert.equal(events.length, 1);
+  const e = events[0];
+  if (e.kind === 'tool-call-update') {
+    assert.equal(e.status, 'completed');
+    assert.ok(e.diff);
+    assert.equal(e.diff?.path, 'src/deleted.ts');
+    assert.match(e.diff?.unified ?? '', /^-old$/m);
+  } else {
+    assert.fail('expected tool-call-update event');
+  }
+});
+
 test('adaptAcpUpdate maps plan entries to plan steps', () => {
   const events = adaptAcpUpdate({
     sessionId: 's1',

@@ -8,8 +8,8 @@
  * exported here (Req 2 AC 4 / 2 AC 7 / 2 AC 8).
  *
  * The three ids and their canonical order:
- *   1. `claude-code` — Anthropic Claude via the Zed-maintained ACP shim.
- *   2. `codex`       — OpenAI Codex via the Zed-maintained ACP shim.
+ *   1. `claude-code` — Anthropic Claude via the Zed-maintained ACP command.
+ *   2. `codex`       — OpenAI Codex via the Zed-maintained ACP command.
  *   3. `opencode`    — OpenCode's first-party ACP subcommand.
  *
  * Icons reference canonical lobehub keys (see
@@ -39,10 +39,9 @@ export const BUILT_IN_AGENT_IDS: readonly string[] = [
  *
  * Commands are split into `command` + `args` so the spawn layer can
  * forward them directly to `child_process.spawn` without re-parsing
- * a shell-quoted string. The Zed-maintained shims (`@zed-industries/
- * claude-code-acp` and `@zed-industries/codex-acp`) are launched via
- * `npx --yes` so users do not need a global install; the OpenCode and
- * Gemini CLIs ship their own ACP subcommand and are invoked directly.
+ * a shell-quoted string. Built-in ACP adapters are invoked through
+ * their installed commands, mirroring Zed's install-then-run model
+ * instead of using `npx` as a runtime launcher.
  *
  * All built-ins start `enabled: true`, `isBuiltIn: true`, and
  * `rememberPermissions: true` (Req 2 AC 1 / 2 AC 4).
@@ -51,8 +50,7 @@ export const BUILT_IN_AGENTS: readonly AgentConfig[] = [
   {
     id: 'claude-code',
     label: 'Claude Code',
-    command: 'npx',
-    args: ['--yes', '@zed-industries/claude-code-acp'],
+    command: 'claude-code-acp',
     icon: 'claudecode',
     enabled: true,
     isBuiltIn: true,
@@ -61,8 +59,7 @@ export const BUILT_IN_AGENTS: readonly AgentConfig[] = [
   {
     id: 'codex',
     label: 'Codex',
-    command: 'npx',
-    args: ['--yes', '@zed-industries/codex-acp'],
+    command: 'codex-acp',
     icon: 'codex',
     enabled: true,
     isBuiltIn: true,

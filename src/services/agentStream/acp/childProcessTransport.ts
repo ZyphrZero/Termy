@@ -32,6 +32,7 @@ import type {
 } from 'child_process';
 
 import type { AcpTransport } from './acpClient.ts';
+import { debugLog, debugTiming } from '../../../utils/logger.ts';
 
 type ChildProcessModule = typeof import('child_process');
 type FsModule = typeof import('fs');
@@ -75,6 +76,8 @@ export class AcpChildProcessTransport implements AcpTransport {
       return Promise.resolve();
     }
 
+    const startedAt = performance.now();
+    debugLog(`[AgentPerf][acp-transport] start command=${this.options.command}`);
     const childProcess = window.require('child_process') as ChildProcessModule;
     const fs = window.require('fs') as FsModule;
     const path = window.require('path') as PathModule;
@@ -85,6 +88,10 @@ export class AcpChildProcessTransport implements AcpTransport {
       env,
       fs,
       path,
+    );
+    debugTiming(
+      `[AgentPerf][acp-transport] resolve command=${this.options.command} found=${resolvedCommand ? 'yes' : 'no'}`,
+      startedAt,
     );
     if (!resolvedCommand) {
       return Promise.reject(
@@ -123,10 +130,16 @@ export class AcpChildProcessTransport implements AcpTransport {
     };
 
     return new Promise<void>((resolve, reject) => {
+      const spawnStartedAt = performance.now();
       let child: ChildProcessWithoutNullStreams;
       try {
         child = childProcess.spawn(spawnCommand, spawnArgs, spawnOptions);
       } catch (error) {
+        debugTiming(
+          `[AgentPerf][acp-transport] spawn threw command=${this.options.command}`,
+          spawnStartedAt,
+          error,
+        );
         reject(error instanceof Error ? error : new Error(String(error)));
         return;
       }
@@ -134,6 +147,11 @@ export class AcpChildProcessTransport implements AcpTransport {
       this.child = child;
 
       const onSpawnError = (error: Error): void => {
+        debugTiming(
+          `[AgentPerf][acp-transport] spawn error command=${this.options.command}`,
+          spawnStartedAt,
+          error,
+        );
         reject(error);
       };
       child.once('error', onSpawnError);
@@ -149,6 +167,10 @@ export class AcpChildProcessTransport implements AcpTransport {
         child.on('error', (error) => {
           this.emitClose(`agent process error: ${error.message}`);
         });
+        debugTiming(
+          `[AgentPerf][acp-transport] spawn ready command=${this.options.command}`,
+          spawnStartedAt,
+        );
         resolve();
       });
 
@@ -181,6 +203,10 @@ export class AcpChildProcessTransport implements AcpTransport {
         const reason = diagnostic.length > 0
           ? `${baseReason}\n${diagnostic}`
           : baseReason;
+        debugTiming(
+          `[AgentPerf][acp-transport] close command=${this.options.command} code=${code ?? 'null'} signal=${signal ?? 'null'}`,
+          startedAt,
+        );
         this.emitClose(reason);
       });
     });

@@ -55,7 +55,7 @@ import {
 } from './agentProviderSessions';
 import { renderInputBar } from './agentOutputView.input';
 import { t } from '../../i18n';
-import { errorLog } from '../../utils/logger';
+import { debugLog, debugTiming, debugTimingIfSlow, errorLog } from '../../utils/logger';
 import type { TerminalService } from '../../services/terminal/terminalService';
 import type { TerminalSettings } from '../../settings/settings';
 import {
@@ -68,6 +68,7 @@ import { RenameTerminalModal } from '../terminal/renameTerminalModal';
 export const AGENT_OUTPUT_VIEW_TYPE = 'termy-agent-output-view';
 const AGENT_OUTPUT_ICON = 'sparkles';
 const SESSION_LIST_REFRESH_INTERVAL_MS = 30_000;
+const SLOW_UI_OPERATION_MS = 50;
 const TERMINAL_PROVIDER_ID = 'terminal';
 
 export interface AgentOutputViewOptions {
@@ -138,7 +139,9 @@ export class AgentOutputView extends ItemView {
   // Data-driven state (Req 6 AC 1 / Property 6.1).
   private selectedAgentId: string | null = null;
   private readonly providerState: Map<string, ProviderState> = new Map();
-  private readonly loadedHistorySessions = new Set<AgentSessionId>();
+  private readonly retainedProviderSessionIds = new Set<AgentSessionId>();
+  private readonly pendingProviderSessionLoads = new Map<AgentSessionId, Promise<void>>();
+  private sessionLoadEpoch = 0;
 
   constructor(leaf: WorkspaceLeaf, options: AgentOutputViewOptions) {
     super(leaf);
@@ -172,18 +175,27 @@ export class AgentOutputView extends ItemView {
     contentEl.empty();
     contentEl.addClass('termy-agent-view');
     this.renderShell(contentEl);
+    this.sessionLoadEpoch += 1;
     this.model.resetAll();
     this.focusedSessionId = null;
     this.providerState.clear();
+    this.retainedProviderSessionIds.clear();
+    this.pendingProviderSessionLoads.clear();
 
     this.unsubscribeModel = this.model.subscribe(() => this.scheduleRender());
     this.unsubscribeBus = this.bus.subscribe((envelope) => {
-      try { this.model.apply(envelope); }
+      try {
+        this.model.apply(envelope);
+        this.handleAgentEventEnvelope(envelope.event);
+      }
       catch (error) { errorLog('[AgentOutputView] Failed to apply envelope:', error); }
     });
     this.unsubscribeAgentsChange = this.settings.onAgentsChange(() => this.handleAgentsChange());
     this.refreshActiveAgentSessions();
-    this.sessionsRefreshTimer = window.setInterval(() => this.refreshActiveAgentSessions(), SESSION_LIST_REFRESH_INTERVAL_MS);
+    this.sessionsRefreshTimer = window.setInterval(
+      () => this.refreshActiveAgentSessions(),
+      SESSION_LIST_REFRESH_INTERVAL_MS,
+    );
     this.scheduleRender();
     return Promise.resolve();
   }
@@ -195,14 +207,19 @@ export class AgentOutputView extends ItemView {
     if (this.unsubscribeAgentsChange) { this.unsubscribeAgentsChange(); this.unsubscribeAgentsChange = null; }
     if (this.sessionsRefreshTimer !== null) { window.clearInterval(this.sessionsRefreshTimer); this.sessionsRefreshTimer = null; }
     await this.terminalThreads?.dispose();
+    this.sessionLoadEpoch += 1;
+    this.retainedProviderSessionIds.clear();
+    this.pendingProviderSessionLoads.clear();
     this.contentEl.empty();
   }
 
   clear(): void {
+    this.sessionLoadEpoch += 1;
     this.model.resetAll();
     this.focusedSessionId = null;
     this.providerState.clear();
-    this.loadedHistorySessions.clear();
+    this.retainedProviderSessionIds.clear();
+    this.pendingProviderSessionLoads.clear();
     this.scheduleRender();
   }
 
@@ -319,6 +336,7 @@ export class AgentOutputView extends ItemView {
   /* ── Submit handling ──────────────────────────────────────────── */
 
   private async handleSubmit(text: string): Promise<void> {
+    const startedAt = performance.now();
     try {
       if (!this.selectedAgentId) {
         throw new Error('No agent provider selected');
@@ -341,9 +359,15 @@ export class AgentOutputView extends ItemView {
       if (!sessionId) {
         const vaultRoot = this.getVaultRoot();
         this.setProviderLoading(agentId, true);
+        const newSessionStartedAt = performance.now();
+        debugLog(`[AgentPerf][view] submit newSession start agent=${agentId}`);
         try {
           sessionId = await this.agentManager.newSession(agentId, { cwd: vaultRoot });
-          this.addLiveAgentSession(agentId, sessionId);
+          this.addLiveAgentSession(agentId, sessionId, vaultRoot);
+          debugTiming(
+            `[AgentPerf][view] submit newSession done agent=${agentId} session=${sessionId}`,
+            newSessionStartedAt,
+          );
         } finally {
           this.setProviderLoading(agentId, false);
         }
@@ -355,20 +379,19 @@ export class AgentOutputView extends ItemView {
       this.updateInputDisabledState(true);
 
       try {
-        if (this.loadedHistorySessions.has(internalId)) {
-          const cwd = this.getAgentSessionCwd(agentId, sessionId);
-          await this.agentManager.loadSessionAndSendPrompt(agentId, sessionId, {
-            cwd,
-            prompt: { enrichedPrompt, displayText },
-          });
-          this.loadedHistorySessions.delete(internalId);
-          return;
-        }
+        const sendStartedAt = performance.now();
+        debugLog(`[AgentPerf][view] submit sendPrompt start agent=${agentId} session=${sessionId}`);
         await this.agentManager.sendPrompt(agentId, sessionId, { enrichedPrompt, displayText });
+        debugTiming(
+          `[AgentPerf][view] submit sendPrompt done agent=${agentId} session=${sessionId}`,
+          sendStartedAt,
+        );
       } finally {
         this.updateInputDisabledState(false);
       }
+      debugTiming(`[AgentPerf][view] submit done agent=${agentId} session=${sessionId}`, startedAt);
     } catch (error) {
+      debugTiming('[AgentPerf][view] submit failed', startedAt, error);
       errorLog('[AgentOutputView] Failed to submit prompt:', error);
       new Notice(t('agent.noticeSubmitFailed'));
       this.updateInputDisabledState(false);
@@ -488,6 +511,7 @@ export class AgentOutputView extends ItemView {
   /* ── Session refresh ─────────────────────────────────────────── */
 
   private refreshActiveAgentSessions(): void {
+    const startedAt = performance.now();
     const providerIds = new Set(this.getProviderTabs().map((provider) => provider.id));
     if (providerIds.has(TERMINAL_PROVIDER_ID)) {
       this.refreshTerminalThreads();
@@ -496,25 +520,83 @@ export class AgentOutputView extends ItemView {
       if (providerId === TERMINAL_PROVIDER_ID) continue;
       this.refreshImportedProviderSessions(providerId);
     }
+    debugTimingIfSlow(
+      `[AgentPerf][view] refreshActiveAgentSessions slow providers=${providerIds.size}`,
+      startedAt,
+      SLOW_UI_OPERATION_MS,
+    );
   }
 
   /* ── Session loading ─────────────────────────────────────────── */
 
   private loadProviderThreadSession(providerId: string, threadId: string): void {
+    const startedAt = performance.now();
+    debugLog(`[AgentPerf][view] openThread start provider=${providerId} session=${threadId}`);
     const internalId = this.activateHistorySession(providerId, threadId);
+    if (this.retainedProviderSessionIds.has(internalId)) {
+      this.focusRetainedProviderSession(providerId, threadId);
+      debugTiming(`[AgentPerf][view] openThread retained provider=${providerId} session=${threadId}`, startedAt);
+      return;
+    }
+    const pending = this.pendingProviderSessionLoads.get(internalId);
+    if (pending) {
+      debugLog(`[AgentPerf][view] openThread join-pending provider=${providerId} session=${threadId}`);
+      this.scheduleRender();
+      this.renderSessionsList();
+      this.setBusyHint(t('agent.transcriptLoading'));
+      debugTiming(`[AgentPerf][view] openThread pending provider=${providerId} session=${threadId}`, startedAt);
+      return;
+    }
+    const load = this.startProviderThreadLoad(providerId, threadId, internalId);
+    this.pendingProviderSessionLoads.set(internalId, load);
+    void load
+      .catch((error) => new Notice(this.formatLoadFailure(error)))
+      .finally(() => {
+        if (this.pendingProviderSessionLoads.get(internalId) === load) {
+          this.pendingProviderSessionLoads.delete(internalId);
+        }
+      });
+    debugTiming(`[AgentPerf][view] openThread background provider=${providerId} session=${threadId}`, startedAt);
+  }
+
+  private async startProviderThreadLoad(
+    providerId: string,
+    threadId: string,
+    internalId: AgentSessionId,
+  ): Promise<void> {
+    const epoch = this.sessionLoadEpoch;
+    const cwd = this.getAgentSessionCwd(providerId, threadId);
+    const startedAt = performance.now();
+    debugLog(`[AgentPerf][view] loadThread start provider=${providerId} session=${threadId}`);
     this.model.reset(internalId);
     this.scheduleRender();
     this.renderSessionsList();
     this.setBusyHint(t('agent.transcriptLoading'));
     try {
-      const events = this.loadLocalTranscript(providerId, threadId);
-      this.model.applyEventsBatch(internalId, events);
-      this.loadedHistorySessions.add(internalId);
+      await this.agentManager.loadSession(providerId, threadId, { cwd });
+      if (this.sessionLoadEpoch === epoch && !this.isThreadArchived(providerId, threadId)) {
+        this.retainedProviderSessionIds.add(internalId);
+      }
       this.scheduleRender();
+      debugTiming(`[AgentPerf][view] loadThread done provider=${providerId} session=${threadId}`, startedAt);
     } catch (error) {
-      errorLog(`[AgentOutputView] ${providerId} loadTranscript failed:`, error);
+      this.retainedProviderSessionIds.delete(internalId);
+      debugTiming(`[AgentPerf][view] loadThread failed provider=${providerId} session=${threadId}`, startedAt, error);
+      errorLog(`[AgentOutputView] ${providerId} loadSession failed:`, error);
       throw error;
     } finally {
+      this.clearBusyHintFor(internalId);
+    }
+  }
+
+  private focusRetainedProviderSession(providerId: string, threadId: string): void {
+    this.activateHistorySession(providerId, threadId);
+    this.scheduleRender();
+    this.renderSessionsList();
+  }
+
+  private clearBusyHintFor(internalId: AgentSessionId): void {
+    if (this.focusedSessionId === internalId) {
       this.setBusyHint(null);
     }
   }
@@ -539,18 +621,32 @@ export class AgentOutputView extends ItemView {
     }
   }
 
-  private loadLocalTranscript(
-    providerId: string,
-    threadId: string,
-  ): AgentEvent[] {
-    const imported = this.getImportedHistoryService?.() ?? null;
-    if (!imported) {
-      throw new Error(t('agent.sessionsProviderUnavailable'));
+  private handleAgentEventEnvelope(event: AgentEvent): void {
+    if (event.kind !== 'session-state') return;
+    const parsed = parseProviderSessionId(event.sessionId);
+    if (!parsed) return;
+    const state = this.getProviderState(parsed.providerId);
+    if (event.state === 'finished') {
+      this.retainedProviderSessionIds.delete(event.sessionId);
+      if (state) {
+        state.sessions = state.sessions.map((session) => (
+          session.id === parsed.threadId && isLiveAgentSession(session)
+            ? persistedSessionFromLive(session)
+            : session
+        ));
+      }
+      this.renderSessionsList();
+      return;
     }
-    return imported.loadThread(providerId, threadId);
+    if (event.state === 'awaiting-input') {
+      if (this.isThreadArchived(parsed.providerId, parsed.threadId)) return;
+      this.retainedProviderSessionIds.add(event.sessionId);
+    }
   }
 
   private async importProviderThreads(providerId: string): Promise<void> {
+    const startedAt = performance.now();
+    debugLog(`[AgentPerf][view] importThreads start provider=${providerId}`);
     const history = this.getImportedHistoryService?.() ?? null;
     if (!history) {
       throw new Error(t('agent.sessionsProviderUnavailable'));
@@ -561,16 +657,22 @@ export class AgentOutputView extends ItemView {
     state.error = null;
     this.renderSessionsList();
     try {
+      const listStartedAt = performance.now();
       const sessions = await this.agentManager.listSessions(providerId, {});
+      debugTiming(
+        `[AgentPerf][view] importThreads list done provider=${providerId} sessions=${sessions.length}`,
+        listStartedAt,
+      );
       for (const session of sessions) {
         const cwd = requireAcpSessionCwd(session);
-        const events = await this.agentManager.importSessionTranscript(providerId, session.sessionId, { cwd });
-        history.saveThread(providerId, importedThreadFromAcpSession({ ...session, cwd }, events));
+        history.saveThread(providerId, importedThreadFromAcpSession({ ...session, cwd }));
       }
       state.sessions = mergeLiveAgentSessions(state.sessions, history.listThreads(providerId));
       state.error = null;
       new Notice(t('agent.threadsImported', { count: sessions.length }));
+      debugTiming(`[AgentPerf][view] importThreads done provider=${providerId} sessions=${sessions.length}`, startedAt);
     } catch (error) {
+      debugTiming(`[AgentPerf][view] importThreads failed provider=${providerId}`, startedAt, error);
       state.error = this.formatLoadFailure(error);
       throw error;
     } finally {
@@ -711,11 +813,7 @@ export class AgentOutputView extends ItemView {
     } else if (this.focusLiveAgentSession(thread.providerId, thread.threadId)) {
       return;
     } else {
-      try {
-        this.loadProviderThreadSession(thread.providerId, thread.threadId);
-      } catch (error) {
-        new Notice(this.formatLoadFailure(error));
-      }
+      this.loadProviderThreadSession(thread.providerId, thread.threadId);
     }
   }
 
@@ -730,9 +828,11 @@ export class AgentOutputView extends ItemView {
   }
 
   private renderNow(): void {
+    const startedAt = performance.now();
     if (!this.bodyEl) return;
     if (this.isTerminalProviderSelected()) {
       this.renderTerminalThreadBody();
+      debugTimingIfSlow('[AgentPerf][view] renderNow slow provider=terminal', startedAt, SLOW_UI_OPERATION_MS);
       return;
     }
     this.bodyEl.removeClass('is-terminal-thread');
@@ -761,6 +861,7 @@ export class AgentOutputView extends ItemView {
       this.emptyStateEl.createDiv({ cls: 'termy-agent-empty-title', text: t('agent.emptyTitle') });
       this.emptyStateEl.createDiv({ cls: 'termy-agent-empty-body', text: t('agent.emptyBody') });
       this.updateInputDisabledState();
+      debugTimingIfSlow('[AgentPerf][view] renderNow slow state=empty', startedAt, SLOW_UI_OPERATION_MS);
       return;
     }
 
@@ -789,6 +890,11 @@ export class AgentOutputView extends ItemView {
     }
     // Update input disabled state on each render (Property 6.3).
     this.updateInputDisabledState();
+    debugTimingIfSlow(
+      `[AgentPerf][view] renderNow slow provider=${this.selectedAgentId ?? 'none'} blocks=${snapshot.blocks.length}`,
+      startedAt,
+      SLOW_UI_OPERATION_MS,
+    );
   }
 
   private updateHeader(snapshot: AgentSessionSnapshot | null): void {
@@ -958,13 +1064,19 @@ export class AgentOutputView extends ItemView {
   }
 
   private clearArchivedAgentSelection(thread: ThreadPoolItem): void {
-    this.loadedHistorySessions.delete(sessionIdFor(thread.providerId, thread.threadId));
+    const internalId = sessionIdFor(thread.providerId, thread.threadId);
+    this.retainedProviderSessionIds.delete(internalId);
+    this.model.reset(internalId);
     const state = this.getProviderState(thread.providerId);
     if (state?.activeSessionId !== thread.threadId) return;
     state.activeSessionId = null;
     if (this.selectedAgentId === thread.providerId) {
       this.focusedSessionId = null;
     }
+  }
+
+  private isThreadArchived(providerId: string, threadId: string): boolean {
+    return this.settings.getAgentThreadMeta(providerId, threadId)?.archived === true;
   }
 
   private async writeRenamedThreadMeta(thread: ThreadPoolItem, title: string): Promise<void> {
@@ -994,18 +1106,19 @@ export class AgentOutputView extends ItemView {
     });
   }
 
-  private addLiveAgentSession(agentId: string, sessionId: string): void {
+  private addLiveAgentSession(agentId: string, sessionId: string, cwd: string): void {
     const state = this.ensureProviderState(agentId);
     const internalId = sessionIdFor(agentId, sessionId);
     state.sessions = upsertLiveAgentSession(state.sessions, {
       id: sessionId,
       title: this.settings.getAgent(agentId)?.label ?? agentId,
       updatedAt: Date.now(),
+      cwd,
       live: true,
     });
     state.activeSessionId = sessionId;
     this.focusedSessionId = internalId;
-    this.loadedHistorySessions.delete(internalId);
+    this.retainedProviderSessionIds.add(internalId);
   }
 
   private activateHistorySession(agentId: string, sessionId: string): AgentSessionId {
@@ -1034,7 +1147,6 @@ export class AgentOutputView extends ItemView {
     if (!session || !isLiveAgentSession(session)) return false;
     state.activeSessionId = sessionId;
     this.focusedSessionId = sessionIdFor(agentId, sessionId);
-    this.loadedHistorySessions.delete(this.focusedSessionId);
     this.scheduleRender();
     this.renderSessionsList();
     return true;
@@ -1261,6 +1373,27 @@ function sessionIdFor(agentId: string, externalId: string): AgentSessionId {
   return `${agentId}:${externalId}`;
 }
 
+function parseProviderSessionId(sessionId: AgentSessionId): { providerId: string; threadId: string } | null {
+  const colonIndex = sessionId.indexOf(':');
+  if (colonIndex <= 0 || colonIndex === sessionId.length - 1) {
+    return null;
+  }
+  return {
+    providerId: sessionId.slice(0, colonIndex),
+    threadId: sessionId.slice(colonIndex + 1),
+  };
+}
+
+function persistedSessionFromLive(session: LiveAgentSession): ImportedAgentThreadListItem {
+  return {
+    id: session.id,
+    title: session.title,
+    cwd: session.cwd,
+    updatedAt: session.updatedAt,
+    importedAt: session.updatedAt,
+  };
+}
+
 function parseAcpUpdatedAt(updatedAt: string | undefined): number {
   if (!updatedAt) {
     throw new Error('ACP session is missing updatedAt');
@@ -1282,17 +1415,13 @@ function requireAcpSessionCwd(session: { sessionId: string; cwd?: string }): str
 
 function importedThreadFromAcpSession(
   session: { sessionId: string; title?: string; cwd: string; updatedAt?: string },
-  events: readonly AgentEvent[],
-): ImportedAgentThreadListItem & {
-  readonly events: readonly AgentEvent[];
-} {
+): ImportedAgentThreadListItem {
   return {
     id: session.sessionId,
     ...(session.title !== undefined ? { title: session.title } : {}),
     cwd: session.cwd,
     updatedAt: parseAcpUpdatedAt(session.updatedAt),
     importedAt: Date.now(),
-    events,
   };
 }
 

@@ -1,5 +1,3 @@
-import type { AgentEvent } from '../agentStream/agentEventTypes.ts';
-
 type FsModule = typeof import('fs');
 type PathModule = typeof import('path');
 
@@ -9,7 +7,6 @@ export interface ImportedAgentThread {
   readonly cwd: string;
   readonly updatedAt: number;
   readonly importedAt: number;
-  readonly events: readonly AgentEvent[];
 }
 
 export interface ImportedAgentThreadListItem {
@@ -41,14 +38,14 @@ export class ImportedAgentThreadHistoryService {
     const store = this.readStore();
     const threads = store.providers[providerId] ?? [];
     return threads
-      .map(({ events: _events, ...thread }) => thread)
+      .map((thread) => ({
+        id: thread.id,
+        ...(thread.title !== undefined ? { title: thread.title } : {}),
+        cwd: thread.cwd,
+        updatedAt: thread.updatedAt,
+        importedAt: thread.importedAt,
+      }))
       .sort((left, right) => right.updatedAt - left.updatedAt);
-  }
-
-  loadThread(providerId: string, threadId: string): AgentEvent[] {
-    const thread = this.readThread(providerId, threadId);
-    const sessionId = `${providerId}:${threadId}`;
-    return thread.events.map((event) => ({ ...event, sessionId }));
   }
 
   saveThread(providerId: string, thread: ImportedAgentThread): void {
@@ -69,14 +66,6 @@ export class ImportedAgentThreadHistoryService {
 
   stop(): void {
     // File-backed service has no process or watcher to tear down.
-  }
-
-  private readThread(providerId: string, threadId: string): ImportedAgentThread {
-    const thread = this.readStore().providers[providerId]?.find((item) => item.id === threadId);
-    if (!thread) {
-      throw new Error(`Imported thread not found: ${providerId}/${threadId}`);
-    }
-    return thread;
   }
 
   private readStore(): StoreFile {

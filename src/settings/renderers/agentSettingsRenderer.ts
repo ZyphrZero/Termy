@@ -8,6 +8,14 @@ import type { RendererContext } from '../types';
 import type { AgentConfig, AgentConfigValidation } from '../../services/agentStream/agentConfig';
 import { validateAgentConfig } from '../../services/agentStream/agentConfig';
 import { BUILT_IN_AGENTS } from '../../services/agentStream/builtInAgents';
+import {
+  getAcpAgentInstallEntry,
+  isAcpAgentUsingRegistryCommand,
+} from '../../services/agentStream/acpAgentInstallRegistry';
+import {
+  detectCommandAvailability,
+  type CommandAvailability,
+} from '../../services/terminal/commandAvailability';
 import type { SettingsAccessor } from '../settingsAccessor';
 import { BaseSettingsRenderer } from './baseRenderer';
 import { t } from '../../i18n';
@@ -59,7 +67,8 @@ export class AgentSettingsRenderer extends BaseSettingsRenderer {
 
     // Label + command preview
     const infoEl = row.createDiv({ cls: 'agent-settings-row-info' });
-    infoEl.createDiv({ cls: 'agent-settings-row-label', text: agent.label });
+    const labelRowEl = infoEl.createDiv({ cls: 'agent-settings-row-label-row' });
+    labelRowEl.createDiv({ cls: 'agent-settings-row-label', text: agent.label });
     infoEl.createDiv({
       cls: 'agent-settings-row-command',
       text: [agent.command, ...(agent.args ?? [])].join(' '),
@@ -67,6 +76,7 @@ export class AgentSettingsRenderer extends BaseSettingsRenderer {
 
     // Action buttons
     const actionsEl = row.createDiv({ cls: 'agent-settings-row-actions' });
+    this.renderAcpAdapterControls(agent, labelRowEl, actionsEl);
     this.addIconBtn(actionsEl, 'pencil', 'settingsDetails.agents.editAgent', () => {
       this.openEditModal(agent);
     });
@@ -93,6 +103,64 @@ export class AgentSettingsRenderer extends BaseSettingsRenderer {
         void this.settingsAccessor?.resetAgentToBuiltIn(agent.id).then(() => this.rerender());
       });
     }
+  }
+
+  private renderAcpAdapterControls(
+    agent: AgentConfig,
+    labelRowEl: HTMLElement,
+    actionsEl: HTMLElement,
+  ): void {
+    const entry = getAcpAgentInstallEntry(agent.id);
+    if (!entry || !isAcpAgentUsingRegistryCommand(agent, entry)) return;
+
+    const badge = labelRowEl.createDiv({
+      cls: 'preset-scripts-menu-status-badge agent-settings-acp-status is-checking',
+      text: t('settingsDetails.agents.acpAdapterStatusChecking'),
+    });
+    const installBtn = this.addIconBtn(
+      actionsEl,
+      'download',
+      'settingsDetails.agents.installAcpAdapter',
+      () => {
+        this.context.plugin.openAcpAgentInstallModal(agent);
+      },
+    );
+    installBtn.addClass('agent-settings-acp-install');
+    installBtn.addClass('is-hidden');
+
+    void this.refreshAcpAdapterStatus(agent.command, badge, installBtn);
+  }
+
+  private async refreshAcpAdapterStatus(
+    command: string,
+    badge: HTMLElement,
+    installBtn: HTMLButtonElement,
+  ): Promise<void> {
+    const status = await detectCommandAvailability(command);
+    if (!badge.isConnected) return;
+    this.applyAcpAdapterStatus(badge, installBtn, status);
+  }
+
+  private applyAcpAdapterStatus(
+    badge: HTMLElement,
+    installBtn: HTMLButtonElement,
+    status: CommandAvailability,
+  ): void {
+    badge.removeClass('is-ready');
+    badge.removeClass('is-not-installed');
+    badge.removeClass('is-checking');
+    const missing = status === 'not-installed';
+    if (status === 'ready') {
+      badge.addClass('is-ready');
+      badge.setText(t('settingsDetails.agents.acpAdapterStatusReady'));
+    } else if (missing) {
+      badge.addClass('is-not-installed');
+      badge.setText(t('settingsDetails.agents.acpAdapterStatusMissing'));
+    } else {
+      badge.addClass('is-checking');
+      badge.setText(t('settingsDetails.agents.acpAdapterStatusUnknown'));
+    }
+    installBtn.toggleClass('is-hidden', !missing);
   }
 
   private addIconBtn(
@@ -133,7 +201,7 @@ export class AgentSettingsRenderer extends BaseSettingsRenderer {
   }
 
   private rerender(): void {
-    const card = this.context?.containerEl.querySelector('.agent-settings-list');
+    const card = this.context.containerEl.querySelector('.agent-settings-list');
     if (card instanceof HTMLElement) this.renderAgentRows(card);
   }
 

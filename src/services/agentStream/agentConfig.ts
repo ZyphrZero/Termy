@@ -104,6 +104,9 @@ export function validateAgentConfig(
   if (config.command.trim().length === 0) {
     errors.push({ field: 'command', messageKey: 'agent.error.commandEmpty' });
   }
+  if (config.command.trim().toLowerCase() === 'npx') {
+    errors.push({ field: 'command', messageKey: 'agent.error.commandNpx' });
+  }
   if (config.label.trim().length === 0) {
     errors.push({ field: 'label', messageKey: 'agent.error.labelEmpty' });
   }

@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { JsonRpcLineDecoder, encodeJsonRpcFrame } from './jsonRpcLine.ts';
-import { AcpClient, type AcpTransport } from './acpClient.ts';
+import {
+  AcpClient,
+  ACP_DEFAULT_REQUEST_TIMEOUT_MS,
+  ACP_SESSION_LOAD_REQUEST_TIMEOUT_MS,
+  type AcpTransport,
+} from './acpClient.ts';
 
 class FakeTransport implements AcpTransport {
   private dataListeners = new Set<(chunk: Buffer) => void>();
@@ -177,6 +182,36 @@ test('AcpClient.loadSession sends session/load and remembers the restored sessio
   transport.emit({ jsonrpc: '2.0', id: sent!.id, result: {} });
   await loadPromise;
   assert.equal(client.sessionId, 'sess-history');
+});
+
+test('AcpClient.loadSession uses the dedicated long timeout', async () => {
+  const transport = new FakeTransport();
+  const scheduled: number[] = [];
+  const client = new AcpClient({
+    transport,
+    clientInfo: { name: 'termy-test', version: '0.0.0' },
+    scheduleTimeout: (_callback, ms) => {
+      scheduled.push(ms);
+      return scheduled.length;
+    },
+    cancelTimeout: noopCancel,
+  });
+
+  const startPromise = client.start();
+  await new Promise((resolve) => setImmediate(resolve));
+  transport.emit({ jsonrpc: '2.0', id: 1, result: { protocolVersion: 1 } });
+  await startPromise;
+
+  const loadPromise = client.loadSession('sess-history', '/tmp/example');
+  await new Promise((resolve) => setImmediate(resolve));
+  const sent = transport.popLastSent();
+  transport.emit({ jsonrpc: '2.0', id: sent!.id, result: {} });
+  await loadPromise;
+
+  assert.deepEqual(scheduled, [
+    ACP_DEFAULT_REQUEST_TIMEOUT_MS,
+    ACP_SESSION_LOAD_REQUEST_TIMEOUT_MS,
+  ]);
 });
 
 test('AcpClient.listSessions sends session/list with cwd and cursor', async () => {

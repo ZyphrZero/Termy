@@ -34,13 +34,14 @@
  * spread strategy in `main.ts`.
  */
 
-import { BUILT_IN_AGENTS } from '@/services/agentStream/builtInAgents';
-import type { AgentConfig } from '@/services/agentStream/agentConfig';
+import { BUILT_IN_AGENTS } from '../services/agentStream/builtInAgents.ts';
+import type { AgentConfig } from '../services/agentStream/agentConfig';
+import { getAcpAgentInstallEntry } from '../services/agentStream/acpAgentInstallRegistry.ts';
 import type { PermissionRule } from './types';
 import {
   DEFAULT_TERMINAL_SETTINGS,
   type TerminalSettings,
-} from './settings';
+} from './settings.ts';
 
 /**
  * Apply default values to a partial settings record loaded from disk.
@@ -67,7 +68,7 @@ export function applyDefaults(
     // missing the field entirely OR provides an empty array. Both
     // conditions count as "fresh install" per Req 2 AC 9.
     agents: hasNonEmptyArray(source.agents)
-      ? source.agents.map(cloneAgentConfig)
+      ? source.agents.map(normalizeAgentConfig)
       : BUILT_IN_AGENTS.map(cloneAgentConfig),
     permissionRules: hasNonEmptyArray(source.permissionRules)
       ? source.permissionRules.map(clonePermissionRule)
@@ -118,5 +119,19 @@ function clonePermissionRule(rule: PermissionRule): PermissionRule {
     pathPrefix: rule.pathPrefix,
     decision: rule.decision,
     createdAt: rule.createdAt,
+  };
+}
+
+function normalizeAgentConfig(agent: AgentConfig): AgentConfig {
+  const cloned = cloneAgentConfig(agent);
+  if (!cloned.isBuiltIn) return cloned;
+
+  const entry = getAcpAgentInstallEntry(cloned.id);
+  if (!entry) return cloned;
+
+  return {
+    ...cloned,
+    command: entry.command,
+    args: entry.args ? [...entry.args] : undefined,
   };
 }

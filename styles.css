@@ -2221,6 +2221,21 @@
   color: var(--text-faint);
 }
 
+.agent-settings-row-label-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.agent-settings-acp-status {
+  margin-left: 0;
+}
+
+.agent-settings-acp-install.is-hidden {
+  display: none;
+}
+
 /* Inline launcher version label rendered next to the readiness badge in
    both the status bar menu and the settings page. Hidden until a probe
    has resolved a local version. */

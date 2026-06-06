@@ -15,6 +15,7 @@ test('upsertLiveAgentSession prepends the live session and replaces duplicate id
     id: 'sess-live',
     title: 'Claude Code',
     updatedAt: 2000,
+    cwd: '/workspace/example',
     live: true,
   };
   const result = upsertLiveAgentSession([
@@ -33,6 +34,7 @@ test('mergeLiveAgentSessions keeps live sessions across history refreshes', () =
     id: 'sess-live',
     title: 'Claude Code',
     updatedAt: 2000,
+    cwd: '/workspace/example',
     live: true,
   };
   const result = mergeLiveAgentSessions([
@@ -54,6 +56,7 @@ test('isLiveAgentSession distinguishes live rows from persisted history', () => 
     id: 'live',
     title: 'Live',
     updatedAt: 1,
+    cwd: '/workspace/example',
     live: true,
   };
 

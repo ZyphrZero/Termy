@@ -346,6 +346,12 @@ export interface TranslationKeys {
       moveUp: string;
       moveDown: string;
       resetAgent: string;
+      installAcpAdapter: string;
+      acpAdapterStatusReady: string;
+      acpAdapterStatusMissing: string;
+      acpAdapterStatusChecking: string;
+      acpAdapterStatusUnknown: string;
+      acpAdapterTitleInstall: string;
       cannotDeleteBuiltIn: string;
       editAgentTitle: string;
       addAgentTitle: string;
@@ -569,6 +575,7 @@ export interface TranslationKeys {
       idFormat: string;
       idDuplicate: string;
       commandEmpty: string;
+      commandNpx: string;
       labelEmpty: string;
     };
     stateIdle: string;

@@ -353,6 +353,13 @@ function requireString(value: unknown, fieldName: string): string {
   return value;
 }
 
+function requireStringValue(value: unknown, fieldName: string): string {
+  if (typeof value !== 'string') {
+    throw new Error(`${fieldName} must be a string`);
+  }
+  return value;
+}
+
 function requireArray(value: unknown, fieldName: string): unknown[] {
   if (!Array.isArray(value)) {
     throw new Error(`${fieldName} must be an array`);
@@ -369,7 +376,7 @@ function requireDiffToolContent(entry: AcpToolCallContent): {
   return {
     path: requireString(candidate.path, 'ACP diff content path'),
     oldText: candidate.oldText,
-    newText: requireString(candidate.newText, 'ACP diff content newText'),
+    newText: requireStringValue(candidate.newText, 'ACP diff content newText'),
   };
 }
 

@@ -7,6 +7,7 @@ import {
   type PresetWorkflowAction,
   type TerminalSettings,
 } from './settings/settings';
+import type { AgentConfig } from './services/agentStream/agentConfig';
 import { applyDefaults } from './settings/settingsDefaults';
 import {
   DefaultSettingsAccessor,
@@ -81,6 +82,12 @@ import {
   clearEnrichedShellEnvCache,
   getEnrichedShellEnv,
 } from './services/terminal/enrichedShellEnv';
+import {
+  getAcpAgentInstallEntry,
+  getAcpInstallCommandForPlatform,
+  isAcpAgentUsingRegistryCommand,
+  type AcpAgentInstallEntry,
+} from './services/agentStream/acpAgentInstallRegistry';
 import { LauncherInstallModal } from './ui/terminal/launcherInstallModal';
 import { resolveChangelogSection } from './utils/changelog';
 import embeddedChangelogContent from '../CHANGELOG.md';
@@ -2317,6 +2324,28 @@ export default class TerminalPlugin extends Plugin {
     return true;
   }
 
+  openAcpAgentInstallModal(agent: AgentConfig): boolean {
+    const entry = getAcpAgentInstallEntry(agent.id);
+    if (!entry || !isAcpAgentUsingRegistryCommand(agent, entry)) return false;
+
+    const installCommand = getAcpInstallCommandForPlatform(entry);
+    const modal = new LauncherInstallModal(this.app, {
+      name: entry.label,
+      command: entry.command,
+      docsUrl: entry.installDocsUrl,
+      installCommand,
+      installCommandKind: 'launcher',
+      nodeRuntime: entry.npmPackage ? this._nodeRuntimeSnapshot : null,
+      onRunInstall: installCommand
+        ? () => {
+            void this.runAcpAgentInstallCommand(entry, installCommand);
+          }
+        : undefined,
+    });
+    modal.open();
+    return true;
+  }
+
   /**
    * Refresh the AI launcher status snapshot in the background. The menu reads
    * {@link _aiLauncherSnapshots} synchronously when rendering; this method
@@ -2848,30 +2877,15 @@ export default class TerminalPlugin extends Plugin {
     intent: 'install' | 'upgrade',
   ): Promise<void> {
     try {
-      await this.activateTerminalView(this.getLeafForNewTerminal());
-      const terminalView = this.getActiveTerminalView();
-      if (!terminalView) {
-        new Notice(t('notices.presetScript.terminalUnavailable'));
-        return;
-      }
-
-      const terminal = await terminalView.waitForTerminalInstance();
       const title = intent === 'install'
         ? t('settingsDetails.terminal.aiLauncherTitleInstall', { name: script.name || entry.presetId })
         : t('settingsDetails.terminal.aiLauncherTitleUpdate', { name: script.name || entry.presetId });
-      terminal.setTitle(title);
-      this.updateLeafHeader(terminalView.leaf);
-
-      // Capture the version we'd consider "stale" — anything different
-      // from this signals the upgrade landed. Always null for install.
       const before =
         intent === 'upgrade'
           ? this._aiLauncherSnapshots.get(entry.presetId)?.local ?? null
           : null;
 
-      const normalized = this.normalizePresetScriptCommand(command);
-      terminal.write(normalized);
-      this.focusTerminalView(terminalView, terminal);
+      await this.runCommandInNewTerminal(command, title);
 
       // Watchdog: poll the local probe (cheap — just spawns
       // `<cmd> --version`) until the readiness flips or we hit the cap.
@@ -2880,6 +2894,40 @@ export default class TerminalPlugin extends Plugin {
       const message = error instanceof Error ? error.message : String(error);
       new Notice(t('notices.presetScript.runFailed', { message }));
     }
+  }
+
+  private async runAcpAgentInstallCommand(
+    entry: AcpAgentInstallEntry,
+    command: string,
+  ): Promise<void> {
+    try {
+      await this.runCommandInNewTerminal(
+        command,
+        t('settingsDetails.agents.acpAdapterTitleInstall', { name: entry.label }),
+      );
+      if (entry.command) {
+        clearCommandAvailabilityCache(entry.command);
+        clearCommandVersionCache(entry.command);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      new Notice(t('notices.presetScript.runFailed', { message }));
+    }
+  }
+
+  private async runCommandInNewTerminal(command: string, title: string): Promise<void> {
+    await this.activateTerminalView(this.getLeafForNewTerminal());
+    const terminalView = this.getActiveTerminalView();
+    if (!terminalView) {
+      new Notice(t('notices.presetScript.terminalUnavailable'));
+      return;
+    }
+
+    const terminal = await terminalView.waitForTerminalInstance();
+    terminal.setTitle(title);
+    this.updateLeafHeader(terminalView.leaf);
+    terminal.write(this.normalizePresetScriptCommand(command));
+    this.focusTerminalView(terminalView, terminal);
   }
 
   /**

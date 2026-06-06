@@ -110,12 +110,27 @@ test('AcpAgentSource creates distinct ACP sessions and publishes panel-namespace
   const prompt = transport.popSent();
   assert.equal(prompt.method, 'session/prompt');
   assert.equal((prompt.params as { sessionId?: string }).sessionId, 'server-2');
+  transport.emit({
+    jsonrpc: '2.0',
+    method: 'session/update',
+    params: {
+      sessionId: 'server-2',
+      update: {
+        sessionUpdate: 'user_message_chunk',
+        content: { type: 'text', text: 'enriched prompt payload' },
+      },
+    },
+  });
   transport.emit({ jsonrpc: '2.0', id: prompt.id, result: { stopReason: 'end_turn' } });
   await promptDone;
+  const echoedPrompt = events.find((event) => (
+    event.kind === 'text' && event.delta.includes('enriched prompt payload')
+  ));
+  assert.equal(echoedPrompt, undefined);
   assert.equal(events.at(-1)?.sessionId, 'claude-code:server-2');
 });
 
-test('AcpAgentSource loads a persisted session without publishing replayed history', async () => {
+test('AcpAgentSource loads a persisted session and publishes replayed history', async () => {
   const transport = new FakeTransport();
   const events: AgentEvent[] = [];
   const source = new AcpAgentSource({
@@ -154,41 +169,6 @@ test('AcpAgentSource loads a persisted session without publishing replayed histo
       },
     },
   });
-  transport.emit({ jsonrpc: '2.0', id: loadRequest.id, result: {} });
-  await load;
-
-  const userEvent = events.find((event) => event.kind === 'text' && event.delta.includes('old question'));
-  assert.equal(userEvent, undefined);
-  assert.equal(events.at(-1)?.sessionId, 'claude-code:history-1');
-});
-
-test('AcpAgentSource imports transcript updates without publishing them to the bus', async () => {
-  const transport = new FakeTransport();
-  const events: AgentEvent[] = [];
-  const source = new AcpAgentSource({
-    name: 'acp:opencode',
-    agentId: 'opencode',
-    agentLabel: 'OpenCode',
-    cwd: '/tmp/example',
-    transportFactory: () => transport,
-    clientInfo: { name: 'termy-test', version: '0.0.0' },
-    testHooks: {
-      scheduleTimeout: noopSchedule,
-      cancelTimeout: noopCancel,
-    },
-  });
-
-  const start = source.start((event) => events.push(event));
-  await tick();
-  const initialize = transport.popSent();
-  transport.emit({ jsonrpc: '2.0', id: initialize.id, result: { protocolVersion: 1 } });
-  await start;
-
-  const imported = source.importSessionTranscript('history-1', '/tmp/example');
-  await tick();
-  const loadRequest = transport.popSent();
-  assert.equal(loadRequest.method, 'session/load');
-
   transport.emit({
     jsonrpc: '2.0',
     method: 'session/update',
@@ -200,25 +180,48 @@ test('AcpAgentSource imports transcript updates without publishing them to the b
       },
     },
   });
-  transport.emit({
-    jsonrpc: '2.0',
-    method: 'session/update',
-    params: {
-      sessionId: 'history-1',
-      update: {
-        sessionUpdate: 'user_message_chunk',
-        content: { type: 'text', text: 'imported question' },
-      },
+  transport.emit({ jsonrpc: '2.0', id: loadRequest.id, result: {} });
+  await load;
+
+  const textEvents = events.filter((event) => event.kind === 'text');
+  assert.equal(textEvents.length, 2);
+  assert.equal(textEvents[0]?.sessionId, 'claude-code:history-1');
+  assert.match(textEvents[0]?.delta ?? '', /old question/);
+  assert.match(textEvents[1]?.delta ?? '', /imported reply/);
+  assert.equal(events.at(-1)?.sessionId, 'claude-code:history-1');
+});
+
+test('AcpAgentSource shares concurrent loads for the same persisted session', async () => {
+  const transport = new FakeTransport();
+  const source = new AcpAgentSource({
+    name: 'acp:claude-code',
+    agentId: 'claude-code',
+    agentLabel: 'Claude Code',
+    cwd: '/tmp/example',
+    transportFactory: () => transport,
+    clientInfo: { name: 'termy-test', version: '0.0.0' },
+    testHooks: {
+      scheduleTimeout: noopSchedule,
+      cancelTimeout: noopCancel,
     },
   });
-  transport.emit({ jsonrpc: '2.0', id: loadRequest.id, result: {} });
 
-  const importedEvents = await imported;
-  assert.equal(events.length, 0);
-  assert.equal(importedEvents.length, 3);
-  assert.equal(importedEvents[0]?.sessionId, 'opencode:history-1');
-  assert.equal(importedEvents[0]?.kind, 'text');
-  assert.equal(importedEvents[2]?.kind, 'text-done');
+  const start = source.start(() => undefined);
+  await tick();
+  const initialize = transport.popSent();
+  transport.emit({ jsonrpc: '2.0', id: initialize.id, result: { protocolVersion: 1 } });
+  await start;
+
+  const first = source.loadSession('history-1', '/tmp/example');
+  const second = source.loadSession('history-1', '/tmp/example');
+  await tick();
+
+  const loadRequest = transport.popSent();
+  assert.equal(loadRequest.method, 'session/load');
+  assert.equal(transport.sent.length, 0);
+
+  transport.emit({ jsonrpc: '2.0', id: loadRequest.id, result: {} });
+  await Promise.all([first, second]);
 });
 
 test('AcpAgentSource lists persisted sessions without adding a cwd filter', async () => {

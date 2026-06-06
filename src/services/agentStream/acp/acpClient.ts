@@ -50,6 +50,7 @@ import {
 } from './acpProtocol.ts';
 import type { AcpFsHandlers, AcpFsReadRequest, AcpFsWriteRequest } from './fsCapabilityHandler.ts';
 import type { AcpTerminalHandlers, AcpTerminalCreateRequest } from './terminalCapabilityHandler.ts';
+import { debugLog, debugTiming } from '../../../utils/logger.ts';
 
 /* -----------------------------------------------------------------
  * Transport abstraction
@@ -122,7 +123,8 @@ export interface AcpClientOptions {
   cancelTimeout?: (handle: unknown) => void;
 }
 
-const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+export const ACP_DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+export const ACP_SESSION_LOAD_REQUEST_TIMEOUT_MS = 120_000;
 
 export type AcpClientTestHooks = Pick<
   AcpClientOptions,
@@ -133,6 +135,8 @@ interface PendingRequest {
   resolve: (result: unknown) => void;
   reject: (error: Error) => void;
   timeoutHandle: unknown;
+  method: string;
+  startedAt: number;
 }
 
 export class AcpClient {
@@ -158,7 +162,7 @@ export class AcpClient {
     this.transport = options.transport;
     this.callbacks = options.callbacks ?? {};
     this.clientInfo = options.clientInfo;
-    this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? ACP_DEFAULT_REQUEST_TIMEOUT_MS;
     const defaultSchedule = (cb: () => void, ms: number): unknown => window.setTimeout(cb, ms);
     const defaultCancel = (handle: unknown): void => {
       if (handle !== null && handle !== undefined) {
@@ -178,6 +182,8 @@ export class AcpClient {
       return this.initializeResult;
     }
     this.started = true;
+    const startedAt = performance.now();
+    debugLog('[AgentPerf][acp-client] start transport');
 
     this.detachData = this.transport.onData((chunk) => this.handleIncoming(chunk));
     this.detachLog = this.transport.onLog((text) => {
@@ -188,6 +194,7 @@ export class AcpClient {
     });
 
     await this.transport.start();
+    debugTiming('[AgentPerf][acp-client] transport started', startedAt);
 
     const result = await this.request<AcpInitializeResult>(ACP_METHODS.initialize, {
       protocolVersion: ACP_LATEST_PROTOCOL_VERSION,
@@ -226,6 +233,8 @@ export class AcpClient {
       sessionId,
       cwd,
       mcpServers: [],
+    }, {
+      timeoutMs: ACP_SESSION_LOAD_REQUEST_TIMEOUT_MS,
     });
     this.activeSessionId = sessionId;
   }
@@ -278,23 +287,36 @@ export class AcpClient {
    * Internals
    * ---------------------------------------------------------------*/
 
-  private async request<TResult>(method: string, params: unknown): Promise<TResult> {
+  private async request<TResult>(
+    method: string,
+    params: unknown,
+    options: { readonly timeoutMs?: number } = {},
+  ): Promise<TResult> {
     if (this.closed) {
       throw new Error('ACP client is closed');
     }
     const id = this.nextRequestId++;
+    const timeoutMs = options.timeoutMs ?? this.requestTimeoutMs;
+    const startedAt = performance.now();
+    debugLog(`[AgentPerf][acp-client] request start id=${id} method=${method} timeout=${timeoutMs}`);
     return new Promise<TResult>((resolve, reject) => {
       const timeoutHandle = this.scheduleTimeout(() => {
         const pending = this.pending.get(id);
         if (!pending) return;
         this.pending.delete(id);
-        reject(new Error(`ACP request \`${method}\` timed out after ${this.requestTimeoutMs}ms`));
-      }, this.requestTimeoutMs);
+        debugTiming(
+          `[AgentPerf][acp-client] request timeout id=${id} method=${method}`,
+          startedAt,
+        );
+        reject(new Error(`ACP request \`${method}\` timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
 
       this.pending.set(id, {
         resolve: (value) => resolve(value as TResult),
         reject,
         timeoutHandle,
+        method,
+        startedAt,
       });
 
       try {
@@ -360,9 +382,18 @@ export class AcpClient {
 
     if (message.error) {
       const reason = message.error.message ?? 'Agent returned an error';
+      debugTiming(
+        `[AgentPerf][acp-client] request error id=${message.id} method=${pending.method}`,
+        pending.startedAt,
+        reason,
+      );
       pending.reject(new Error(`ACP error (${message.error.code ?? '?'}): ${reason}`));
       return;
     }
+    debugTiming(
+      `[AgentPerf][acp-client] request done id=${message.id} method=${pending.method}`,
+      pending.startedAt,
+    );
     pending.resolve(message.result ?? {});
   }
 

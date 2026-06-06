@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import { ImportedAgentThreadHistoryService } from './importedAgentThreadHistoryService.ts';
 
-test('ImportedAgentThreadHistoryService stores provider-owned imported transcripts', () => {
+test('ImportedAgentThreadHistoryService stores provider-owned imported thread metadata', () => {
   const pluginDir = fs.mkdtempSync(path.join(os.tmpdir(), 'termy-imported-history-'));
   const previousWindow = globalThis.window;
   try {
@@ -28,14 +28,6 @@ test('ImportedAgentThreadHistoryService stores provider-owned imported transcrip
       cwd: '/tmp/example',
       updatedAt: 100,
       importedAt: 1000,
-      events: [
-        {
-          kind: 'text',
-          sessionId: 'opencode:older',
-          channel: 'final',
-          delta: 'old',
-        },
-      ],
     });
     service.saveThread('opencode', {
       id: 'newer',
@@ -43,14 +35,6 @@ test('ImportedAgentThreadHistoryService stores provider-owned imported transcrip
       cwd: '/tmp/example',
       updatedAt: 300,
       importedAt: 1001,
-      events: [
-        {
-          kind: 'text',
-          sessionId: 'opencode:newer',
-          channel: 'final',
-          delta: 'new',
-        },
-      ],
     });
     service.saveThread('opencode', {
       id: 'older',
@@ -58,14 +42,6 @@ test('ImportedAgentThreadHistoryService stores provider-owned imported transcrip
       cwd: '/tmp/example',
       updatedAt: 400,
       importedAt: 1002,
-      events: [
-        {
-          kind: 'text',
-          sessionId: 'opencode:older',
-          channel: 'final',
-          delta: 'updated',
-        },
-      ],
     });
 
     assert.deepEqual(
@@ -73,11 +49,6 @@ test('ImportedAgentThreadHistoryService stores provider-owned imported transcrip
       ['older', 'newer'],
     );
     assert.equal(service.listThreads('opencode')[0]?.title, 'Older renamed by source');
-    assert.equal(service.loadThread('opencode', 'older')[0]?.kind, 'text');
-    assert.equal(
-      (service.loadThread('opencode', 'older')[0] as { delta?: string } | undefined)?.delta,
-      'updated',
-    );
     assert.deepEqual(service.listThreads('claude-code'), []);
   } finally {
     globalThis.window = previousWindow;

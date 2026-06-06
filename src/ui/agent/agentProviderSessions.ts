@@ -12,6 +12,7 @@ export interface LiveAgentSession {
   readonly id: string;
   readonly title: string;
   readonly updatedAt: number;
+  readonly cwd: string;
   readonly live: true;
 }
 

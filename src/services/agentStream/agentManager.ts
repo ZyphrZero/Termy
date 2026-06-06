@@ -17,8 +17,9 @@
  */
 
 import { FileSystemAdapter } from 'obsidian';
+import * as fs from 'fs';
+import * as path from 'path';
 import type { AgentEventBus } from './agentEventBus';
-import type { AgentEvent } from './agentEventTypes';
 import type { AcpSessionInfo } from './acp/acpProtocol';
 import type { SettingsAccessor } from '@/settings/settingsAccessor';
 import type { PermissionQueue } from './permissionQueue';
@@ -27,10 +28,16 @@ import type { TerminalCapabilityHandler } from './acp/terminalCapabilityHandler'
 import type { AcpExitInfo } from './acp/acpAgentSource';
 import { AcpAgentSource } from './acp/acpAgentSource';
 import type { AcpClientOptions } from './acp/acpClient';
-import { AcpChildProcessTransport } from './acp/childProcessTransport';
-import type { AgentDiff } from './agentConfig';
-import { debugLog } from '@/utils/logger';
+import { AcpChildProcessTransport, resolveExecutableOnPath } from './acp/childProcessTransport';
+import type { AgentConfig, AgentDiff } from './agentConfig';
+import { debugLog, debugTiming } from '@/utils/logger';
 import { AgentOperationTracker } from './agentOperationTracker';
+import { buildAgentProcessEnv } from './agentProcessEnv';
+import {
+  getAcpAgentInstallEntry,
+  getAcpInstallCommandForPlatform,
+  isAcpAgentUsingRegistryCommand,
+} from './acpAgentInstallRegistry';
 
 /* ---- Public types ------------------------------------------------*/
 
@@ -61,6 +68,7 @@ interface ActiveAgent {
 export class AgentManager {
   private readonly active = new Map<string, ActiveAgent>();
   private readonly inflight = new Map<string, Promise<ActiveAgent>>();
+  private readonly pendingSessionLoads = new Map<string, Promise<void>>();
   private readonly operations = new AgentOperationTracker();
   private readonly configUnsub: () => void;
   private disposed = false;
@@ -99,11 +107,17 @@ export class AgentManager {
 
     // Reuse existing active connection (Req 1 AC 2)
     const existing = this.active.get(agentId);
-    if (existing) return existing;
+    if (existing) {
+      debugLog(`[AgentPerf][manager] ensureStarted reuse agent=${agentId}`);
+      return existing;
+    }
 
     // Share in-flight Promise for concurrent calls (Req 1 AC 7)
     const pending = this.inflight.get(agentId);
-    if (pending) return pending;
+    if (pending) {
+      debugLog(`[AgentPerf][manager] ensureStarted join-pending agent=${agentId}`);
+      return pending;
+    }
 
     const config = this.settings.getAgent(agentId);
     if (!config || !config.enabled) {
@@ -120,7 +134,11 @@ export class AgentManager {
 
     const cwd = this.vaultAdapter.getBasePath();
     const sourceName = `acp:${agentId}`;
+    const env = buildAgentProcessEnv(process.env, config.env);
+    this.assertInstalledAcpCommand(config, env);
 
+    const startedAt = performance.now();
+    debugLog(`[AgentPerf][manager] ensureStarted start agent=${agentId}`);
     const startPromise = (async (): Promise<ActiveAgent> => {
       const source = new AcpAgentSource({
         name: sourceName,
@@ -131,9 +149,7 @@ export class AgentManager {
           command: config.command,
           args: config.args ? [...config.args] : [],
           cwd,
-          env: config.env
-            ? { ...process.env, ...config.env }
-            : undefined,
+          env,
         }),
         clientInfo: this.clientInfo,
         onPermissionRequest: async (params) => {
@@ -146,7 +162,12 @@ export class AgentManager {
       });
 
       // Register with bus — this calls source.start() internally
+      const addSourceStartedAt = performance.now();
       await this.bus.addSource(source);
+      debugTiming(
+        `[AgentPerf][manager] bus.addSource done agent=${agentId}`,
+        addSourceStartedAt,
+      );
 
       const active: ActiveAgent = {
         agentId,
@@ -156,6 +177,7 @@ export class AgentManager {
       };
       this.active.set(agentId, active);
       debugLog(`[AgentManager] started agent "${agentId}" as "${sourceName}"`);
+      debugTiming(`[AgentPerf][manager] ensureStarted done agent=${agentId}`, startedAt);
       return active;
     })();
 
@@ -198,6 +220,7 @@ export class AgentManager {
     await Promise.allSettled(ids.map((id) => this.stop(id)));
     this.active.clear();
     this.inflight.clear();
+    this.pendingSessionLoads.clear();
     debugLog('[AgentManager] stopAll complete');
   }
 
@@ -206,19 +229,19 @@ export class AgentManager {
    * if not already running.
    */
   async newSession(agentId: string, opts: { cwd: string }): Promise<string> {
-    return this.withActiveAgent(agentId, (active) => active.source.newSession(opts.cwd));
+    return this.withTimedActiveAgent(
+      agentId,
+      'newSession',
+      (active) => active.source.newSession(opts.cwd),
+    );
   }
 
   async listSessions(agentId: string, opts: { cwd?: string }): Promise<AcpSessionInfo[]> {
-    return this.withActiveAgent(agentId, (active) => active.source.listSessions(opts));
-  }
-
-  async importSessionTranscript(
-    agentId: string,
-    sessionId: string,
-    opts: { cwd: string },
-  ): Promise<AgentEvent[]> {
-    return this.withActiveAgent(agentId, (active) => active.source.importSessionTranscript(sessionId, opts.cwd));
+    return this.withTimedActiveAgent(
+      agentId,
+      'listSessions',
+      (active) => active.source.listSessions(opts),
+    );
   }
 
   /**
@@ -226,21 +249,25 @@ export class AgentManager {
    * agent if needed, then asks the agent to reload its own context.
    */
   async loadSession(agentId: string, sessionId: string, opts: { cwd: string }): Promise<void> {
-    await this.withActiveAgent(agentId, (active) => active.source.loadSession(sessionId, opts.cwd));
-  }
-
-  async loadSessionAndSendPrompt(
-    agentId: string,
-    sessionId: string,
-    opts: {
-      readonly cwd: string;
-      readonly prompt: PromptInput;
-    },
-  ): Promise<void> {
-    await this.withActiveAgent(agentId, async (active) => {
-      await active.source.loadSession(sessionId, opts.cwd);
-      await active.source.submitPrompt(sessionId, opts.prompt.enrichedPrompt);
-    });
+    const key = agentSessionLoadKey(agentId, sessionId);
+    const pending = this.pendingSessionLoads.get(key);
+    if (pending) {
+      debugLog(`[AgentPerf][manager] loadSession join-pending agent=${agentId} session=${sessionId}`);
+      return pending;
+    }
+    const load = this.withTimedActiveAgent(
+      agentId,
+      `loadSession session=${sessionId}`,
+      (active) => active.source.loadSession(sessionId, opts.cwd),
+    );
+    this.pendingSessionLoads.set(key, load);
+    try {
+      await load;
+    } finally {
+      if (this.pendingSessionLoads.get(key) === load) {
+        this.pendingSessionLoads.delete(key);
+      }
+    }
   }
 
   /**
@@ -252,7 +279,11 @@ export class AgentManager {
     sessionId: string,
     input: PromptInput,
   ): Promise<void> {
-    await this.withActiveAgent(agentId, (active) => active.source.submitPrompt(sessionId, input.enrichedPrompt));
+    await this.withTimedActiveAgent(
+      agentId,
+      `sendPrompt session=${sessionId}`,
+      (active) => active.source.submitPrompt(sessionId, input.enrichedPrompt),
+    );
   }
 
   /**
@@ -277,6 +308,25 @@ export class AgentManager {
     return this.active.has(agentId);
   }
 
+  private assertInstalledAcpCommand(
+    config: AgentConfig,
+    env: NodeJS.ProcessEnv,
+  ): void {
+    const entry = getAcpAgentInstallEntry(config.id);
+    if (!entry || !isAcpAgentUsingRegistryCommand(config, entry)) return;
+
+    const resolved = resolveExecutableOnPath(config.command, env, fs, path);
+    if (resolved) return;
+
+    const installCommand = getAcpInstallCommandForPlatform(entry);
+    const suffix = installCommand
+      ? ` Install it manually with: ${installCommand}`
+      : ' No install command is registered for this platform.';
+    throw new Error(
+      `ACP adapter "${entry.label}" is not installed. Missing command: ${config.command}.${suffix}`,
+    );
+  }
+
   private async withActiveAgent<T>(
     agentId: string,
     action: (active: ActiveAgent) => Promise<T>,
@@ -287,6 +337,23 @@ export class AgentManager {
       return await action(active);
     } finally {
       lease.release();
+    }
+  }
+
+  private async withTimedActiveAgent<T>(
+    agentId: string,
+    label: string,
+    action: (active: ActiveAgent) => Promise<T>,
+  ): Promise<T> {
+    const startedAt = performance.now();
+    debugLog(`[AgentPerf][manager] ${label} start agent=${agentId}`);
+    try {
+      const result = await this.withActiveAgent(agentId, action);
+      debugTiming(`[AgentPerf][manager] ${label} done agent=${agentId}`, startedAt);
+      return result;
+    } catch (error) {
+      debugTiming(`[AgentPerf][manager] ${label} failed agent=${agentId}`, startedAt, error);
+      throw error;
     }
   }
 
@@ -327,4 +394,9 @@ export class AgentManager {
     }
     // Added agents are not auto-started (lazy start semantics)
   }
+
+}
+
+function agentSessionLoadKey(agentId: string, sessionId: string): string {
+  return `${agentId}\u0000${sessionId}`;
 }

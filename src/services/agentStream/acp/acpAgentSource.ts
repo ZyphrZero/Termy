@@ -25,7 +25,7 @@
  */
 
 import type { AgentEventPublisher, AgentEventSource } from '../agentEventSource.ts';
-import type { AgentEvent, AgentSessionId, AgentSessionState } from '../agentEventTypes.ts';
+import type { AgentSessionId, AgentSessionState } from '../agentEventTypes.ts';
 import { adaptAcpUpdate, adaptStopReason } from './acpEventAdapter.ts';
 import {
   AcpClient,
@@ -42,6 +42,7 @@ import type {
 } from './acpProtocol.ts';
 import { AcpSessionMapper } from './acpSessionMapper.ts';
 import type { AcpTerminalHandlers } from './terminalCapabilityHandler.ts';
+import { debugLog, debugTiming } from '../../../utils/logger.ts';
 
 /** Info about a child process exit, forwarded to AgentManager. */
 export interface AcpExitInfo {
@@ -90,6 +91,11 @@ export interface AcpAgentSourceOptions {
   onExit?: (info: AcpExitInfo) => void;
 }
 
+interface LoadReplayTiming {
+  readonly startedAt: number;
+  updateCount: number;
+}
+
 export class AcpAgentSource implements AgentEventSource {
   readonly name: string;
   private readonly agentLabel: string;
@@ -107,8 +113,9 @@ export class AcpAgentSource implements AgentEventSource {
   private client: AcpClient | null = null;
   private publish: AgentEventPublisher | null = null;
   private readonly sessions: AcpSessionMapper;
-  private readonly restoringServerSessionIds = new Set<string>();
-  private readonly importingServerSessionIds = new Map<string, AgentEvent[]>();
+  private readonly promptingServerSessionIds = new Set<string>();
+  private readonly pendingSessionLoads = new Map<string, Promise<void>>();
+  private readonly loadReplayTimings = new Map<string, LoadReplayTiming>();
 
   constructor(options: AcpAgentSourceOptions) {
     this.name = options.name;
@@ -135,10 +142,14 @@ export class AcpAgentSource implements AgentEventSource {
     const client = this.createClient();
     this.client = client;
 
+    const startedAt = performance.now();
+    debugLog(`[AgentPerf][source] start source=${this.name}`);
     try {
       await client.start();
+      debugTiming(`[AgentPerf][source] start done source=${this.name}`, startedAt);
     } catch (error) {
       this.client = null;
+      debugTiming(`[AgentPerf][source] start failed source=${this.name}`, startedAt, error);
       this.emitError(`Failed to start agent: ${describe(error)}`);
       throw error;
     }
@@ -150,39 +161,42 @@ export class AcpAgentSource implements AgentEventSource {
    */
   async newSession(cwd = this.defaultCwd): Promise<string> {
     const client = this.requireClient();
+    const startedAt = performance.now();
+    debugLog(`[AgentPerf][source] newSession start source=${this.name}`);
     const serverSessionId = await client.newSession(cwd);
     const panelSessionId = this.panelSessionIdForServer(serverSessionId);
     this.publishSessionState(panelSessionId, 'awaiting-input', `${this.agentLabel} ready`);
+    debugTiming(
+      `[AgentPerf][source] newSession done source=${this.name} session=${serverSessionId}`,
+      startedAt,
+    );
     return serverSessionId;
   }
 
   async listSessions(input: { cwd?: string; cursor?: string }): Promise<AcpSessionInfo[]> {
     const client = this.requireClient();
+    const startedAt = performance.now();
+    debugLog(`[AgentPerf][source] listSessions start source=${this.name}`);
     const sessions: AcpSessionInfo[] = [];
     let cursor = input.cursor;
+    let pageCount = 0;
     while (true) {
+      const pageStartedAt = performance.now();
       const result = await client.listSessions({ cwd: input.cwd, cursor });
+      pageCount += 1;
+      debugTiming(
+        `[AgentPerf][source] listSessions page source=${this.name} page=${pageCount} sessions=${result.sessions.length}`,
+        pageStartedAt,
+      );
       sessions.push(...result.sessions);
       if (!result.nextCursor) break;
       cursor = result.nextCursor;
     }
+    debugTiming(
+      `[AgentPerf][source] listSessions done source=${this.name} pages=${pageCount} sessions=${sessions.length}`,
+      startedAt,
+    );
     return sessions;
-  }
-
-  async importSessionTranscript(serverSessionId: string, cwd = this.defaultCwd): Promise<AgentEvent[]> {
-    const client = this.requireClient();
-    const events: AgentEvent[] = [];
-    this.panelSessionIdForServer(serverSessionId);
-    this.importingServerSessionIds.set(serverSessionId, events);
-    try {
-      await client.loadSession(serverSessionId, cwd);
-      return events;
-    } catch (error) {
-      this.emitError(describe(error), this.panelSessionIdForServer(serverSessionId));
-      throw error;
-    } finally {
-      this.importingServerSessionIds.delete(serverSessionId);
-    }
   }
 
   /**
@@ -190,18 +204,46 @@ export class AcpAgentSource implements AgentEventSource {
    * original conversation rather than forking into a new session.
    */
   async loadSession(serverSessionId: string, cwd = this.defaultCwd): Promise<void> {
+    const pending = this.pendingSessionLoads.get(serverSessionId);
+    if (pending) {
+      debugLog(`[AgentPerf][source] loadSession join-pending source=${this.name} session=${serverSessionId}`);
+      return pending;
+    }
+    const load = this.performLoadSession(serverSessionId, cwd);
+    this.pendingSessionLoads.set(serverSessionId, load);
+    try {
+      await load;
+    } finally {
+      if (this.pendingSessionLoads.get(serverSessionId) === load) {
+        this.pendingSessionLoads.delete(serverSessionId);
+      }
+    }
+  }
+
+  private async performLoadSession(serverSessionId: string, cwd: string): Promise<void> {
     const client = this.requireClient();
     const panelSessionId = this.panelSessionIdForServer(serverSessionId);
+    const startedAt = performance.now();
+    this.loadReplayTimings.set(serverSessionId, { startedAt, updateCount: 0 });
+    debugLog(`[AgentPerf][source] loadSession start source=${this.name} session=${serverSessionId}`);
     this.publishSessionState(panelSessionId, 'running', 'Loading session');
-    this.restoringServerSessionIds.add(serverSessionId);
     try {
       await client.loadSession(serverSessionId, cwd);
       this.publishSessionState(panelSessionId, 'awaiting-input', `${this.agentLabel} ready`);
+      debugTiming(
+        `[AgentPerf][source] loadSession done source=${this.name} session=${serverSessionId} updates=${this.loadReplayUpdateCount(serverSessionId)}`,
+        startedAt,
+      );
     } catch (error) {
+      debugTiming(
+        `[AgentPerf][source] loadSession failed source=${this.name} session=${serverSessionId} updates=${this.loadReplayUpdateCount(serverSessionId)}`,
+        startedAt,
+        error,
+      );
       this.emitError(describe(error), panelSessionId);
       throw error;
     } finally {
-      this.restoringServerSessionIds.delete(serverSessionId);
+      this.loadReplayTimings.delete(serverSessionId);
     }
   }
 
@@ -212,6 +254,8 @@ export class AcpAgentSource implements AgentEventSource {
   async submitPrompt(serverSessionId: string, text: string): Promise<void> {
     const client = this.requireClient();
     const panelSessionId = this.panelSessionIdForServer(serverSessionId);
+    const startedAt = performance.now();
+    debugLog(`[AgentPerf][source] submitPrompt start source=${this.name} session=${serverSessionId}`);
 
     if (this.publish) {
       this.publish({
@@ -236,16 +280,28 @@ export class AcpAgentSource implements AgentEventSource {
     }
 
     let stopReason;
+    this.promptingServerSessionIds.add(serverSessionId);
     try {
       stopReason = await client.prompt(serverSessionId, text);
     } catch (error) {
+      debugTiming(
+        `[AgentPerf][source] submitPrompt failed source=${this.name} session=${serverSessionId}`,
+        startedAt,
+        error,
+      );
       this.emitError(describe(error), panelSessionId);
       return;
+    } finally {
+      this.promptingServerSessionIds.delete(serverSessionId);
     }
 
     if (this.publish) {
       this.publish(adaptStopReason(panelSessionId, stopReason));
     }
+    debugTiming(
+      `[AgentPerf][source] submitPrompt done source=${this.name} session=${serverSessionId} stop=${stopReason}`,
+      startedAt,
+    );
   }
 
   /** Send a `session/cancel` notification to the agent. */
@@ -266,6 +322,7 @@ export class AcpAgentSource implements AgentEventSource {
     this.client = null;
     this.publish = null;
     this.sessions.clear();
+    this.pendingSessionLoads.clear();
   }
 
   /* -----------------------------------------------------------------
@@ -279,6 +336,7 @@ export class AcpAgentSource implements AgentEventSource {
   private handleClose(reason: string): void {
     this.publishSessionStateForAll('finished', reason);
     this.client = null;
+    this.pendingSessionLoads.clear();
     if (this.onExit) {
       // Parse exit code/signal from the reason string if available.
       // The transport typically formats as "process exited (code N)"
@@ -329,22 +387,29 @@ export class AcpAgentSource implements AgentEventSource {
 
   private handleSessionUpdate(notification: AcpSessionUpdateNotification): void {
     const sessionId = this.panelSessionIdForServer(notification.sessionId);
-    const importEvents = this.importingServerSessionIds.get(notification.sessionId);
-    if (importEvents) {
-      importEvents.push(...adaptAcpUpdate({
-        sessionId,
-        update: notification.update,
-        includeUserMessages: true,
-      }));
-      return;
-    }
-    if (this.restoringServerSessionIds.has(notification.sessionId)) return;
     if (!this.publish) return;
+    this.recordReplayUpdate(notification);
     const events = adaptAcpUpdate({
       sessionId,
       update: notification.update,
+      includeUserMessages: !this.promptingServerSessionIds.has(notification.sessionId),
     });
     for (const event of events) this.publish(event);
+  }
+
+  private recordReplayUpdate(notification: AcpSessionUpdateNotification): void {
+    const timing = this.loadReplayTimings.get(notification.sessionId);
+    if (!timing) return;
+    timing.updateCount += 1;
+    const label = timing.updateCount === 1 ? 'firstUpdate' : 'update';
+    debugTiming(
+      `[AgentPerf][source] loadSession ${label} source=${this.name} session=${notification.sessionId} count=${timing.updateCount} kind=${notification.update.sessionUpdate}`,
+      timing.startedAt,
+    );
+  }
+
+  private loadReplayUpdateCount(serverSessionId: string): number {
+    return this.loadReplayTimings.get(serverSessionId)?.updateCount ?? 0;
   }
 
   private requireClient(): AcpClient {

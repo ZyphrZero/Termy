@@ -28,6 +28,28 @@ export function debugLog(...args: unknown[]): void {
 }
 
 /**
+ * Debug timing logs - only output in debug mode.
+ */
+export function debugTiming(label: string, startedAt: number, ...args: unknown[]): void {
+  debugLog(`${label} +${formatElapsedMs(startedAt)}`, ...args);
+}
+
+/**
+ * Debug timing logs for slow operations - only output in debug mode.
+ */
+export function debugTimingIfSlow(
+  label: string,
+  startedAt: number,
+  thresholdMs: number,
+  ...args: unknown[]
+): void {
+  const elapsedMs = performance.now() - startedAt;
+  if (elapsedMs >= thresholdMs) {
+    debugLog(`${label} +${formatElapsedMsValue(elapsedMs)}`, ...args);
+  }
+}
+
+/**
  * Debug warnings - only output in debug mode
  */
 export function debugWarn(...args: unknown[]): void {
@@ -41,4 +63,12 @@ export function debugWarn(...args: unknown[]): void {
  */
 export function errorLog(...args: unknown[]): void {
   console.error(...args);
+}
+
+function formatElapsedMs(startedAt: number): string {
+  return formatElapsedMsValue(performance.now() - startedAt);
+}
+
+function formatElapsedMsValue(elapsedMs: number): string {
+  return `${elapsedMs.toFixed(1)}ms`;
 }

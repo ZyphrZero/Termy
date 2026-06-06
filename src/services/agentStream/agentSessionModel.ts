@@ -263,22 +263,6 @@ export class AgentSessionModel {
   }
 
   /**
-   * Convenience helper for callers that need to apply a batch of
-   * events to a single session in one shot — e.g. loading a stored
-   * OpenCode transcript. Listeners are notified once at the end so
-   * the renderer paints the result as a single frame.
-   */
-  applyEventsBatch(sessionId: AgentSessionId, events: ReadonlyArray<AgentEvent>): void {
-    if (events.length === 0) return;
-    const session = this.ensureSession(sessionId);
-    for (const event of events) {
-      if (event.sessionId !== sessionId) continue;
-      this.processEvent(event, session);
-    }
-    this.notify(sessionId);
-  }
-
-  /**
    * Move all session state from `fromId` to `toId`. Used by providers
    * that mint their session id asynchronously (e.g. Codex returns a
    * threadId only after `thread/start`): the panel renders the user
