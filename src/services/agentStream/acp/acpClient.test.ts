@@ -155,6 +155,90 @@ test('AcpClient.newSession returns the server-assigned sessionId', async () => {
   assert.equal(client.sessionId, 'sess-1');
 });
 
+test('AcpClient.loadSession sends session/load and remembers the restored sessionId', async () => {
+  const transport = new FakeTransport();
+  const client = makeClient(transport);
+
+  const startPromise = client.start();
+  await new Promise((resolve) => setImmediate(resolve));
+  transport.emit({ jsonrpc: '2.0', id: 1, result: { protocolVersion: 1 } });
+  await startPromise;
+
+  const loadPromise = client.loadSession('sess-history', '/tmp/example');
+  await new Promise((resolve) => setImmediate(resolve));
+  const sent = transport.popLastSent();
+  assert.equal(sent?.method, 'session/load');
+  assert.deepEqual(sent?.params, {
+    sessionId: 'sess-history',
+    cwd: '/tmp/example',
+    mcpServers: [],
+  });
+
+  transport.emit({ jsonrpc: '2.0', id: sent!.id, result: {} });
+  await loadPromise;
+  assert.equal(client.sessionId, 'sess-history');
+});
+
+test('AcpClient.listSessions sends session/list with cwd and cursor', async () => {
+  const transport = new FakeTransport();
+  const client = makeClient(transport);
+
+  const startPromise = client.start();
+  await new Promise((resolve) => setImmediate(resolve));
+  transport.emit({ jsonrpc: '2.0', id: 1, result: { protocolVersion: 1 } });
+  await startPromise;
+
+  const listPromise = client.listSessions({ cwd: '/tmp/example', cursor: '123' });
+  await new Promise((resolve) => setImmediate(resolve));
+  const sent = transport.popLastSent();
+  assert.equal(sent?.method, 'session/list');
+  assert.deepEqual(sent?.params, {
+    cwd: '/tmp/example',
+    cursor: '123',
+  });
+
+  transport.emit({
+    jsonrpc: '2.0',
+    id: sent!.id,
+    result: {
+      sessions: [
+        {
+          sessionId: 'sess-1',
+          cwd: '/tmp/example',
+          title: 'Imported',
+          updatedAt: '2026-06-06T00:00:00.000Z',
+        },
+      ],
+    },
+  });
+  const result = await listPromise;
+  assert.equal(result.sessions[0]?.sessionId, 'sess-1');
+});
+
+test('AcpClient.listSessions sends an empty request without cwd filtering', async () => {
+  const transport = new FakeTransport();
+  const client = makeClient(transport);
+
+  const startPromise = client.start();
+  await new Promise((resolve) => setImmediate(resolve));
+  transport.emit({ jsonrpc: '2.0', id: 1, result: { protocolVersion: 1 } });
+  await startPromise;
+
+  const listPromise = client.listSessions({});
+  await new Promise((resolve) => setImmediate(resolve));
+  const sent = transport.popLastSent();
+  assert.equal(sent?.method, 'session/list');
+  assert.deepEqual(sent?.params, {});
+
+  transport.emit({
+    jsonrpc: '2.0',
+    id: sent!.id,
+    result: { sessions: [] },
+  });
+  const result = await listPromise;
+  assert.deepEqual(result.sessions, []);
+});
+
 test('AcpClient.prompt resolves with the stop reason', async () => {
   const transport = new FakeTransport();
   const client = makeClient(transport);

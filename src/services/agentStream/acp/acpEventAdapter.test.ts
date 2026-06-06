@@ -149,12 +149,14 @@ test('adaptAcpUpdate maps plan entries to plan steps', () => {
   }
 });
 
-test('adaptAcpUpdate ignores unknown session update kinds', () => {
-  const events = adaptAcpUpdate({
-    sessionId: 's1',
-    update: { sessionUpdate: 'future_unknown_kind', payload: 'whatever' } as never,
-  });
-  assert.deepEqual(events, []);
+test('adaptAcpUpdate rejects unknown session update kinds', () => {
+  assert.throws(
+    () => adaptAcpUpdate({
+      sessionId: 's1',
+      update: { sessionUpdate: 'future_unknown_kind', payload: 'whatever' } as never,
+    }),
+    /Unsupported ACP session\/update kind: future_unknown_kind/,
+  );
 });
 
 test('adaptStopReason maps end_turn to awaiting-input', () => {
@@ -174,6 +176,13 @@ test('adaptStopReason maps refusal to errored', () => {
   } else {
     assert.fail('expected session-state event');
   }
+});
+
+test('adaptStopReason rejects unknown stop reasons', () => {
+  assert.throws(
+    () => adaptStopReason('s1', 'future_reason' as never),
+    /Unsupported ACP stop reason: future_reason/,
+  );
 });
 
 test('adaptAcpUpdate handles resource_link content blocks', () => {
@@ -205,4 +214,45 @@ test('adaptAcpUpdate emits no event when chunk content is empty', () => {
     },
   });
   assert.deepEqual(events, []);
+});
+
+test('adaptAcpUpdate rejects unsupported content block types', () => {
+  assert.throws(
+    () => adaptAcpUpdate({
+      sessionId: 's1',
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'future_content', value: 'x' } as never,
+      },
+    }),
+    /Unsupported ACP content block type: future_content/,
+  );
+});
+
+test('adaptAcpUpdate rejects unsupported tool statuses', () => {
+  assert.throws(
+    () => adaptAcpUpdate({
+      sessionId: 's1',
+      update: {
+        sessionUpdate: 'tool_call',
+        toolCallId: 't1',
+        title: 'Run',
+        status: 'future_status' as never,
+      },
+    }),
+    /Unsupported ACP tool status: future_status/,
+  );
+});
+
+test('adaptAcpUpdate rejects tool_call_update without status or content', () => {
+  assert.throws(
+    () => adaptAcpUpdate({
+      sessionId: 's1',
+      update: {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 't1',
+      },
+    }),
+    /ACP tool_call_update must include status or content/,
+  );
 });

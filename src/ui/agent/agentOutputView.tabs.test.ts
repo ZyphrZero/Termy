@@ -8,7 +8,7 @@ test('buildProviderTabs prepends Terminal without dropping ACP providers', () =>
       id: 'terminal',
       label: 'Terminal',
       icon: 'terminal',
-      fallbackIcon: 'terminal',
+      iconKind: 'lucide',
     },
     enabledAgents: [
       { id: 'claude-code', label: 'Claude Code', icon: 'claudecode' },
@@ -32,6 +32,6 @@ test('buildProviderTabs keeps ACP-only mode available', () => {
   });
 
   assert.deepEqual(tabs, [
-    { id: 'claude-code', label: 'Claude Code', icon: 'claudecode' },
+    { id: 'claude-code', label: 'Claude Code', icon: 'claudecode', iconKind: 'brand' },
   ]);
 });

@@ -38,7 +38,7 @@ import type {
 import { computeAgentDiff, validateAgentConfig } from '@/services/agentStream/agentConfig';
 import { BUILT_IN_AGENTS } from '@/services/agentStream/builtInAgents';
 import type { PermissionRule } from './types';
-import type { TerminalSettings } from './settings';
+import type { AgentThreadMeta, TerminalSettings } from './settings';
 
 /**
  * Read/write surface for the ACP-related slice of settings.
@@ -61,6 +61,8 @@ export interface SettingsAccessor {
   onAgentsChange(handler: (diff: AgentDiff) => void): () => void;
   getPermissionRules(): readonly PermissionRule[];
   upsertPermissionRule(rule: PermissionRule): Promise<void>;
+  getAgentThreadMeta(providerId: string, threadId: string): AgentThreadMeta | undefined;
+  upsertAgentThreadMeta(meta: AgentThreadMeta): Promise<void>;
 }
 
 /**
@@ -194,6 +196,25 @@ export class DefaultSettingsAccessor implements SettingsAccessor {
     await this.deps.persist();
   }
 
+  getAgentThreadMeta(providerId: string, threadId: string): AgentThreadMeta | undefined {
+    return this.deps.getSettings().agentThreadMeta.find((meta) => (
+      meta.providerId === providerId && meta.threadId === threadId
+    ));
+  }
+
+  async upsertAgentThreadMeta(meta: AgentThreadMeta): Promise<void> {
+    const settings = this.deps.getSettings();
+    const previous = settings.agentThreadMeta;
+    const index = previous.findIndex((existing) => (
+      existing.providerId === meta.providerId && existing.threadId === meta.threadId
+    ));
+    const updated = index >= 0
+      ? [...previous.slice(0, index), meta, ...previous.slice(index + 1)]
+      : [...previous, meta];
+    writeAgentThreadMeta(settings, updated);
+    await this.deps.persist();
+  }
+
   /**
    * Replace the agents array, persist, and dispatch a non-empty diff.
    *
@@ -251,6 +272,13 @@ function writePermissionRules(
   next: readonly PermissionRule[],
 ): void {
   (settings as { permissionRules: readonly PermissionRule[] }).permissionRules = next;
+}
+
+function writeAgentThreadMeta(
+  settings: TerminalSettings,
+  next: readonly AgentThreadMeta[],
+): void {
+  (settings as { agentThreadMeta: readonly AgentThreadMeta[] }).agentThreadMeta = next;
 }
 
 /** True when the diff carries no observable change. */

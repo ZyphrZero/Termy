@@ -104,7 +104,9 @@ export class AgentTerminalThreadController {
   }
 
   setActiveThread(id: string): void {
-    if (!this.threads.has(id)) return;
+    if (!this.threads.has(id)) {
+      throw new Error(`Terminal thread not found: ${id}`);
+    }
     if (this.activeThreadId === id) return;
 
     this.detachActiveTerminal();
@@ -113,9 +115,22 @@ export class AgentTerminalThreadController {
     this.onChanged();
   }
 
+  renameThread(id: string, title: string): void {
+    const thread = this.threads.get(id);
+    if (!thread) {
+      throw new Error(`Terminal thread not found: ${id}`);
+    }
+    thread.terminal.setTitle(title);
+    thread.title = title;
+    thread.updatedAt = Date.now();
+    this.onChanged();
+  }
+
   async closeThread(id: string): Promise<void> {
     const thread = this.threads.get(id);
-    if (!thread) return;
+    if (!thread) {
+      throw new Error(`Terminal thread not found: ${id}`);
+    }
 
     if (this.activeThreadId === id) {
       this.detachActiveTerminal();
@@ -254,13 +269,8 @@ export class AgentTerminalThreadController {
   }
 
   private async destroyTerminal(terminal: TerminalInstance): Promise<void> {
-    try {
-      const terminalService = await this.getTerminalService();
-      await terminalService.destroyTerminal(terminal.id);
-    } catch (error) {
-      errorLog('[AgentTerminalThreadController] Failed to destroy terminal:', error);
-      terminal.destroy();
-    }
+    const terminalService = await this.getTerminalService();
+    await terminalService.destroyTerminal(terminal.id);
   }
 
   private toSnapshot(thread: TerminalThread): TerminalThreadSnapshot {

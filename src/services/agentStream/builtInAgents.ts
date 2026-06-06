@@ -14,8 +14,8 @@
  *
  * Icons reference canonical lobehub keys (see
  * `src/ui/terminal/lobeIconAssets.ts`); the panel's brand-icon renderer
- * resolves them through `resolveLobeIconKey` and falls back to a Lucide
- * icon when no match is found.
+ * resolves them through `resolveLobeIconKey` and reports an explicit
+ * configuration error when no match is found.
  */
 
 import type { AgentConfig } from './agentConfig';

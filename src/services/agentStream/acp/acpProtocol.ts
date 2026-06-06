@@ -2,11 +2,9 @@
  * Wire-level types for the Agent Client Protocol (ACP) messages
  * Termy needs.
  *
- * We intentionally model only the subset Termy uses today and treat
- * unknown fields permissively. ACP is an evolving spec, and the
- * agent process is by definition untrusted — we should never crash
- * on a field we have not enumerated. Validators in the adapter layer
- * narrow further when they care about specific shapes.
+ * We intentionally model only the subset Termy uses today. Unsupported
+ * ACP variants are surfaced as explicit adapter errors so protocol
+ * drift is visible during debugging instead of being silently hidden.
  *
  * Reference: https://agentclientprotocol.com/protocol/overview and
  * https://agentclientprotocol.com/protocol/schema
@@ -20,6 +18,8 @@ export const ACP_METHODS = {
   initialize: 'initialize',
   authenticate: 'authenticate',
   newSession: 'session/new',
+  listSessions: 'session/list',
+  loadSession: 'session/load',
   prompt: 'session/prompt',
   cancel: 'session/cancel',
   // Notifications received from the agent.
@@ -100,8 +100,6 @@ export interface AcpNewSessionParams {
 }
 
 export interface AcpMcpServerConfig {
-  // Termy does not expose external MCP servers to ACP agents in this
-  // iteration; the field is here for forward compatibility.
   name: string;
   command: string;
   args?: string[];
@@ -110,6 +108,39 @@ export interface AcpMcpServerConfig {
 
 export interface AcpNewSessionResult {
   sessionId: string;
+}
+
+export interface AcpListSessionsParams {
+  cwd?: string;
+  cursor?: string;
+}
+
+export interface AcpSessionInfo {
+  sessionId: string;
+  cwd: string;
+  title?: string;
+  updatedAt?: string;
+}
+
+export interface AcpListSessionsResult {
+  sessions: AcpSessionInfo[];
+  nextCursor?: string;
+}
+
+export interface AcpLoadSessionParams {
+  /**
+   * ID of the persisted conversation to restore. The agent replays
+   * its history through `session/update` before responding.
+   */
+  sessionId: string;
+  /** Absolute working directory for this restored session. */
+  cwd: string;
+  mcpServers: AcpMcpServerConfig[];
+}
+
+export interface AcpLoadSessionResult {
+  configOptions?: unknown[] | null;
+  modes?: Record<string, unknown> | null;
 }
 
 export type AcpStopReason =
@@ -141,8 +172,7 @@ export type AcpContentBlock =
   | AcpResourceLinkBlock
   | AcpResourceBlock
   | AcpImageBlock
-  | AcpAudioBlock
-  | { type: string; [extra: string]: unknown };
+  | AcpAudioBlock;
 
 export interface AcpTextBlock {
   type: 'text';
@@ -190,8 +220,7 @@ export type AcpSessionUpdate =
   | AcpToolCallProgressUpdate
   | AcpPlanUpdate
   | AcpAvailableCommandsUpdate
-  | AcpModeUpdate
-  | { sessionUpdate: string; [extra: string]: unknown };
+  | AcpModeUpdate;
 
 export interface AcpSessionUpdateNotification {
   sessionId: string;
@@ -271,8 +300,7 @@ export type AcpToolKind =
 export type AcpToolCallContent =
   | { type: 'content'; content: AcpContentBlock }
   | { type: 'diff'; path: string; oldText?: string | null; newText: string }
-  | { type: 'terminal'; terminalId: string }
-  | { type: string; [extra: string]: unknown };
+  | { type: 'terminal'; terminalId: string };
 
 export interface AcpToolCallLocation {
   path: string;

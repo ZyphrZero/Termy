@@ -39,6 +39,8 @@ import {
   ACP_LATEST_PROTOCOL_VERSION,
   ACP_METHODS,
   type AcpInitializeResult,
+  type AcpListSessionsResult,
+  type AcpLoadSessionResult,
   type AcpNewSessionResult,
   type AcpPermissionRequestParams,
   type AcpPermissionResult,
@@ -121,6 +123,11 @@ export interface AcpClientOptions {
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
+export type AcpClientTestHooks = Pick<
+  AcpClientOptions,
+  'scheduleTimeout' | 'cancelTimeout' | 'now' | 'requestTimeoutMs'
+>;
 
 interface PendingRequest {
   resolve: (result: unknown) => void;
@@ -207,6 +214,20 @@ export class AcpClient {
     }
     this.activeSessionId = result.sessionId;
     return result.sessionId;
+  }
+
+  async listSessions(input: { cwd?: string; cursor?: string }): Promise<AcpListSessionsResult> {
+    return this.request<AcpListSessionsResult>(ACP_METHODS.listSessions, input);
+  }
+
+  /** Restore a persisted session in the agent and replay its context. */
+  async loadSession(sessionId: string, cwd: string): Promise<void> {
+    await this.request<AcpLoadSessionResult>(ACP_METHODS.loadSession, {
+      sessionId,
+      cwd,
+      mcpServers: [],
+    });
+    this.activeSessionId = sessionId;
   }
 
   /**

@@ -29,9 +29,7 @@ import { DefaultTerminalCapabilityHandler } from './services/agentStream/acp/ter
 import { AgentManager as AgentManagerImpl } from './services/agentStream/agentManager';
 import { PermissionModalImpl } from './ui/agent/permissionModal';
 import * as path from 'path';
-import { OpenCodeReadOnlyHistoryService } from './services/agent/opencode/opencodeReadOnlyHistoryService';
-import { ClaudeCodeReadOnlyHistoryService } from './services/agent/claudeCode/claudeCodeReadOnlyHistoryService';
-import { CodexReadOnlyHistoryService } from './services/agent/codex/codexReadOnlyHistoryService';
+import { ImportedAgentThreadHistoryService } from './services/agent/importedAgentThreadHistoryService';
 import { TERMINAL_VIEW_TYPE, TerminalView } from './ui/terminal/terminalView';
 import { AGENT_OUTPUT_VIEW_TYPE, AgentOutputView } from './ui/agent/agentOutputView';
 import { AgentEventBus } from './services/agentStream/agentEventBus';
@@ -164,22 +162,7 @@ export default class TerminalPlugin extends Plugin {
    * users who never open the panel pay no startup cost.
    */
   private _agentEventBus: AgentEventBus | null = null;
-  /**
-   * OpenCode HTTP daemon + history bridge. Lazily started the first
-   * time the user opens the agent panel so cold start cost stays
-   * with the feature that pays for it.
-   */
-  private _opencodeHistoryService: OpenCodeReadOnlyHistoryService | null = null;
-  /**
-   * Claude Code history bridge. Lightweight — no daemon, just reads
-   * JSONL files on disk.
-   */
-  private _claudeCodeHistoryService: ClaudeCodeReadOnlyHistoryService | null = null;
-  /**
-   * Codex CLI read-only history bridge. Spawns `codex app-server`
-   * lazily for listing and transcript loading only.
-   */
-  private _codexHistoryService: CodexReadOnlyHistoryService | null = null;
+  private _importedAgentThreadHistoryService: ImportedAgentThreadHistoryService | null = null;
   private _changelogContentCache: string | null = null;
   private _changelogSectionCache: Map<string, ChangelogDetails> = new Map();
   
@@ -327,11 +310,9 @@ export default class TerminalPlugin extends Plugin {
       (leaf: WorkspaceLeaf) => new AgentOutputView(leaf, {
         bus: this.getAgentEventBus(),
         settings: this.getSettingsAccessor(),
-        agentManager: this._agentManager ?? undefined,
-        permissionQueue: this._permissionQueue ?? undefined,
-        getOpenCodeHistoryService: () => this.getOpenCodeHistoryService(),
-        getClaudeCodeHistoryService: () => this.getClaudeCodeHistoryService(),
-        getCodexHistoryService: () => this.getCodexHistoryService(),
+        agentManager: this.requireAgentManager(),
+        permissionQueue: this.requirePermissionQueue(),
+        getImportedHistoryService: () => this.getImportedAgentThreadHistoryService(),
         getAgentContextBridge: () => this._agentContextBridge,
         getTerminalService: () => this.getTerminalService(),
         getSettings: () => this.settings,
@@ -481,22 +462,9 @@ export default class TerminalPlugin extends Plugin {
       this._permissionQueue = null;
     }
 
-    if (this._opencodeHistoryService) {
-      debugLog('[TerminalPlugin] Shutting down OpenCode history service...');
-      this._opencodeHistoryService.stop();
-      debugLog('[TerminalPlugin] OpenCode history service stopped');
-      this._opencodeHistoryService = null;
-    }
-
-    if (this._codexHistoryService) {
-      try {
-        debugLog('[TerminalPlugin] Shutting down Codex daemon...');
-        await this._codexHistoryService.stop();
-        debugLog('[TerminalPlugin] Codex daemon stopped');
-      } catch (error) {
-        errorLog('[TerminalPlugin] Failed to stop Codex daemon:', error);
-      }
-      this._codexHistoryService = null;
+    if (this._importedAgentThreadHistoryService) {
+      this._importedAgentThreadHistoryService.stop();
+      this._importedAgentThreadHistoryService = null;
     }
 
     debugLog(t('plugin.unloadedMessage'));
@@ -515,61 +483,16 @@ export default class TerminalPlugin extends Plugin {
     return this._agentEventBus;
   }
 
-  /**
-   * Lazily start the OpenCode history bridge. The first caller pays
-   * the cost of spawning `opencode serve`; everyone else gets the
-   * cached instance. The daemon is shut down in `onunload`.
-   *
-   * Returns `null` when the vault adapter cannot be resolved to a
-   * filesystem path — callers should treat this as "OpenCode is not
-   * available right now" rather than retrying indefinitely.
-   */
-  getOpenCodeHistoryService(): OpenCodeReadOnlyHistoryService | null {
-    if (this._opencodeHistoryService) {
-      return this._opencodeHistoryService;
+  getImportedAgentThreadHistoryService(): ImportedAgentThreadHistoryService | null {
+    if (this._importedAgentThreadHistoryService) {
+      return this._importedAgentThreadHistoryService;
     }
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
       return null;
     }
-    this._opencodeHistoryService = new OpenCodeReadOnlyHistoryService({
-      vaultRoot: adapter.getBasePath(),
-    });
-    return this._opencodeHistoryService;
-  }
-
-  /**
-   * Lazily create the Claude Code history bridge. No daemon needed —
-   * it reads JSONL directly from disk.
-   */
-  getClaudeCodeHistoryService(): ClaudeCodeReadOnlyHistoryService | null {
-    if (this._claudeCodeHistoryService) {
-      return this._claudeCodeHistoryService;
-    }
-    const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof FileSystemAdapter)) {
-      return null;
-    }
-    this._claudeCodeHistoryService = new ClaudeCodeReadOnlyHistoryService({
-      vaultPath: adapter.getBasePath(),
-    });
-    return this._claudeCodeHistoryService;
-  }
-
-  /**
-   * Lazily create the Codex read-only history bridge. Spawns the
-   * daemon only for listing and transcript loading.
-   */
-  getCodexHistoryService(): CodexReadOnlyHistoryService | null {
-    if (this._codexHistoryService) {
-      return this._codexHistoryService;
-    }
-    const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof FileSystemAdapter)) {
-      return null;
-    }
-    this._codexHistoryService = new CodexReadOnlyHistoryService(adapter.getBasePath());
-    return this._codexHistoryService;
+    this._importedAgentThreadHistoryService = new ImportedAgentThreadHistoryService(this.getPluginDir());
+    return this._importedAgentThreadHistoryService;
   }
 
   /**
@@ -616,10 +539,21 @@ export default class TerminalPlugin extends Plugin {
     if (adapter instanceof FileSystemAdapter) {
       return adapter.getBasePath();
     }
-    // Should be unreachable in the desktop-only plugin, but a sane
-    // fallback keeps the agent from crashing on a misconfigured
-    // adapter.
-    return process.cwd();
+    throw new Error('Agent panel requires a FileSystemAdapter vault');
+  }
+
+  private requireAgentManager(): AgentManager {
+    if (!this._agentManager) {
+      throw new Error('AgentManager has not been initialized');
+    }
+    return this._agentManager;
+  }
+
+  private requirePermissionQueue(): PermissionQueue {
+    if (!this._permissionQueue) {
+      throw new Error('PermissionQueue has not been initialized');
+    }
+    return this._permissionQueue;
   }
 
   /**

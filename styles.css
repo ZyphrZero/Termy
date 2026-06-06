@@ -3147,6 +3147,29 @@ body.termy-preserve-editor-selection .cm-editor:not(.cm-focused) .termy-persiste
   min-width: 0;
 }
 
+.termy-agent-session-provider-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+}
+
+.termy-agent-session-provider-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.termy-agent-session-text-stack {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .termy-agent-session-title {
   flex: 1 1 auto;
   min-width: 0;
@@ -3158,22 +3181,25 @@ body.termy-preserve-editor-selection .cm-editor:not(.cm-focused) .termy-persiste
   text-overflow: ellipsis;
 }
 
-.termy-agent-session-close {
+.termy-agent-session-action {
   flex: 0 0 auto;
   width: 20px;
   height: 20px;
   opacity: 0;
 }
 
-.termy-agent-session-item:hover .termy-agent-session-close,
-.termy-agent-session-item.is-active .termy-agent-session-close,
-.termy-agent-session-close:focus-visible {
+.termy-agent-session-item:hover .termy-agent-session-action,
+.termy-agent-session-item.is-active .termy-agent-session-action,
+.termy-agent-session-action:focus-visible {
   opacity: 1;
 }
 
 .termy-agent-session-meta {
   font-size: 11px;
   color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .termy-agent-main {

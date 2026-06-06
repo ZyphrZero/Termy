@@ -4,10 +4,9 @@
  *
  * Wires four things together:
  *
- *  1. **Lifecycle**: when the source starts, spawn the agent, run
- *     `initialize` + `session/new`, and emit a session-state event
- *     so the panel shows a "running" header. On stop, send
- *     `session/cancel` and tear the transport down.
+ *  1. **Lifecycle**: when the source starts, spawn the agent and run
+ *     `initialize`. Each panel "new session" action then calls
+ *     `session/new` on the same connection and gets its own session id.
  *  2. **`session/update` notifications**: pipe through
  *     {@link adaptAcpUpdate} into {@link AgentEvent}s.
  *  3. **Permissions**: delegated to the injected `onPermissionRequest`
@@ -26,15 +25,22 @@
  */
 
 import type { AgentEventPublisher, AgentEventSource } from '../agentEventSource.ts';
-import type { AgentSessionId } from '../agentEventTypes.ts';
+import type { AgentEvent, AgentSessionId, AgentSessionState } from '../agentEventTypes.ts';
 import { adaptAcpUpdate, adaptStopReason } from './acpEventAdapter.ts';
 import {
   AcpClient,
   type AcpClientOptions,
+  type AcpClientTestHooks,
   type AcpTransport,
 } from './acpClient.ts';
 import type { AcpFsHandlers } from './fsCapabilityHandler.ts';
-import type { AcpPermissionRequestParams, AcpPermissionResult } from './acpProtocol.ts';
+import type {
+  AcpPermissionRequestParams,
+  AcpPermissionResult,
+  AcpSessionInfo,
+  AcpSessionUpdateNotification,
+} from './acpProtocol.ts';
+import { AcpSessionMapper } from './acpSessionMapper.ts';
 import type { AcpTerminalHandlers } from './terminalCapabilityHandler.ts';
 
 /** Info about a child process exit, forwarded to AgentManager. */
@@ -47,9 +53,11 @@ export interface AcpExitInfo {
 export interface AcpAgentSourceOptions {
   /** Stable name used by the bus. Pick something readable, e.g. `acp:opencode`. */
   name: string;
+  /** Stable provider id used as the panel session-id namespace. */
+  agentId: string;
   /** Agent display label rendered in the panel header. */
   agentLabel: string;
-  /** Working directory passed to the agent's `session/new` request. */
+  /** Default working directory passed to the agent's `session/new` request. */
   cwd: string;
   /**
    * Transport factory. We accept a factory rather than an instance
@@ -73,6 +81,8 @@ export interface AcpAgentSourceOptions {
   fsHandler?: AcpFsHandlers;
   /** Injected terminal capability handler for terminal/create routing. */
   terminalHandler?: AcpTerminalHandlers;
+  /** Optional client hooks used by Node tests. */
+  testHooks?: AcpClientTestHooks;
   /**
    * Called when the underlying child process exits. Used by
    * AgentManager for active-map cleanup and error event emission.
@@ -83,7 +93,7 @@ export interface AcpAgentSourceOptions {
 export class AcpAgentSource implements AgentEventSource {
   readonly name: string;
   private readonly agentLabel: string;
-  private readonly cwd: string;
+  private readonly defaultCwd: string;
   private readonly transportFactory: () => AcpTransport;
   private readonly clientInfo: AcpClientOptions['clientInfo'];
   private readonly onPermissionRequest?: (
@@ -91,22 +101,27 @@ export class AcpAgentSource implements AgentEventSource {
   ) => Promise<AcpPermissionResult>;
   private readonly fsHandler?: AcpFsHandlers;
   private readonly terminalHandler?: AcpTerminalHandlers;
+  private readonly testHooks?: AcpClientTestHooks;
   private readonly onExit?: (info: AcpExitInfo) => void;
 
   private client: AcpClient | null = null;
   private publish: AgentEventPublisher | null = null;
-  private sessionId: AgentSessionId | null = null;
+  private readonly sessions: AcpSessionMapper;
+  private readonly restoringServerSessionIds = new Set<string>();
+  private readonly importingServerSessionIds = new Map<string, AgentEvent[]>();
 
   constructor(options: AcpAgentSourceOptions) {
     this.name = options.name;
     this.agentLabel = options.agentLabel;
-    this.cwd = options.cwd;
+    this.defaultCwd = options.cwd;
     this.transportFactory = options.transportFactory;
     this.clientInfo = options.clientInfo;
     this.onPermissionRequest = options.onPermissionRequest;
     this.fsHandler = options.fsHandler;
     this.terminalHandler = options.terminalHandler;
+    this.testHooks = options.testHooks;
     this.onExit = options.onExit;
+    this.sessions = new AcpSessionMapper(options.agentId);
   }
 
   async start(publish: AgentEventPublisher): Promise<void> {
@@ -117,88 +132,91 @@ export class AcpAgentSource implements AgentEventSource {
       return;
     }
     this.publish = publish;
-    // Allocate a stable session id immediately so any error /
-    // stderr / close event emitted before `session/new` succeeds
-    // still has somewhere to land in the agent panel. We deliberately
-    // keep this id stable across the source's lifetime — the
-    // server-assigned session id is tracked separately on the client
-    // and used only for outgoing requests.
-    this.sessionId = `acp:${this.name}`;
-
-    this.publish({
-      kind: 'session-state',
-      sessionId: this.sessionId,
-      state: 'running',
-      detail: `Connecting to ${this.agentLabel}…`,
-    });
-
-    const transport = this.transportFactory();
-    const client = new AcpClient({
-      transport,
-      clientInfo: this.clientInfo,
-      callbacks: {
-        onSessionUpdate: (notification) => {
-          if (!this.publish || !this.sessionId) return;
-          const events = adaptAcpUpdate({
-            sessionId: this.sessionId,
-            update: notification.update,
-          });
-          for (const event of events) {
-            this.publish(event);
-          }
-        },
-        onPermissionRequest: this.onPermissionRequest
-          ? (params) => this.onPermissionRequest!(params)
-          : undefined,
-        fsHandler: this.fsHandler,
-        terminalHandler: this.terminalHandler,
-        onLog: (text) => this.emitLog(text),
-        onError: (error) => this.emitError(error.message),
-        onClose: (reason) => this.handleClose(reason),
-      },
-    });
+    const client = this.createClient();
     this.client = client;
 
     try {
       await client.start();
     } catch (error) {
+      this.client = null;
       this.emitError(`Failed to start agent: ${describe(error)}`);
       throw error;
     }
+  }
 
-    try {
-      await client.newSession(this.cwd);
-    } catch (error) {
-      this.emitError(`Failed to open session: ${describe(error)}`);
-      throw error;
+  /**
+   * Create a logical ACP session on the already-started agent process.
+   * Returns the server-assigned id; the panel namespaces it by agent.
+   */
+  async newSession(cwd = this.defaultCwd): Promise<string> {
+    const client = this.requireClient();
+    const serverSessionId = await client.newSession(cwd);
+    const panelSessionId = this.panelSessionIdForServer(serverSessionId);
+    this.publishSessionState(panelSessionId, 'awaiting-input', `${this.agentLabel} ready`);
+    return serverSessionId;
+  }
+
+  async listSessions(input: { cwd?: string; cursor?: string }): Promise<AcpSessionInfo[]> {
+    const client = this.requireClient();
+    const sessions: AcpSessionInfo[] = [];
+    let cursor = input.cursor;
+    while (true) {
+      const result = await client.listSessions({ cwd: input.cwd, cursor });
+      sessions.push(...result.sessions);
+      if (!result.nextCursor) break;
+      cursor = result.nextCursor;
     }
+    return sessions;
+  }
 
-    this.publish({
-      kind: 'session-state',
-      sessionId: this.sessionId,
-      state: 'awaiting-input',
-      detail: `${this.agentLabel} ready`,
-    });
+  async importSessionTranscript(serverSessionId: string, cwd = this.defaultCwd): Promise<AgentEvent[]> {
+    const client = this.requireClient();
+    const events: AgentEvent[] = [];
+    this.panelSessionIdForServer(serverSessionId);
+    this.importingServerSessionIds.set(serverSessionId, events);
+    try {
+      await client.loadSession(serverSessionId, cwd);
+      return events;
+    } catch (error) {
+      this.emitError(describe(error), this.panelSessionIdForServer(serverSessionId));
+      throw error;
+    } finally {
+      this.importingServerSessionIds.delete(serverSessionId);
+    }
+  }
+
+  /**
+   * Restore a persisted ACP session so future prompts continue the
+   * original conversation rather than forking into a new session.
+   */
+  async loadSession(serverSessionId: string, cwd = this.defaultCwd): Promise<void> {
+    const client = this.requireClient();
+    const panelSessionId = this.panelSessionIdForServer(serverSessionId);
+    this.publishSessionState(panelSessionId, 'running', 'Loading session');
+    this.restoringServerSessionIds.add(serverSessionId);
+    try {
+      await client.loadSession(serverSessionId, cwd);
+      this.publishSessionState(panelSessionId, 'awaiting-input', `${this.agentLabel} ready`);
+    } catch (error) {
+      this.emitError(describe(error), panelSessionId);
+      throw error;
+    } finally {
+      this.restoringServerSessionIds.delete(serverSessionId);
+    }
   }
 
   /**
    * Send a user prompt to the agent. Resolves when the turn ends.
    * Throws if the source has not been started.
    */
-  async submitPrompt(text: string): Promise<void> {
-    if (!this.client || !this.sessionId) {
-      throw new Error('ACP agent source has not been started yet');
-    }
-    const sessionId = this.sessionId;
-    const serverSessionId = this.client.sessionId;
-    if (!serverSessionId) {
-      throw new Error('ACP agent source has no active session');
-    }
+  async submitPrompt(serverSessionId: string, text: string): Promise<void> {
+    const client = this.requireClient();
+    const panelSessionId = this.panelSessionIdForServer(serverSessionId);
 
     if (this.publish) {
       this.publish({
         kind: 'session-state',
-        sessionId,
+        sessionId: panelSessionId,
         state: 'running',
         detail: 'Working',
       });
@@ -206,34 +224,34 @@ export class AcpAgentSource implements AgentEventSource {
       // sides of the conversation.
       this.publish({
         kind: 'text',
-        sessionId,
+        sessionId: panelSessionId,
         channel: 'final',
         delta: `\n\n**You:** ${text}\n\n`,
       });
       this.publish({
         kind: 'text-done',
-        sessionId,
+        sessionId: panelSessionId,
         channel: 'final',
       });
     }
 
     let stopReason;
     try {
-      stopReason = await this.client.prompt(serverSessionId, text);
+      stopReason = await client.prompt(serverSessionId, text);
     } catch (error) {
-      this.emitError(describe(error));
+      this.emitError(describe(error), panelSessionId);
       return;
     }
 
     if (this.publish) {
-      this.publish(adaptStopReason(sessionId, stopReason));
+      this.publish(adaptStopReason(panelSessionId, stopReason));
     }
   }
 
   /** Send a `session/cancel` notification to the agent. */
-  cancelTurn(): void {
-    if (!this.client || !this.client.sessionId) return;
-    this.client.cancel(this.client.sessionId);
+  cancelTurn(serverSessionId: string): void {
+    if (!this.client) return;
+    this.client.cancel(serverSessionId);
   }
 
   async stop(): Promise<void> {
@@ -244,17 +262,10 @@ export class AcpAgentSource implements AgentEventSource {
         // The transport is best-effort during teardown; do not throw.
       }
     }
-    if (this.publish && this.sessionId) {
-      this.publish({
-        kind: 'session-state',
-        sessionId: this.sessionId,
-        state: 'finished',
-        detail: 'Disconnected',
-      });
-    }
+    this.publishSessionStateForAll('finished', 'Disconnected');
     this.client = null;
     this.publish = null;
-    this.sessionId = null;
+    this.sessions.clear();
   }
 
   /* -----------------------------------------------------------------
@@ -266,13 +277,8 @@ export class AcpAgentSource implements AgentEventSource {
    * the onExit callback so AgentManager can clean up the active map.
    */
   private handleClose(reason: string): void {
-    if (!this.publish || !this.sessionId) return;
-    this.publish({
-      kind: 'session-state',
-      sessionId: this.sessionId,
-      state: 'finished',
-      detail: reason,
-    });
+    this.publishSessionStateForAll('finished', reason);
+    this.client = null;
     if (this.onExit) {
       // Parse exit code/signal from the reason string if available.
       // The transport typically formats as "process exited (code N)"
@@ -287,23 +293,111 @@ export class AcpAgentSource implements AgentEventSource {
     }
   }
 
-  private emitError(message: string): void {
-    if (!this.publish || !this.sessionId) return;
+  private createClient(): AcpClient {
+    return new AcpClient({
+      transport: this.transportFactory(),
+      clientInfo: this.clientInfo,
+      ...this.testHooks,
+      callbacks: {
+        onSessionUpdate: (notification) => this.handleSessionUpdate(notification),
+        onPermissionRequest: this.onPermissionRequest
+          ? (params) => this.onPermissionRequest!(this.withPanelSession(params))
+          : undefined,
+        fsHandler: this.createFsHandlers(),
+        terminalHandler: this.createTerminalHandlers(),
+        onLog: (text) => this.emitLog(text),
+        onError: (error) => this.emitError(error.message),
+        onClose: (reason) => this.handleClose(reason),
+      },
+    });
+  }
+
+  private createFsHandlers(): AcpFsHandlers | undefined {
+    if (!this.fsHandler) return undefined;
+    return {
+      readTextFile: (req) => this.fsHandler!.readTextFile(this.withPanelSession(req)),
+      writeTextFile: (req) => this.fsHandler!.writeTextFile(this.withPanelSession(req)),
+    };
+  }
+
+  private createTerminalHandlers(): AcpTerminalHandlers | undefined {
+    if (!this.terminalHandler) return undefined;
+    return {
+      create: (req) => this.terminalHandler!.create(this.withPanelSession(req)),
+    };
+  }
+
+  private handleSessionUpdate(notification: AcpSessionUpdateNotification): void {
+    const sessionId = this.panelSessionIdForServer(notification.sessionId);
+    const importEvents = this.importingServerSessionIds.get(notification.sessionId);
+    if (importEvents) {
+      importEvents.push(...adaptAcpUpdate({
+        sessionId,
+        update: notification.update,
+        includeUserMessages: true,
+      }));
+      return;
+    }
+    if (this.restoringServerSessionIds.has(notification.sessionId)) return;
+    if (!this.publish) return;
+    const events = adaptAcpUpdate({
+      sessionId,
+      update: notification.update,
+    });
+    for (const event of events) this.publish(event);
+  }
+
+  private requireClient(): AcpClient {
+    if (!this.client) throw new Error('ACP agent source has not been started yet');
+    return this.client;
+  }
+
+  private panelSessionIdForServer(serverSessionId: string): AgentSessionId {
+    return this.sessions.panelIdFor(serverSessionId);
+  }
+
+  private withPanelSession<T extends { readonly sessionId: string }>(value: T): T {
+    return {
+      ...value,
+      sessionId: this.panelSessionIdForServer(value.sessionId),
+    };
+  }
+
+  private publishSessionState(
+    sessionId: AgentSessionId,
+    state: AgentSessionState,
+    detail: string,
+  ): void {
+    this.publish?.({ kind: 'session-state', sessionId, state, detail });
+  }
+
+  private publishSessionStateForAll(
+    state: AgentSessionState,
+    detail: string,
+  ): void {
+    for (const sessionId of this.sessions.all()) {
+      this.publishSessionState(sessionId, state, detail);
+    }
+  }
+
+  private emitError(message: string, sessionId = this.sessions.latest()): void {
+    if (!this.publish || !sessionId) return;
     this.publish({
       kind: 'error',
-      sessionId: this.sessionId,
+      sessionId,
       message,
     });
   }
 
   private emitLog(text: string): void {
-    if (!this.publish || !this.sessionId) return;
+    const sessionId = this.sessions.latest();
+    if (!this.publish || !sessionId) return;
     // Stderr lines feel like background diagnostics; we render them
     // as low-importance text in the thought channel so they do not
     // crowd the main reply but remain inspectable.
     this.publish({
       kind: 'text',
-      sessionId: this.sessionId,
+      sessionId,
       channel: 'thought',
       delta: `${text}\n`,
     });

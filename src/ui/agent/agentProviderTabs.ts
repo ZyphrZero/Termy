@@ -1,9 +1,16 @@
-export interface ProviderTabConfig {
-  readonly id: string;
-  readonly label: string;
-  readonly icon?: string;
-  readonly fallbackIcon?: string;
-}
+export type ProviderTabConfig =
+  | {
+      readonly id: string;
+      readonly label: string;
+      readonly icon?: string;
+      readonly iconKind: 'brand';
+    }
+  | {
+      readonly id: string;
+      readonly label: string;
+      readonly icon: string;
+      readonly iconKind: 'lucide';
+    };
 
 export interface AgentProviderConfig {
   readonly id: string;
@@ -22,6 +29,7 @@ export function buildProviderTabs(options: BuildProviderTabsOptions): ProviderTa
     id: agent.id,
     label: agent.label,
     icon: agent.icon,
+    iconKind: 'brand' as const,
   }));
   return terminalTabs.concat(agentTabs);
 }

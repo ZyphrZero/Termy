@@ -9,12 +9,7 @@
  * keeps the panel free of those styles while still using the same
  * underlying SVG catalog.
  *
- * Returns `true` when the lobehub key resolved and the icon was
- * inserted, `false` otherwise so callers can fall back to a Lucide
- * id via Obsidian's `setIcon`.
  */
-
-import { setIcon } from 'obsidian';
 
 import { getLobeIconAsset } from '../terminal/lobeIconAssets';
 
@@ -25,20 +20,18 @@ import { getLobeIconAsset } from '../terminal/lobeIconAssets';
  */
 let agentBrandInstanceCounter = 0;
 
-export function renderAgentBrandIcon(el: HTMLElement, lobeIconKey: string, fallbackLucideIcon: string): void {
+export function renderAgentBrandIcon(el: HTMLElement, lobeIconKey: string): void {
   el.empty();
   el.removeClass('termy-agent-brand-icon');
   el.removeAttribute('data-icon');
   const asset = getLobeIconAsset(lobeIconKey);
   if (!asset) {
-    setIcon(el, fallbackLucideIcon);
-    return;
+    throw new Error(`Unknown Lobehub icon key: ${lobeIconKey}`);
   }
   const markup = asset.color ?? asset.mono;
   const svg = parseSvgMarkup(scopeLobeIconMarkup(markup, asset.key));
   if (!svg) {
-    setIcon(el, fallbackLucideIcon);
-    return;
+    throw new Error(`Invalid Lobehub icon SVG: ${lobeIconKey}`);
   }
   svg.setAttribute('aria-hidden', 'true');
   el.addClass('termy-agent-brand-icon');

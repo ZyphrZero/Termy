@@ -18,6 +18,8 @@
 
 import { FileSystemAdapter } from 'obsidian';
 import type { AgentEventBus } from './agentEventBus';
+import type { AgentEvent } from './agentEventTypes';
+import type { AcpSessionInfo } from './acp/acpProtocol';
 import type { SettingsAccessor } from '@/settings/settingsAccessor';
 import type { PermissionQueue } from './permissionQueue';
 import type { FsCapabilityHandler } from './acp/fsCapabilityHandler';
@@ -28,6 +30,7 @@ import type { AcpClientOptions } from './acp/acpClient';
 import { AcpChildProcessTransport } from './acp/childProcessTransport';
 import type { AgentDiff } from './agentConfig';
 import { debugLog } from '@/utils/logger';
+import { AgentOperationTracker } from './agentOperationTracker';
 
 /* ---- Public types ------------------------------------------------*/
 
@@ -58,6 +61,7 @@ interface ActiveAgent {
 export class AgentManager {
   private readonly active = new Map<string, ActiveAgent>();
   private readonly inflight = new Map<string, Promise<ActiveAgent>>();
+  private readonly operations = new AgentOperationTracker();
   private readonly configUnsub: () => void;
   private disposed = false;
 
@@ -120,6 +124,7 @@ export class AgentManager {
     const startPromise = (async (): Promise<ActiveAgent> => {
       const source = new AcpAgentSource({
         name: sourceName,
+        agentId,
         agentLabel: config.label,
         cwd,
         transportFactory: () => new AcpChildProcessTransport({
@@ -174,6 +179,14 @@ export class AgentManager {
     debugLog(`[AgentManager] stopped agent "${agentId}"`);
   }
 
+  async stopIfIdle(agentId: string): Promise<boolean> {
+    if (!this.operations.isIdle(agentId)) {
+      return false;
+    }
+    await this.stop(agentId);
+    return true;
+  }
+
   /**
    * Stop all active agents in parallel. After this call the manager
    * is disposed and `ensureStarted` will throw (Property 1.3).
@@ -193,11 +206,41 @@ export class AgentManager {
    * if not already running.
    */
   async newSession(agentId: string, opts: { cwd: string }): Promise<string> {
-    const active = await this.ensureStarted(agentId);
-    // AcpAgentSource.start() already creates a session; for now
-    // return the stable session id. Future: support multiple sessions.
-    void opts;
-    return active.source.name;
+    return this.withActiveAgent(agentId, (active) => active.source.newSession(opts.cwd));
+  }
+
+  async listSessions(agentId: string, opts: { cwd?: string }): Promise<AcpSessionInfo[]> {
+    return this.withActiveAgent(agentId, (active) => active.source.listSessions(opts));
+  }
+
+  async importSessionTranscript(
+    agentId: string,
+    sessionId: string,
+    opts: { cwd: string },
+  ): Promise<AgentEvent[]> {
+    return this.withActiveAgent(agentId, (active) => active.source.importSessionTranscript(sessionId, opts.cwd));
+  }
+
+  /**
+   * Restore a persisted ACP session on the given agent. Starts the
+   * agent if needed, then asks the agent to reload its own context.
+   */
+  async loadSession(agentId: string, sessionId: string, opts: { cwd: string }): Promise<void> {
+    await this.withActiveAgent(agentId, (active) => active.source.loadSession(sessionId, opts.cwd));
+  }
+
+  async loadSessionAndSendPrompt(
+    agentId: string,
+    sessionId: string,
+    opts: {
+      readonly cwd: string;
+      readonly prompt: PromptInput;
+    },
+  ): Promise<void> {
+    await this.withActiveAgent(agentId, async (active) => {
+      await active.source.loadSession(sessionId, opts.cwd);
+      await active.source.submitPrompt(sessionId, opts.prompt.enrichedPrompt);
+    });
   }
 
   /**
@@ -206,21 +249,20 @@ export class AgentManager {
    */
   async sendPrompt(
     agentId: string,
-    _sessionId: string,
+    sessionId: string,
     input: PromptInput,
   ): Promise<void> {
-    const active = await this.ensureStarted(agentId);
-    await active.source.submitPrompt(input.enrichedPrompt);
+    await this.withActiveAgent(agentId, (active) => active.source.submitPrompt(sessionId, input.enrichedPrompt));
   }
 
   /**
    * Cancel the current turn on the given agent session.
    * No-op if the agent is not active.
    */
-  cancel(agentId: string, _sessionId: string): void {
+  cancel(agentId: string, sessionId: string): void {
     const active = this.active.get(agentId);
     if (!active) return;
-    active.source.cancelTurn();
+    active.source.cancelTurn(sessionId);
   }
 
   /**
@@ -229,6 +271,23 @@ export class AgentManager {
    */
   getActiveAgentIds(): readonly string[] {
     return [...this.active.keys()];
+  }
+
+  isStarted(agentId: string): boolean {
+    return this.active.has(agentId);
+  }
+
+  private async withActiveAgent<T>(
+    agentId: string,
+    action: (active: ActiveAgent) => Promise<T>,
+  ): Promise<T> {
+    const lease = this.operations.acquire(agentId);
+    try {
+      const active = await this.ensureStarted(agentId);
+      return await action(active);
+    } finally {
+      lease.release();
+    }
   }
 
   /* ---- Internal: exit handling (Req 1 AC 4 / Req 9 AC 2) ---------*/

@@ -12,7 +12,7 @@
  *
  * Sources:
  *   - Live ACP source via {@link AgentManager}.
- *   - Read-only history from per-agent history services.
+ *   - Termy-owned imported ACP thread history.
  *
  * The view stays dumb: rendering is driven entirely by snapshots
  * from {@link AgentSessionModel}, and any change that affects the
@@ -24,20 +24,14 @@ import { ItemView, Menu, Notice, setIcon, setTooltip } from 'obsidian';
 
 import type { AgentEventBus } from '../../services/agentStream/agentEventBus';
 import { AgentSessionModel, type AgentSessionSnapshot } from '../../services/agentStream/agentSessionModel';
-import type { AgentSessionId } from '../../services/agentStream/agentEventTypes';
+import type { AgentEvent, AgentSessionId } from '../../services/agentStream/agentEventTypes';
 import type { SettingsAccessor } from '../../settings/settingsAccessor';
 import type { AgentManager } from '../../services/agentStream/agentManager';
 import type { PermissionQueue } from '../../services/agentStream/permissionQueue';
 import type {
-  OpenCodeReadOnlyHistoryService,
-  OpenCodeHistorySession,
-} from '../../services/agent/opencode/opencodeReadOnlyHistoryService';
-import { adaptTranscriptToEvents } from '../../services/agent/opencode/opencodeMessageAdapter';
-import type {
-  ClaudeCodeReadOnlyHistoryService,
-  ClaudeCodeSession,
-} from '../../services/agent/claudeCode/claudeCodeReadOnlyHistoryService';
-import type { CodexReadOnlyHistoryService, CodexHistorySession } from '../../services/agent/codex/codexReadOnlyHistoryService';
+  ImportedAgentThreadHistoryService,
+  ImportedAgentThreadListItem,
+} from '../../services/agent/importedAgentThreadHistoryService';
 import { renderAgentSnapshot, type AgentSnapshotRenderer } from './agentMarkdownRenderer';
 import { createAgentSnapshotRenderer } from './agentMarkdownRendererFactory';
 import { enrichPromptWithContext } from '../../services/agent/panelContextEncoder';
@@ -48,6 +42,17 @@ import {
   type TabRenderContext,
 } from './agentOutputView.tabs';
 import { buildProviderTabs, type ProviderTabConfig } from './agentProviderTabs';
+import {
+  isLiveAgentSession,
+  buildThreadPoolItems,
+  mergeLiveAgentSessions,
+  requireSessionCwd,
+  upsertLiveAgentSession,
+  type LiveAgentSession,
+  type ProviderIconConfig,
+  type ProviderThreadSource,
+  type ThreadPoolItem,
+} from './agentProviderSessions';
 import { renderInputBar } from './agentOutputView.input';
 import { t } from '../../i18n';
 import { errorLog } from '../../utils/logger';
@@ -57,6 +62,8 @@ import {
   AgentTerminalThreadController,
   type TerminalThreadSnapshot,
 } from './agentTerminalThreadController';
+import { renderAgentBrandIcon } from './agentBrandIcon';
+import { RenameTerminalModal } from '../terminal/renameTerminalModal';
 
 export const AGENT_OUTPUT_VIEW_TYPE = 'termy-agent-output-view';
 const AGENT_OUTPUT_ICON = 'sparkles';
@@ -67,21 +74,13 @@ export interface AgentOutputViewOptions {
   /** Bus the view subscribes to. */
   bus: AgentEventBus;
   /** Settings accessor for dynamic agent configuration. */
-  settings?: SettingsAccessor;
+  settings: SettingsAccessor;
   /** Agent lifecycle manager. */
-  agentManager?: AgentManager;
+  agentManager: AgentManager;
   /** Permission queue for pending-count indicator. */
-  permissionQueue?: PermissionQueue;
-  /** Optional callback for prompt submission. */
-  submitPrompt?: (text: string) => Promise<void> | void;
-  /** Optional callback to interrupt a turn. */
-  cancelTurn?: () => void;
-  /** Returns the OpenCode history bridge. */
-  getOpenCodeHistoryService?: () => OpenCodeReadOnlyHistoryService | null;
-  /** Returns the Claude Code history bridge. */
-  getClaudeCodeHistoryService?: () => ClaudeCodeReadOnlyHistoryService | null;
-  /** Returns the Codex history bridge. */
-  getCodexHistoryService?: () => CodexReadOnlyHistoryService | null;
+  permissionQueue: PermissionQueue;
+  /** Returns Termy's imported ACP thread history store. */
+  getImportedHistoryService?: () => ImportedAgentThreadHistoryService | null;
   /** Returns the agent context bridge. */
   getAgentContextBridge?: () => AgentContextBridge | null;
   /** Returns the terminal service used for terminal threads. */
@@ -100,23 +99,18 @@ interface ProviderState {
 }
 
 type ProviderSession =
-  | OpenCodeHistorySession
-  | ClaudeCodeSession
-  | (CodexHistorySession & { id: string })
-  | TerminalThreadSnapshot;
+  | ImportedAgentThreadListItem
+  | TerminalThreadSnapshot
+  | LiveAgentSession;
 
 export class AgentOutputView extends ItemView {
   private readonly bus: AgentEventBus;
-  private readonly settings: SettingsAccessor | null;
-  private readonly agentManager: AgentManager | null;
-  private readonly permissionQueue: PermissionQueue | null;
+  private readonly settings: SettingsAccessor;
+  private readonly agentManager: AgentManager;
+  private readonly permissionQueue: PermissionQueue;
   private readonly model = new AgentSessionModel();
   private readonly rendererFactory: (view: AgentOutputView) => AgentSnapshotRenderer;
-  private readonly submitPrompt?: (text: string) => Promise<void> | void;
-  private readonly cancelTurn?: () => void;
-  private readonly getOpenCodeHistoryService?: () => OpenCodeReadOnlyHistoryService | null;
-  private readonly getClaudeCodeHistoryService?: () => ClaudeCodeReadOnlyHistoryService | null;
-  private readonly getCodexHistoryService?: () => CodexReadOnlyHistoryService | null;
+  private readonly getImportedHistoryService?: () => ImportedAgentThreadHistoryService | null;
   private readonly getAgentContextBridge?: () => AgentContextBridge | null;
   private readonly terminalThreads: AgentTerminalThreadController | null = null;
   private unsubscribeBus: (() => void) | null = null;
@@ -140,29 +134,28 @@ export class AgentOutputView extends ItemView {
   private focusedSessionId: AgentSessionId | null = null;
   private renderToken = 0;
   private sessionsRefreshTimer: number | null = null;
-  private isReadOnlyHistory = false;
 
   // Data-driven state (Req 6 AC 1 / Property 6.1).
   private selectedAgentId: string | null = null;
   private readonly providerState: Map<string, ProviderState> = new Map();
+  private readonly loadedHistorySessions = new Set<AgentSessionId>();
 
   constructor(leaf: WorkspaceLeaf, options: AgentOutputViewOptions) {
     super(leaf);
     this.bus = options.bus;
-    this.settings = options.settings ?? null;
-    this.agentManager = options.agentManager ?? null;
-    this.permissionQueue = options.permissionQueue ?? null;
+    this.settings = options.settings;
+    this.agentManager = options.agentManager;
+    this.permissionQueue = options.permissionQueue;
     this.rendererFactory = options.rendererFactory ?? ((view) => createAgentSnapshotRenderer(view.app));
-    this.submitPrompt = options.submitPrompt;
-    this.cancelTurn = options.cancelTurn;
-    this.getOpenCodeHistoryService = options.getOpenCodeHistoryService;
-    this.getClaudeCodeHistoryService = options.getClaudeCodeHistoryService;
-    this.getCodexHistoryService = options.getCodexHistoryService;
+    this.getImportedHistoryService = options.getImportedHistoryService;
     this.getAgentContextBridge = options.getAgentContextBridge;
     if (options.getTerminalService) {
+      if (!options.getSettings) {
+        throw new Error('Terminal thread settings dependency is required');
+      }
       this.terminalThreads = new AgentTerminalThreadController({
         getTerminalService: options.getTerminalService,
-        getSettings: options.getSettings ?? missingTerminalSettings,
+        getSettings: options.getSettings,
         onChanged: () => this.handleTerminalThreadsChanged(),
       });
     }
@@ -181,7 +174,6 @@ export class AgentOutputView extends ItemView {
     this.renderShell(contentEl);
     this.model.resetAll();
     this.focusedSessionId = null;
-    this.isReadOnlyHistory = false;
     this.providerState.clear();
 
     this.unsubscribeModel = this.model.subscribe(() => this.scheduleRender());
@@ -189,9 +181,7 @@ export class AgentOutputView extends ItemView {
       try { this.model.apply(envelope); }
       catch (error) { errorLog('[AgentOutputView] Failed to apply envelope:', error); }
     });
-    if (this.settings) {
-      this.unsubscribeAgentsChange = this.settings.onAgentsChange(() => this.handleAgentsChange());
-    }
+    this.unsubscribeAgentsChange = this.settings.onAgentsChange(() => this.handleAgentsChange());
     this.refreshActiveAgentSessions();
     this.sessionsRefreshTimer = window.setInterval(() => this.refreshActiveAgentSessions(), SESSION_LIST_REFRESH_INTERVAL_MS);
     this.scheduleRender();
@@ -211,8 +201,8 @@ export class AgentOutputView extends ItemView {
   clear(): void {
     this.model.resetAll();
     this.focusedSessionId = null;
-    this.isReadOnlyHistory = false;
     this.providerState.clear();
+    this.loadedHistorySessions.clear();
     this.scheduleRender();
   }
 
@@ -315,7 +305,6 @@ export class AgentOutputView extends ItemView {
   private switchAgent(agentId: string): void {
     if (this.selectedAgentId === agentId) return;
     this.selectedAgentId = agentId;
-    this.isReadOnlyHistory = false;
     this.doRenderTabs();
     this.renderSessionsHeader();
     this.renderSessionsList();
@@ -330,15 +319,14 @@ export class AgentOutputView extends ItemView {
   /* ── Submit handling ──────────────────────────────────────────── */
 
   private async handleSubmit(text: string): Promise<void> {
-    if (!this.selectedAgentId) {
-      new Notice(t('agent.noticeSubmitFailed'));
-      return;
-    }
-    if (this.isTerminalProviderSelected()) {
-      this.submitTerminalInput(text);
-      return;
-    }
     try {
+      if (!this.selectedAgentId) {
+        throw new Error('No agent provider selected');
+      }
+      if (this.isTerminalProviderSelected()) {
+        this.submitTerminalInput(text);
+        return;
+      }
       const snapshot = this.getAgentContextBridge?.()?.getCurrentSnapshot() ?? null;
       const state = this.getProviderState(this.selectedAgentId);
       const isFirstMessage = !state?.activeSessionId;
@@ -347,47 +335,39 @@ export class AgentOutputView extends ItemView {
         includeSelection: !!snapshot?.selection && !snapshot.selection.isEmpty,
       });
 
-      // If AgentManager is available, use the ACP path (Req 6 AC 5).
-      if (this.agentManager && this.selectedAgentId) {
-        const agentId = this.selectedAgentId;
+      const agentId = this.selectedAgentId;
 
-        // Ensure agent is started and we have a session.
-        let sessionId = state?.activeSessionId;
-        if (!sessionId) {
-          const vaultRoot = this.getVaultRoot();
-          sessionId = await this.agentManager.newSession(agentId, { cwd: vaultRoot });
-          const pState = this.ensureProviderState(agentId);
-          pState.activeSessionId = sessionId;
-          this.focusedSessionId = sessionIdFor(agentId, sessionId);
-          this.isReadOnlyHistory = false;
-        }
-
-        // Focus the session for rendering.
-        const internalId = sessionIdFor(agentId, sessionId);
-        this.focusedSessionId = internalId;
-        this.isReadOnlyHistory = false;
-        this.scheduleRender();
-
-        // Disable send button until response (Property 6.3).
-        this.updateInputDisabledState(true);
-
+      let sessionId = state?.activeSessionId;
+      if (!sessionId) {
+        const vaultRoot = this.getVaultRoot();
+        this.setProviderLoading(agentId, true);
         try {
-          // AcpAgentSource.submitPrompt echoes displayText into the
-          // bus automatically, so transcript shows the user message.
-          await this.agentManager.sendPrompt(agentId, sessionId, { enrichedPrompt, displayText });
+          sessionId = await this.agentManager.newSession(agentId, { cwd: vaultRoot });
+          this.addLiveAgentSession(agentId, sessionId);
         } finally {
-          this.updateInputDisabledState(false);
+          this.setProviderLoading(agentId, false);
         }
-        return;
       }
 
-      // Fallback: legacy submitPrompt callback.
-      if (this.submitPrompt) {
-        const maybe = this.submitPrompt(enrichedPrompt);
-        if (maybe instanceof Promise) await maybe;
-        return;
+      const internalId = sessionIdFor(agentId, sessionId);
+      this.focusedSessionId = internalId;
+      this.scheduleRender();
+      this.updateInputDisabledState(true);
+
+      try {
+        if (this.loadedHistorySessions.has(internalId)) {
+          const cwd = this.getAgentSessionCwd(agentId, sessionId);
+          await this.agentManager.loadSessionAndSendPrompt(agentId, sessionId, {
+            cwd,
+            prompt: { enrichedPrompt, displayText },
+          });
+          this.loadedHistorySessions.delete(internalId);
+          return;
+        }
+        await this.agentManager.sendPrompt(agentId, sessionId, { enrichedPrompt, displayText });
+      } finally {
+        this.updateInputDisabledState(false);
       }
-      new Notice(t('agent.noticeSubmitFailed'));
     } catch (error) {
       errorLog('[AgentOutputView] Failed to submit prompt:', error);
       new Notice(t('agent.noticeSubmitFailed'));
@@ -399,12 +379,15 @@ export class AgentOutputView extends ItemView {
 
   private handleCancel(): void {
     if (this.isTerminalProviderSelected()) {
-      this.terminalThreads?.getActiveTerminal()?.write('\x03');
+      const terminal = this.requireTerminalThreads().getActiveTerminal();
+      if (!terminal) {
+        throw new Error('Active terminal thread is unavailable');
+      }
+      terminal.write('\x03');
       return;
     }
-    if (!this.agentManager || !this.selectedAgentId) {
-      this.cancelTurn?.();
-      return;
+    if (!this.selectedAgentId) {
+      throw new Error('No agent provider selected');
     }
     const state = this.getProviderState(this.selectedAgentId);
     const sessionId = state?.activeSessionId;
@@ -423,60 +406,25 @@ export class AgentOutputView extends ItemView {
       return;
     }
 
-    if (!this.agentManager || !this.selectedAgentId) {
-      new Notice(t('agent.sessionsProviderUnavailable'));
+    const agentId = this.selectedAgentId;
+    if (!agentId) {
+      new Notice(t('agent.noticeSubmitFailed'));
       return;
     }
-    try {
-      const agentId = this.selectedAgentId;
-      const vaultRoot = this.getVaultRoot();
-      const sessionId = await this.agentManager.newSession(agentId, { cwd: vaultRoot });
-      const pState = this.ensureProviderState(agentId);
-      pState.activeSessionId = sessionId;
-      this.focusedSessionId = sessionIdFor(agentId, sessionId);
-      this.isReadOnlyHistory = false;
-      // Clear input.
-      if (this.inputTextareaEl) this.inputTextareaEl.value = '';
-      this.model.reset(this.focusedSessionId);
-      this.scheduleRender();
-      this.renderSessionsList();
-    } catch (error) {
-      errorLog('[AgentOutputView] Failed to create new session:', error);
-      new Notice(this.formatLoadFailure(error));
+    const state = this.ensureProviderState(agentId);
+    state.activeSessionId = null;
+    this.focusedSessionId = null;
+    if (this.inputTextareaEl) {
+      this.inputTextareaEl.value = '';
     }
-  }
-
-  /* ── Resume from read-only history (Req 4 AC 5) ──────────────── */
-
-  private async handleResumeFromHistory(): Promise<void> {
-    if (!this.agentManager || !this.selectedAgentId) {
-      new Notice(t('agent.sessionsProviderUnavailable'));
-      return;
-    }
-    try {
-      const agentId = this.selectedAgentId;
-      const vaultRoot = this.getVaultRoot();
-      // Create a fresh ACP session — NOT session/load (Req 4 AC 5).
-      const sessionId = await this.agentManager.newSession(agentId, { cwd: vaultRoot });
-      const pState = this.ensureProviderState(agentId);
-      pState.activeSessionId = sessionId;
-      this.focusedSessionId = sessionIdFor(agentId, sessionId);
-      this.isReadOnlyHistory = false;
-      // Clear input and reset model for the new session.
-      if (this.inputTextareaEl) this.inputTextareaEl.value = '';
-      this.model.reset(this.focusedSessionId);
-      this.scheduleRender();
-      this.renderSessionsList();
-    } catch (error) {
-      errorLog('[AgentOutputView] Failed to resume from history:', error);
-      new Notice(this.formatLoadFailure(error));
-    }
+    this.scheduleRender();
+    this.renderSessionsList();
   }
 
   /* ── Restart handling (Req 9 AC 3) ───────────────────────────── */
 
   private async handleRestart(): Promise<void> {
-    if (!this.agentManager || !this.selectedAgentId) return;
+    if (!this.selectedAgentId) return;
     try {
       // Preserve old transcript — just re-start the agent.
       await this.agentManager.ensureStarted(this.selectedAgentId);
@@ -507,9 +455,8 @@ export class AgentOutputView extends ItemView {
     }
 
     const isRunning = forceRunning ?? this.isSessionRunning();
-    const pendingPermission = this.permissionQueue?.pendingCount() ?? 0;
-    // Disable input when viewing read-only history (Req 4 AC 4d).
-    const disabled = isRunning || pendingPermission > 0 || this.isReadOnlyHistory;
+    const pendingPermission = this.permissionQueue.pendingCount();
+    const disabled = isRunning || pendingPermission > 0;
 
     if (this.inputSendBtnEl) {
       this.inputSendBtnEl.disabled = disabled;
@@ -535,123 +482,103 @@ export class AgentOutputView extends ItemView {
     if (adapter && typeof adapter.getBasePath === 'function') {
       return adapter.getBasePath();
     }
-    return '';
+    throw new Error('Vault adapter does not expose getBasePath');
   }
 
   /* ── Session refresh ─────────────────────────────────────────── */
 
-  private refreshActiveAgentSessions(force = false): void {
-    if (!this.selectedAgentId) return;
-    if (this.isTerminalProviderSelected()) {
+  private refreshActiveAgentSessions(): void {
+    const providerIds = new Set(this.getProviderTabs().map((provider) => provider.id));
+    if (providerIds.has(TERMINAL_PROVIDER_ID)) {
       this.refreshTerminalThreads();
-    } else if (this.selectedAgentId === 'claude-code') {
-      this.refreshClaudeCodeSessions();
-    } else if (this.selectedAgentId === 'codex') {
-      void this.refreshCodexSessions(force).catch((e) => errorLog('[AgentOutputView] Codex refresh:', e));
-    } else if (this.selectedAgentId === 'opencode') {
-      void this.refreshOpenCodeSessions(force).catch((e) => errorLog('[AgentOutputView] OpenCode refresh:', e));
     }
-  }
-
-  private async refreshOpenCodeSessions(force = false): Promise<void> {
-    const service = this.getOpenCodeHistoryService?.() ?? null;
-    const state = this.ensureProviderState('opencode');
-    if (!service) { state.error = t('agent.sessionsProviderUnavailable'); state.loading = false; this.renderSessionsList(); return; }
-    if (state.loading && !force) return;
-    state.loading = true; state.error = null; this.renderSessionsList();
-    try { state.sessions = await service.listSessions(); state.error = null; }
-    catch (error) { state.error = this.formatLoadFailure(error); }
-    finally { state.loading = false; this.renderSessionsList(); }
-  }
-
-  private refreshClaudeCodeSessions(): void {
-    const service = this.getClaudeCodeHistoryService?.() ?? null;
-    const state = this.ensureProviderState('claude-code');
-    if (!service) { state.error = t('agent.sessionsProviderUnavailable'); state.loading = false; this.renderSessionsList(); return; }
-    state.loading = true; state.error = null; this.renderSessionsList();
-    try { state.sessions = service.listSessions(); state.error = null; }
-    catch (error) { state.error = this.formatLoadFailure(error); }
-    finally { state.loading = false; this.renderSessionsList(); }
-  }
-
-  private async refreshCodexSessions(force = false): Promise<void> {
-    const service = this.getCodexHistoryService?.() ?? null;
-    const state = this.ensureProviderState('codex');
-    if (!service) { state.error = t('agent.sessionsProviderUnavailable'); state.loading = false; this.renderSessionsList(); return; }
-    if (state.loading && !force) return;
-    state.loading = true; state.error = null; this.renderSessionsList();
-    try {
-      const sessions = await service.listSessions();
-      state.sessions = sessions.map((s) => ({ ...s, id: s.threadId, title: s.title }));
-      state.error = null;
-    } catch (error) { state.error = this.formatLoadFailure(error); }
-    finally { state.loading = false; this.renderSessionsList(); }
+    for (const providerId of providerIds) {
+      if (providerId === TERMINAL_PROVIDER_ID) continue;
+      this.refreshImportedProviderSessions(providerId);
+    }
   }
 
   /* ── Session loading ─────────────────────────────────────────── */
 
-  private async loadOpenCodeSession(sessionId: string): Promise<void> {
-    const service = this.getOpenCodeHistoryService?.() ?? null;
-    if (!service) { new Notice(t('agent.sessionsProviderUnavailable')); return; }
-    const state = this.ensureProviderState('opencode');
-    state.activeSessionId = sessionId;
-    const internalId = sessionIdFor('opencode', sessionId);
-    this.focusedSessionId = internalId;
-    this.isReadOnlyHistory = true;
+  private loadProviderThreadSession(providerId: string, threadId: string): void {
+    const internalId = this.activateHistorySession(providerId, threadId);
     this.model.reset(internalId);
-    this.scheduleRender(); this.renderSessionsList();
+    this.scheduleRender();
+    this.renderSessionsList();
     this.setBusyHint(t('agent.transcriptLoading'));
     try {
-      const messages = await service.loadTranscript(sessionId);
-      this.model.applyEventsBatch(internalId, adaptTranscriptToEvents(internalId, messages));
-      this.scheduleRender(); this.setBusyHint(null);
+      const events = this.loadLocalTranscript(providerId, threadId);
+      this.model.applyEventsBatch(internalId, events);
+      this.loadedHistorySessions.add(internalId);
+      this.scheduleRender();
     } catch (error) {
+      errorLog(`[AgentOutputView] ${providerId} loadTranscript failed:`, error);
+      throw error;
+    } finally {
       this.setBusyHint(null);
-      errorLog('[AgentOutputView] OpenCode loadTranscript failed:', error);
-      new Notice(this.formatLoadFailure(error));
     }
   }
 
-  private loadClaudeCodeSession(sessionId: string): void {
-    const service = this.getClaudeCodeHistoryService?.() ?? null;
-    if (!service) { new Notice(t('agent.sessionsProviderUnavailable')); return; }
-    const state = this.ensureProviderState('claude-code');
-    state.activeSessionId = sessionId;
-    const internalId = sessionIdFor('claude-code', sessionId);
-    this.focusedSessionId = internalId;
-    this.isReadOnlyHistory = true;
-    this.model.reset(internalId); this.renderSessionsList();
-    this.setBusyHint(t('agent.transcriptLoading'));
+  private refreshImportedProviderSessions(providerId: string): void {
+    const service = this.getImportedHistoryService?.() ?? null;
+    const state = this.ensureProviderState(providerId);
+    if (!service) {
+      state.error = t('agent.sessionsProviderUnavailable');
+      state.loading = false;
+      this.renderSessionsList();
+      return;
+    }
     try {
-      const events = service.loadTranscript(internalId, sessionId);
-      this.model.applyEventsBatch(internalId, events);
-      this.scheduleRender(); this.setBusyHint(null);
+      state.sessions = mergeLiveAgentSessions(state.sessions, service.listThreads(providerId));
+      state.error = null;
     } catch (error) {
-      this.setBusyHint(null);
-      errorLog('[AgentOutputView] Claude Code loadTranscript failed:', error);
-      new Notice(this.formatLoadFailure(error));
+      state.error = this.formatLoadFailure(error);
+    } finally {
+      state.loading = false;
+      this.renderSessionsList();
     }
   }
 
-  private async loadCodexSession(threadId: string): Promise<void> {
-    const service = this.getCodexHistoryService?.() ?? null;
-    if (!service) { new Notice(t('agent.sessionsProviderUnavailable')); return; }
-    const state = this.ensureProviderState('codex');
-    state.activeSessionId = threadId;
-    const internalId = sessionIdFor('codex', threadId);
-    this.focusedSessionId = internalId;
-    this.isReadOnlyHistory = true;
-    this.model.reset(internalId);
-    this.scheduleRender(); this.renderSessionsList();
-    this.setBusyHint(t('agent.transcriptLoading'));
+  private loadLocalTranscript(
+    providerId: string,
+    threadId: string,
+  ): AgentEvent[] {
+    const imported = this.getImportedHistoryService?.() ?? null;
+    if (!imported) {
+      throw new Error(t('agent.sessionsProviderUnavailable'));
+    }
+    return imported.loadThread(providerId, threadId);
+  }
+
+  private async importProviderThreads(providerId: string): Promise<void> {
+    const history = this.getImportedHistoryService?.() ?? null;
+    if (!history) {
+      throw new Error(t('agent.sessionsProviderUnavailable'));
+    }
+    const state = this.ensureProviderState(providerId);
+    const wasStarted = this.agentManager.isStarted(providerId);
+    state.loading = true;
+    state.error = null;
+    this.renderSessionsList();
     try {
-      const events = await service.loadTranscript(internalId, threadId);
-      this.model.applyEventsBatch(internalId, events);
-      this.scheduleRender(); this.setBusyHint(null);
+      const sessions = await this.agentManager.listSessions(providerId, {});
+      for (const session of sessions) {
+        const cwd = requireAcpSessionCwd(session);
+        const events = await this.agentManager.importSessionTranscript(providerId, session.sessionId, { cwd });
+        history.saveThread(providerId, importedThreadFromAcpSession({ ...session, cwd }, events));
+      }
+      state.sessions = mergeLiveAgentSessions(state.sessions, history.listThreads(providerId));
+      state.error = null;
+      new Notice(t('agent.threadsImported', { count: sessions.length }));
     } catch (error) {
-      this.setBusyHint(null);
-      errorLog('[AgentOutputView] Codex loadTranscript failed:', error);
-      new Notice(this.formatLoadFailure(error));
+      state.error = this.formatLoadFailure(error);
+      throw error;
+    } finally {
+      state.loading = false;
+      if (!wasStarted) {
+        await this.agentManager.stopIfIdle(providerId);
+      }
+      this.renderSessionsList();
     }
   }
 
@@ -662,84 +589,133 @@ export class AgentOutputView extends ItemView {
     this.sessionsHeaderEl.empty();
     this.sessionsHeaderEl.createDiv({
       cls: 'termy-agent-sidebar-title',
-      text: this.isTerminalProviderSelected()
-        ? t('agent.terminalThreadsHeading')
-        : t('agent.sessionsHeading'),
+      text: t('agent.threadsHeading'),
     });
     const actions = this.sessionsHeaderEl.createDiv({ cls: 'termy-agent-sidebar-actions' });
     const refreshBtn = actions.createEl('button', { cls: 'clickable-icon termy-agent-sidebar-action', attr: { type: 'button' } });
     setIcon(refreshBtn, 'refresh-cw');
-    setTooltip(refreshBtn, this.isTerminalProviderSelected()
-      ? t('agent.terminalThreadsRefresh')
-      : t('agent.sessionsRefresh'));
-    refreshBtn.addEventListener('click', () => this.refreshActiveAgentSessions(true));
+    setTooltip(refreshBtn, t('agent.threadsRefresh'));
+    refreshBtn.addEventListener('click', () => this.refreshActiveAgentSessions());
+    if (!this.isTerminalProviderSelected()) {
+      const importBtn = actions.createEl('button', {
+        cls: 'clickable-icon termy-agent-sidebar-action',
+        attr: { type: 'button' },
+      });
+      setIcon(importBtn, 'download');
+      setTooltip(importBtn, t('agent.threadsImport'));
+      importBtn.addEventListener('click', () => {
+        const providerId = this.selectedAgentId;
+        if (!providerId || providerId === TERMINAL_PROVIDER_ID) return;
+        void this.importProviderThreads(providerId)
+          .catch((error) => new Notice(this.formatLoadFailure(error)));
+      });
+    }
     const newBtn = actions.createEl('button', { cls: 'clickable-icon termy-agent-sidebar-action', attr: { type: 'button' } });
     setIcon(newBtn, 'plus');
-    setTooltip(newBtn, this.isTerminalProviderSelected()
-      ? t('agent.terminalThreadsNewThread')
-      : t('agent.sessionsNewSession'));
+    setTooltip(newBtn, t('agent.threadsNew'));
     newBtn.addEventListener('click', () => { void this.handleNewSession(); });
   }
 
   private renderSessionsList(): void {
     if (!this.sessionsListEl) return;
     this.sessionsListEl.empty();
-    const state = this.getProviderState(this.selectedAgentId);
-    if (!state || (state.loading && state.sessions.length === 0)) {
+    const states = this.getThreadPoolStates();
+    const items = this.getThreadPoolItems();
+    const loading = states.some((state) => state.loading);
+    const errors = states.flatMap((state) => state.error ? [state.error] : []);
+
+    if (items.length === 0 && loading) {
       this.sessionsListEl.createDiv({ cls: 'termy-agent-sidebar-status', text: t('agent.sessionsLoading') });
       return;
     }
-    if (state.error) {
-      this.sessionsListEl.createDiv({ cls: 'termy-agent-sidebar-status is-error', text: state.error });
+
+    if (items.length === 0 && errors.length > 0) {
+      this.renderThreadPoolErrors(errors);
       return;
     }
-    if (state.sessions.length === 0) {
-      this.sessionsListEl.createDiv({
-        cls: 'termy-agent-sidebar-status',
-        text: this.isTerminalProviderSelected()
-          ? t('agent.terminalThreadsEmpty')
-          : t('agent.sessionsEmpty'),
-      });
+
+    if (loading) {
+      this.sessionsListEl.createDiv({ cls: 'termy-agent-sidebar-status', text: t('agent.sessionsLoading') });
+    }
+    if (errors.length > 0) {
+      this.renderThreadPoolErrors(errors);
+    }
+    if (items.length === 0) {
+      this.sessionsListEl.createDiv({ cls: 'termy-agent-sidebar-status', text: t('agent.threadsEmpty') });
       return;
     }
-    for (const session of state.sessions) {
-      const item = this.sessionsListEl.createDiv({ cls: 'termy-agent-session-item' });
-      if (session.id === state.activeSessionId) item.addClass('is-active');
-      const titleText = session.title && session.title.length > 0 ? session.title : t('agent.sessionItemUntitled');
-      const itemHeader = item.createDiv({ cls: 'termy-agent-session-title-row' });
-      itemHeader.createDiv({ cls: 'termy-agent-session-title', text: titleText });
-      if (this.isTerminalProviderSelected()) {
-        const closeBtn = itemHeader.createEl('button', {
-          cls: 'clickable-icon termy-agent-session-close',
-          attr: { type: 'button', 'aria-label': t('agent.terminalThreadsClose') },
-        });
-        setIcon(closeBtn, 'x');
-        closeBtn.addEventListener('click', (event) => {
-          event.stopPropagation();
-          void this.terminalThreads?.closeThread(session.id);
-        });
-      }
-      const updated = 'updatedAt' in session
-        ? (session as { updatedAt: number }).updatedAt
-        : ('time' in session ? ((session as { time?: { updated?: number } }).time?.updated ?? Date.now()) : Date.now());
-      item.createDiv({ cls: 'termy-agent-session-meta', text: formatRelativeTime(updated, Date.now()) });
-      const sid = session.id;
-      item.addEventListener('click', () => this.handleSessionClick(sid));
+
+    for (const item of items) {
+      this.renderThreadPoolItem(item);
     }
   }
 
-  private handleSessionClick(sessionId: string): void {
-    if (this.isTerminalProviderSelected()) {
-      this.terminalThreads?.setActiveThread(sessionId);
+  private renderThreadPoolErrors(errors: readonly string[]): void {
+    for (const error of errors) {
+      this.sessionsListEl?.createDiv({ cls: 'termy-agent-sidebar-status is-error', text: error });
+    }
+  }
+
+  private renderThreadPoolItem(thread: ThreadPoolItem): void {
+    if (!this.sessionsListEl) return;
+    const item = this.sessionsListEl.createDiv({ cls: 'termy-agent-session-item' });
+    if (thread.active) item.addClass('is-active');
+
+    const itemHeader = item.createDiv({ cls: 'termy-agent-session-title-row' });
+    this.renderThreadPoolIcon(itemHeader, thread);
+    const textStack = itemHeader.createDiv({ cls: 'termy-agent-session-text-stack' });
+    textStack.createDiv({ cls: 'termy-agent-session-title', text: thread.title });
+    textStack.createDiv({ cls: 'termy-agent-session-meta', text: this.threadMetaLabel(thread) });
+
+    const actionBtn = itemHeader.createEl('button', {
+      cls: 'clickable-icon termy-agent-session-action',
+      attr: { type: 'button', 'aria-label': t('agent.threadActions') },
+    });
+    setIcon(actionBtn, 'more-horizontal');
+    setTooltip(actionBtn, t('agent.threadActions'));
+    actionBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      this.showThreadMenu(event, thread);
+    });
+
+    item.addEventListener('click', () => this.handleThreadClick(thread));
+    item.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      this.showThreadMenu(event, thread);
+    });
+  }
+
+  private renderThreadPoolIcon(container: HTMLElement, thread: ThreadPoolItem): void {
+    const iconEl = container.createDiv({ cls: 'termy-agent-session-provider-icon' });
+    if (!thread.providerIcon) return;
+    renderThreadPoolProviderIcon(iconEl, thread.providerIcon);
+  }
+
+  private threadMetaLabel(thread: ThreadPoolItem): string {
+    const parts = [
+      thread.providerLabel,
+      formatRelativeTime(thread.updatedAt, Date.now()),
+    ];
+    if (thread.live) {
+      parts.push(t('agent.threadLiveBadge'));
+    }
+    return parts.join(' \u00b7 ');
+  }
+
+  private handleThreadClick(thread: ThreadPoolItem): void {
+    this.selectThreadProvider(thread.providerId);
+    if (thread.providerId === TERMINAL_PROVIDER_ID) {
+      this.requireTerminalThreads().setActiveThread(thread.threadId);
       this.refreshTerminalThreads();
       this.scheduleRender();
-    } else if (this.selectedAgentId === 'claude-code') {
-      try { this.loadClaudeCodeSession(sessionId); }
-      catch (error) { new Notice(this.formatLoadFailure(error)); }
-    } else if (this.selectedAgentId === 'codex') {
-      void this.loadCodexSession(sessionId).catch((e) => new Notice(this.formatLoadFailure(e)));
+    } else if (this.focusLiveAgentSession(thread.providerId, thread.threadId)) {
+      return;
     } else {
-      void this.loadOpenCodeSession(sessionId).catch((e) => new Notice(this.formatLoadFailure(e)));
+      try {
+        this.loadProviderThreadSession(thread.providerId, thread.threadId);
+      } catch (error) {
+        new Notice(this.formatLoadFailure(error));
+      }
     }
   }
 
@@ -790,19 +766,6 @@ export class AgentOutputView extends ItemView {
 
     this.emptyStateEl = null;
     this.bodyEl.empty();
-    // Read-only history badge + resume button (Req 4 AC 4 / Property 4.4).
-    if (this.isReadOnlyHistory) {
-      const readOnlyBar = this.bodyEl.createDiv({ cls: 'termy-agent-readonly-bar' });
-      readOnlyBar.createDiv({ cls: 'termy-agent-readonly-badge', text: t('agent.readOnlyBadge') });
-      if (this.agentManager && this.selectedAgentId) {
-        const resumeBtn = readOnlyBar.createEl('button', {
-          cls: 'mod-cta termy-agent-resume-btn',
-          text: t('agent.resumeSessionButton'),
-          attr: { type: 'button' },
-        });
-        resumeBtn.addEventListener('click', () => { void this.handleResumeFromHistory(); });
-      }
-    }
     const transcriptEl = this.bodyEl.createDiv({ cls: 'termy-agent-transcript' });
     const renderer = this.rendererFactory(this);
     const token = ++this.renderToken;
@@ -856,8 +819,10 @@ export class AgentOutputView extends ItemView {
     const externalId = sid.slice(colonIndex + 1);
     const state = this.getProviderState(providerKey);
     const match = state?.sessions.find((s) => s.id === externalId);
+    const meta = this.settings.getAgentThreadMeta(providerKey, externalId);
+    if (meta?.title && meta.title.length > 0) return meta.title;
     if (match?.title && match.title.length > 0) return match.title;
-    return this.settings?.getAgent(providerKey)?.label ?? sid;
+    return this.settings.getAgent(providerKey)?.label ?? sid;
   }
 
   private describeState(state: AgentSessionSnapshot['state']): string {
@@ -920,8 +885,8 @@ export class AgentOutputView extends ItemView {
         item.setTitle(t('agent.terminalThreadsClose'));
         item.setIcon('x');
         item.onClick(() => {
-          const activeId = this.terminalThreads?.getActiveThreadId();
-          if (activeId) void this.terminalThreads?.closeThread(activeId);
+          const activeId = this.requireTerminalThreads().getActiveThreadId();
+          if (activeId) void this.requireTerminalThreads().closeThread(activeId);
         });
       });
     } else {
@@ -929,6 +894,150 @@ export class AgentOutputView extends ItemView {
       menu.addItem((item) => { item.setTitle(t('agent.menuCopyTranscript')); item.setIcon('clipboard-copy'); item.onClick(() => { void this.copyTranscriptToClipboard(); }); });
     }
     menu.showAtMouseEvent(event);
+  }
+
+  private showThreadMenu(event: MouseEvent, thread: ThreadPoolItem): void {
+    const menu = new Menu();
+    menu.addItem((item) => {
+      item.setTitle(t('agent.threadRename'));
+      item.setIcon('pencil');
+      item.onClick(() => this.openRenameThreadModal(thread));
+    });
+    menu.addItem((item) => {
+      item.setTitle(t('agent.threadArchive'));
+      item.setIcon('archive');
+      item.onClick(() => { void this.archiveThread(thread); });
+    });
+    menu.showAtMouseEvent(event);
+  }
+
+  private openRenameThreadModal(thread: ThreadPoolItem): void {
+    new RenameTerminalModal(
+      this.app,
+      thread.title,
+      (title) => { void this.renameThread(thread, title); },
+      {
+        title: t('agent.threadRenameTitle'),
+        placeholder: t('agent.threadRenamePlaceholder'),
+      },
+    ).open();
+  }
+
+  private async renameThread(thread: ThreadPoolItem, title: string): Promise<void> {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    try {
+      if (thread.providerId === TERMINAL_PROVIDER_ID) {
+        this.requireTerminalThreads().renameThread(thread.threadId, trimmed);
+      }
+      await this.writeRenamedThreadMeta(thread, trimmed);
+      this.renderSessionsList();
+      this.scheduleRender();
+      new Notice(t('agent.threadRenamed'));
+    } catch (error) {
+      errorLog('[AgentOutputView] Failed to rename thread:', error);
+      new Notice(this.formatLoadFailure(error));
+    }
+  }
+
+  private async archiveThread(thread: ThreadPoolItem): Promise<void> {
+    try {
+      await this.writeArchivedThreadMeta(thread);
+      if (thread.providerId === TERMINAL_PROVIDER_ID) {
+        await this.requireTerminalThreads().closeThread(thread.threadId);
+      } else {
+        this.clearArchivedAgentSelection(thread);
+      }
+      this.renderSessionsList();
+      this.scheduleRender();
+      new Notice(t('agent.threadArchived'));
+    } catch (error) {
+      errorLog('[AgentOutputView] Failed to archive thread:', error);
+      new Notice(this.formatLoadFailure(error));
+    }
+  }
+
+  private clearArchivedAgentSelection(thread: ThreadPoolItem): void {
+    this.loadedHistorySessions.delete(sessionIdFor(thread.providerId, thread.threadId));
+    const state = this.getProviderState(thread.providerId);
+    if (state?.activeSessionId !== thread.threadId) return;
+    state.activeSessionId = null;
+    if (this.selectedAgentId === thread.providerId) {
+      this.focusedSessionId = null;
+    }
+  }
+
+  private async writeRenamedThreadMeta(thread: ThreadPoolItem, title: string): Promise<void> {
+    if (!this.settings) {
+      throw new Error('Settings accessor is unavailable');
+    }
+    await this.settings.upsertAgentThreadMeta({
+      providerId: thread.providerId,
+      threadId: thread.threadId,
+      title,
+      archived: false,
+      updatedAt: Date.now(),
+    });
+  }
+
+  private async writeArchivedThreadMeta(thread: ThreadPoolItem): Promise<void> {
+    if (!this.settings) {
+      throw new Error('Settings accessor is unavailable');
+    }
+    const previous = this.settings.getAgentThreadMeta(thread.providerId, thread.threadId);
+    await this.settings.upsertAgentThreadMeta({
+      providerId: thread.providerId,
+      threadId: thread.threadId,
+      title: previous?.title,
+      archived: true,
+      updatedAt: Date.now(),
+    });
+  }
+
+  private addLiveAgentSession(agentId: string, sessionId: string): void {
+    const state = this.ensureProviderState(agentId);
+    const internalId = sessionIdFor(agentId, sessionId);
+    state.sessions = upsertLiveAgentSession(state.sessions, {
+      id: sessionId,
+      title: this.settings.getAgent(agentId)?.label ?? agentId,
+      updatedAt: Date.now(),
+      live: true,
+    });
+    state.activeSessionId = sessionId;
+    this.focusedSessionId = internalId;
+    this.loadedHistorySessions.delete(internalId);
+  }
+
+  private activateHistorySession(agentId: string, sessionId: string): AgentSessionId {
+    const state = this.ensureProviderState(agentId);
+    state.activeSessionId = sessionId;
+    this.focusedSessionId = sessionIdFor(agentId, sessionId);
+    return this.focusedSessionId;
+  }
+
+  private getAgentSessionCwd(agentId: string, sessionId: string): string {
+    const state = this.ensureProviderState(agentId);
+    return requireSessionCwd(state.sessions, sessionId);
+  }
+
+  private setProviderLoading(agentId: string, loading: boolean): void {
+    const state = this.ensureProviderState(agentId);
+    state.loading = loading;
+    if (loading) state.error = null;
+    this.renderSessionsList();
+  }
+
+  private focusLiveAgentSession(agentId: string, sessionId: string): boolean {
+    const state = this.getProviderState(agentId);
+    if (!state) return false;
+    const session = state?.sessions.find((item) => item.id === sessionId);
+    if (!session || !isLiveAgentSession(session)) return false;
+    state.activeSessionId = sessionId;
+    this.focusedSessionId = sessionIdFor(agentId, sessionId);
+    this.loadedHistorySessions.delete(this.focusedSessionId);
+    this.scheduleRender();
+    this.renderSessionsList();
+    return true;
   }
 
   private async copyTranscriptToClipboard(): Promise<void> {
@@ -953,8 +1062,52 @@ export class AgentOutputView extends ItemView {
     return state;
   }
 
+  private getThreadPoolStates(): ProviderState[] {
+    const states: ProviderState[] = [];
+    for (const provider of this.getProviderTabs()) {
+      const state = this.getProviderState(provider.id);
+      if (state) states.push(state);
+    }
+    return states;
+  }
+
+  private getThreadPoolItems(): ThreadPoolItem[] {
+    const providers: ProviderThreadSource[] = [];
+    for (const provider of this.getProviderTabs()) {
+      const state = this.getProviderState(provider.id);
+      if (!state) continue;
+      providers.push({
+        providerId: provider.id,
+        providerLabel: provider.label,
+        providerIcon: getProviderIconConfig(provider),
+        sessions: state.sessions,
+        activeSessionId: state.activeSessionId,
+        live: provider.id === TERMINAL_PROVIDER_ID,
+      });
+    }
+    return buildThreadPoolItems({
+      providers,
+      selectedProviderId: this.selectedAgentId,
+      getMeta: (providerId, threadId) => this.settings.getAgentThreadMeta(providerId, threadId),
+      untitledTitle: t('agent.sessionItemUntitled'),
+    });
+  }
+
+  private selectThreadProvider(providerId: string): void {
+    if (this.selectedAgentId === providerId) return;
+    this.selectedAgentId = providerId;
+    this.doRenderTabs();
+    this.renderSessionsHeader();
+    if (providerId === TERMINAL_PROVIDER_ID) {
+      this.focusedSessionId = null;
+    } else {
+      this.terminalThreads?.detach();
+    }
+    this.updateInputDisabledState();
+  }
+
   private getProviderTabs(): ProviderTabConfig[] {
-    const agents = this.settings?.getEnabledAgents() ?? [];
+    const agents = this.settings.getEnabledAgents();
     return buildProviderTabs({
       enabledAgents: agents,
       terminalProvider: this.terminalThreads
@@ -962,7 +1115,7 @@ export class AgentOutputView extends ItemView {
         id: TERMINAL_PROVIDER_ID,
         label: t('agent.terminalProvider'),
         icon: 'terminal',
-        fallbackIcon: 'terminal',
+        iconKind: 'lucide',
       }
       : null,
     });
@@ -972,21 +1125,28 @@ export class AgentOutputView extends ItemView {
     return this.selectedAgentId === TERMINAL_PROVIDER_ID;
   }
 
+  private requireTerminalThreads(): AgentTerminalThreadController {
+    if (!this.terminalThreads) {
+      throw new Error('Terminal threads are unavailable');
+    }
+    return this.terminalThreads;
+  }
+
   private refreshTerminalThreads(): void {
-    if (!this.terminalThreads) return;
+    const terminalThreads = this.requireTerminalThreads();
     const state = this.ensureProviderState(TERMINAL_PROVIDER_ID);
-    state.sessions = this.terminalThreads.listThreads();
-    state.activeSessionId = this.terminalThreads.getActiveThreadId();
+    state.sessions = terminalThreads.listThreads();
+    state.activeSessionId = terminalThreads.getActiveThreadId();
     state.loading = false;
     state.error = null;
     this.renderSessionsList();
   }
 
   private async createTerminalThread(command?: string, title?: string): Promise<void> {
-    if (!this.terminalThreads) return;
+    const terminalThreads = this.requireTerminalThreads();
     try {
-      const snapshot = await this.terminalThreads.createThread();
-      const terminal = this.terminalThreads.getActiveTerminal();
+      const snapshot = await terminalThreads.createThread();
+      const terminal = terminalThreads.getActiveTerminal();
       if (terminal && title) {
         terminal.setSuggestedTitle(title);
       }
@@ -1006,7 +1166,7 @@ export class AgentOutputView extends ItemView {
   }
 
   private submitTerminalInput(text: string): void {
-    const terminal = this.terminalThreads?.getActiveTerminal();
+    const terminal = this.requireTerminalThreads().getActiveTerminal();
     if (!terminal) {
       new Notice(t('notices.presetScript.terminalUnavailable'));
       return;
@@ -1023,16 +1183,17 @@ export class AgentOutputView extends ItemView {
     if (!this.bodyEl) return;
     this.updateHeader(null);
     this.renderStatusIndicatorOnly();
+    const terminalThreads = this.requireTerminalThreads();
 
     this.bodyEl.empty();
     this.emptyStateEl = null;
 
-    if (!this.terminalThreads?.hasThreads()) {
+    if (!terminalThreads.hasThreads()) {
       this.bodyEl.removeClass('is-terminal-thread');
       const empty = this.bodyEl.createDiv({ cls: 'termy-agent-empty' });
       empty.createDiv({ cls: 'termy-agent-empty-title', text: t('agent.terminalThreadsEmptyTitle') });
       empty.createDiv({ cls: 'termy-agent-empty-body', text: t('agent.terminalThreadsEmpty') });
-      this.terminalThreads?.detach();
+      terminalThreads.detach();
       this.updateInputDisabledState();
       return;
     }
@@ -1040,7 +1201,7 @@ export class AgentOutputView extends ItemView {
     this.bodyEl.addClass('is-terminal-thread');
     const wrapper = this.bodyEl.createDiv({ cls: 'terminal-view-container termy-agent-terminal-view-container' });
     const terminalContainer = wrapper.createDiv({ cls: 'terminal-container termy-agent-terminal-container' });
-    this.terminalThreads.attach(wrapper, terminalContainer);
+    terminalThreads.attach(wrapper, terminalContainer);
     this.updateInputDisabledState();
   }
 
@@ -1071,7 +1232,11 @@ export class AgentOutputView extends ItemView {
 
   private handleClearAction(): void {
     if (this.isTerminalProviderSelected()) {
-      this.terminalThreads?.getActiveTerminal()?.clearBuffer();
+      const terminal = this.requireTerminalThreads().getActiveTerminal();
+      if (!terminal) {
+        throw new Error('Active terminal thread is unavailable');
+      }
+      terminal.clearBuffer();
       return;
     }
     this.clear();
@@ -1096,6 +1261,41 @@ function sessionIdFor(agentId: string, externalId: string): AgentSessionId {
   return `${agentId}:${externalId}`;
 }
 
+function parseAcpUpdatedAt(updatedAt: string | undefined): number {
+  if (!updatedAt) {
+    throw new Error('ACP session is missing updatedAt');
+  }
+  const value = Date.parse(updatedAt);
+  if (!Number.isFinite(value)) {
+    throw new Error(`ACP session has invalid updatedAt: ${updatedAt}`);
+  }
+  return value;
+}
+
+function requireAcpSessionCwd(session: { sessionId: string; cwd?: string }): string {
+  const cwd = session.cwd?.trim();
+  if (!cwd) {
+    throw new Error(`ACP session "${session.sessionId}" is missing cwd`);
+  }
+  return cwd;
+}
+
+function importedThreadFromAcpSession(
+  session: { sessionId: string; title?: string; cwd: string; updatedAt?: string },
+  events: readonly AgentEvent[],
+): ImportedAgentThreadListItem & {
+  readonly events: readonly AgentEvent[];
+} {
+  return {
+    id: session.sessionId,
+    ...(session.title !== undefined ? { title: session.title } : {}),
+    cwd: session.cwd,
+    updatedAt: parseAcpUpdatedAt(session.updatedAt),
+    importedAt: Date.now(),
+    events,
+  };
+}
+
 function formatRelativeTime(timestamp: number, now: number): string {
   const deltaSeconds = Math.max(0, Math.floor((now - timestamp) / 1000));
   if (deltaSeconds < 60) return t('agent.sessionTimeJustNow');
@@ -1105,6 +1305,24 @@ function formatRelativeTime(timestamp: number, now: number): string {
   if (hours < 24) return t('agent.sessionTimeHours', { count: hours });
   const days = Math.floor(hours / 24);
   return t('agent.sessionTimeDays', { count: days });
+}
+
+function getProviderIconConfig(provider: ProviderTabConfig): ProviderIconConfig | undefined {
+  if (provider.iconKind === 'lucide') {
+    return { kind: 'lucide', icon: provider.icon };
+  }
+  if (!provider.icon) {
+    return undefined;
+  }
+  return { kind: 'brand', icon: provider.icon };
+}
+
+function renderThreadPoolProviderIcon(el: HTMLElement, icon: ProviderIconConfig): void {
+  if (icon.kind === 'lucide') {
+    setIcon(el, icon.icon);
+    return;
+  }
+  renderAgentBrandIcon(el, icon.icon);
 }
 
 function serializeSnapshotToMarkdown(snapshot: AgentSessionSnapshot): string {
@@ -1133,8 +1351,4 @@ function serializeSnapshotToMarkdown(snapshot: AgentSessionSnapshot): string {
     }
   }
   return parts.join('\n\n');
-}
-
-function missingTerminalSettings(): TerminalSettings {
-  throw new Error('Terminal settings are unavailable');
 }

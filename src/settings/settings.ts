@@ -38,6 +38,20 @@ export interface PlatformCustomShellPaths {
 }
 
 /**
+ * Termy-owned metadata for the Agent panel's unified thread pool.
+ *
+ * Provider history files remain read-only. Rename and archive actions
+ * are persisted as an overlay keyed by provider + external thread id.
+ */
+export interface AgentThreadMeta {
+  readonly providerId: string;
+  readonly threadId: string;
+  readonly title?: string;
+  readonly archived?: boolean;
+  readonly updatedAt?: number;
+}
+
+/**
  * Terminal settings interface
  */
 export interface TerminalSettings {
@@ -153,6 +167,7 @@ export interface TerminalSettings {
   agents: readonly AgentConfig[];
   permissionRules: readonly PermissionRule[];
   permissionApprovalEnabled: boolean;
+  agentThreadMeta: readonly AgentThreadMeta[];
 }
 
 /**
@@ -427,4 +442,5 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   agents: [],
   permissionRules: [],
   permissionApprovalEnabled: true,
+  agentThreadMeta: [],
 };

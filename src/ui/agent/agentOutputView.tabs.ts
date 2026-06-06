@@ -19,8 +19,8 @@ export interface TabRenderContext {
   readonly providerTabsEl: HTMLElement;
   readonly headerStatusEl: HTMLElement | null;
   readonly selectedAgentId: string | null;
-  readonly agentManager: AgentManager | null;
-  readonly permissionQueue: PermissionQueue | null;
+  readonly agentManager: AgentManager;
+  readonly permissionQueue: PermissionQueue;
   readonly getActiveSnapshot: () => AgentSessionSnapshot | null;
   readonly onTabClick: (agentId: string) => void;
   readonly onOpenSettings: () => void;
@@ -50,11 +50,9 @@ export function renderProviderTabs(
     if (agent.id === ctx.selectedAgentId) {
       button.addClass('is-active');
     }
-    const iconEl = button.createSpan({ cls: 'termy-agent-provider-tab-icon' });
-    if (agent.icon) {
-      renderAgentBrandIcon(iconEl, agent.icon, agent.fallbackIcon ?? 'sparkles');
-    } else {
-      setIcon(iconEl, agent.fallbackIcon ?? 'sparkles');
+    if (hasProviderTabIcon(agent)) {
+      const iconEl = button.createSpan({ cls: 'termy-agent-provider-tab-icon' });
+      renderProviderTabIcon(iconEl, agent);
     }
     button.createSpan({ cls: 'termy-agent-provider-tab-label', text: agent.label });
     button.addEventListener('click', () => {
@@ -74,8 +72,8 @@ export function renderStatusIndicator(ctx: TabRenderContext): void {
   if (!ctx.headerStatusEl) return;
   ctx.headerStatusEl.empty();
 
-  const activeCount = ctx.agentManager?.getActiveAgentIds().length ?? 0;
-  const pendingCount = ctx.permissionQueue?.pendingCount() ?? 0;
+  const activeCount = ctx.agentManager.getActiveAgentIds().length;
+  const pendingCount = ctx.permissionQueue.pendingCount();
 
   // Determine running session count from the current snapshot.
   const snapshot = ctx.getActiveSnapshot();
@@ -121,4 +119,19 @@ function renderEmptyAgentsState(ctx: TabRenderContext): void {
   openSettingsBtn.addEventListener('click', () => {
     ctx.onOpenSettings();
   });
+}
+
+function renderProviderTabIcon(iconEl: HTMLElement, agent: ProviderTabConfig): void {
+  if (agent.iconKind === 'lucide') {
+    setIcon(iconEl, agent.icon);
+    return;
+  }
+  if (!agent.icon) {
+    throw new Error(`Provider "${agent.id}" is missing a Lobehub icon key`);
+  }
+  renderAgentBrandIcon(iconEl, agent.icon);
+}
+
+function hasProviderTabIcon(agent: ProviderTabConfig): boolean {
+  return agent.iconKind === 'lucide' || typeof agent.icon === 'string';
 }

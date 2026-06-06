@@ -11,12 +11,21 @@ export class RenameTerminalModal extends Modal {
   private onSubmit: (newTitle: string) => void;
   private inputValue: string;
   private inputEl: HTMLInputElement | null = null;
+  private titleText: string;
+  private placeholderText: string;
 
-  constructor(app: App, currentTitle: string, onSubmit: (newTitle: string) => void) {
+  constructor(
+    app: App,
+    currentTitle: string,
+    onSubmit: (newTitle: string) => void,
+    labels: { readonly title: string; readonly placeholder: string },
+  ) {
     super(app);
     this.currentTitle = currentTitle;
     this.inputValue = currentTitle;
     this.onSubmit = onSubmit;
+    this.titleText = labels.title;
+    this.placeholderText = labels.placeholder;
   }
 
   onOpen(): void {
@@ -28,7 +37,7 @@ export class RenameTerminalModal extends Modal {
 
     // Title
     const titleEl = contentEl.createDiv({ cls: 'modal-title' });
-    titleEl.createDiv({ cls: 'modal-title-text', text: t('modals.renameTerminal.title') });
+    titleEl.createDiv({ cls: 'modal-title-text', text: this.titleText });
 
     // Input area container
     const inputContainer = contentEl.createDiv({ cls: 'rename-input-container' });
@@ -36,7 +45,7 @@ export class RenameTerminalModal extends Modal {
     // Label
     inputContainer.createEl('label', { 
       cls: 'rename-input-label',
-      text: t('modals.renameTerminal.placeholder')
+      text: this.placeholderText
     });
     
     // Input field
@@ -44,7 +53,7 @@ export class RenameTerminalModal extends Modal {
       cls: 'rename-input',
       type: 'text',
       value: this.currentTitle,
-      placeholder: t('modals.renameTerminal.placeholder')
+      placeholder: this.placeholderText
     });
 
     // Input handler

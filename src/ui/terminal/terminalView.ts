@@ -122,7 +122,11 @@ export class TerminalView extends ItemView {
                 this.updateLeafHeader(view.leaf);
                 view.updateDropHintText();
               }
-            }
+            },
+            {
+              title: t('modals.renameTerminal.title'),
+              placeholder: t('modals.renameTerminal.placeholder'),
+            },
           ).open();
         });
     });

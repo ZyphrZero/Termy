@@ -622,6 +622,20 @@ export interface TranslationKeys {
     providerClaudeCode: string;
     providerCodex: string;
     /** Sessions sidebar */
+    threadsHeading: string;
+    threadsRefresh: string;
+    threadsImport: string;
+    threadsImported: string;
+    threadsNew: string;
+    threadsEmpty: string;
+    threadActions: string;
+    threadLiveBadge: string;
+    threadRename: string;
+    threadArchive: string;
+    threadRenameTitle: string;
+    threadRenamePlaceholder: string;
+    threadRenamed: string;
+    threadArchived: string;
     sessionsHeading: string;
     sessionsRefresh: string;
     sessionsNewSession: string;
@@ -640,8 +654,6 @@ export interface TranslationKeys {
     transcriptLoadFailed: string;
     openSettings: string;
     agentRemoved: string;
-    readOnlyBadge: string;
-    resumeSessionButton: string;
     restartButton: string;
   };
 }

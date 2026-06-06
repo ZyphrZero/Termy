@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New settings section: "Agents" with dynamic agent configuration (add, edit, reorder, enable/disable, reset built-ins).
   - Permission modal for ACP permission requests (fs write, terminal create) with FIFO queue, persistent rules, and 60 s timeout banner.
   - 4 built-in default agents: `claude-code`, `codex`, `opencode`, `gemini`.
-  - Read-only history preserved for all three providers (Claude Code, Codex, OpenCode).
+  - Session history preserved for all three providers (Claude Code, Codex, OpenCode), with history rows resumable through ACP `session/load`.
   - Big-bang deletion of non-ACP active session code (Claude Code stream client, Codex app-server client, OpenCode server manager, IDE bridge agent source, mock agent source).
 - Added an Agent output panel that renders structured agent activity as Markdown next to the terminal. The first wired-up source is the existing IDE bridge: when Claude Code (or any other MCP-compatible CLI) connects, the panel shows a "connected" session card; when the agent calls the new `openFile` tool, Termy navigates to the requested vault file and posts a tool card. xterm.js terminals are unchanged. Demo flow available through the **Agent: run demo stream** command.
 - Added a built-in Hermes Agent launcher to the workflow gallery, status bar menu, and command palette. The launcher detects the `hermes` CLI on PATH, surfaces install / update guidance for macOS, Linux, and Windows, and queries `https://api.github.com` for the latest `NousResearch/hermes-agent` release when **Check for AI launcher updates** is opted in.

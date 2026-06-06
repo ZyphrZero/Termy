@@ -21,10 +21,10 @@
  *   are translated into the panel's tool card model.
  * - **tool_call_update** → `tool-call-update` patching the same id.
  * - **plan** → `plan` with the steps mapped 1:1.
- * - **available_commands_update**, **current_mode_update**, and
- *   anything unrecognised → ignored. We surface no card for these
- *   because they are slash-command discovery / mode UI primarily, and
- *   Termy does not yet have UI for them. They simply do not show up.
+ * - **available_commands_update**, **current_mode_update** → explicit
+ *   no-op. They are command/mode metadata, not transcript content.
+ * - Unsupported protocol variants throw. Termy should expose protocol
+ *   drift immediately instead of hiding missing UI mappings.
  *
  * Stop reasons (from the prompt response, not a `session/update`)
  * map to `session-state` events through {@link adaptStopReason}.
@@ -47,6 +47,7 @@ import type { AgentSessionId, AgentToolKind, AgentToolStatus } from '../agentEve
 export interface AdaptUpdateInput {
   sessionId: AgentSessionId;
   update: AcpSessionUpdate;
+  includeUserMessages?: boolean;
 }
 
 /**
@@ -65,27 +66,43 @@ export function adaptAcpUpdate(input: AdaptUpdateInput): AgentEvent[] {
       return adaptTextChunk(sessionId, 'thought', updateRecord.content as AcpContentBlock);
 
     case 'user_message_chunk':
-      // Termy renders the user's input itself; do not echo.
-      return [];
+      return input.includeUserMessages
+        ? adaptUserTextChunk(sessionId, updateRecord.content as AcpContentBlock)
+        : [];
 
     case 'tool_call':
-      return adaptToolCall(sessionId, update as AcpToolCallUpdate);
+      return adaptToolCall(sessionId, update);
 
     case 'tool_call_update':
-      return adaptToolCallProgress(sessionId, update as AcpToolCallProgressUpdate);
+      return adaptToolCallProgress(sessionId, update);
 
     case 'plan':
-      return adaptPlan(sessionId, (updateRecord.entries ?? []) as AcpPlanEntry[]);
+      return adaptPlan(
+        sessionId,
+        requireArray(updateRecord.entries, 'ACP plan update entries') as AcpPlanEntry[],
+      );
 
     case 'available_commands_update':
     case 'current_mode_update':
       return [];
 
     default:
-      // Unknown discriminators are silently ignored. The protocol is
-      // still evolving and Termy must not crash on a future variant.
-      return [];
+      throw new Error(`Unsupported ACP session/update kind: ${String(updateRecord.sessionUpdate)}`);
   }
+}
+
+function adaptUserTextChunk(
+  sessionId: AgentSessionId,
+  content: AcpContentBlock,
+): AgentEvent[] {
+  const text = extractTextFromContentBlock(content);
+  if (text.length === 0) {
+    return [];
+  }
+  return [
+    { kind: 'text', sessionId, channel: 'final', delta: `\n\n**You:** ${text}\n\n` },
+    { kind: 'text-done', sessionId, channel: 'final' },
+  ];
 }
 
 /**
@@ -107,11 +124,8 @@ export function adaptStopReason(
       return { kind: 'session-state', sessionId, state: 'errored', detail: 'Max tokens reached' };
     case 'max_turn_requests':
       return { kind: 'session-state', sessionId, state: 'errored', detail: 'Max turn requests reached' };
-    default: {
-      // Forward-compatible: render as a generic awaiting-input.
-      const _exhaustive: never = stopReason;
-      return { kind: 'session-state', sessionId, state: 'awaiting-input', detail: String(_exhaustive) };
-    }
+    default:
+      throw new Error(`Unsupported ACP stop reason: ${String(stopReason)}`);
   }
 }
 
@@ -131,14 +145,16 @@ function adaptToolCall(
   sessionId: AgentSessionId,
   update: AcpToolCallUpdate,
 ): AgentEvent[] {
+  const toolCallId = requireString(update.toolCallId, 'ACP tool_call.toolCallId');
+  const title = requireString(update.title, 'ACP tool_call.title');
   const events: AgentEvent[] = [
     {
       kind: 'tool-call',
       sessionId,
-      toolCallId: update.toolCallId,
-      toolName: update.title,
+      toolCallId,
+      toolName: title,
       toolKind: mapToolKind(update.kind),
-      title: update.title,
+      title,
       status: mapToolStatus(update.status, 'pending'),
     },
   ];
@@ -147,10 +163,7 @@ function adaptToolCall(
   // body / diff / output content — otherwise the panel would render
   // a redundant card update.
   if (update.content && update.content.length > 0) {
-    const progress = synthesizeProgressUpdate(sessionId, update.toolCallId, update.status, update.content);
-    if (progress) {
-      events.push(progress);
-    }
+    events.push(synthesizeProgressUpdate(sessionId, toolCallId, update.status, update.content));
   }
   return events;
 }
@@ -159,8 +172,11 @@ function adaptToolCallProgress(
   sessionId: AgentSessionId,
   update: AcpToolCallProgressUpdate,
 ): AgentEvent[] {
-  const progress = synthesizeProgressUpdate(sessionId, update.toolCallId, update.status, update.content);
-  return progress ? [progress] : [];
+  if (update.status === undefined && (!update.content || update.content.length === 0)) {
+    throw new Error('ACP tool_call_update must include status or content');
+  }
+  const toolCallId = requireString(update.toolCallId, 'ACP tool_call_update.toolCallId');
+  return [synthesizeProgressUpdate(sessionId, toolCallId, update.status, update.content)];
 }
 
 function synthesizeProgressUpdate(
@@ -168,11 +184,7 @@ function synthesizeProgressUpdate(
   toolCallId: string,
   status: AcpToolStatus | undefined,
   content: AcpToolCallContent[] | undefined,
-): AgentEvent | null {
-  if (status === undefined && (!content || content.length === 0)) {
-    return null;
-  }
-
+): AgentEvent {
   const event: AgentEvent = {
     kind: 'tool-call-update',
     sessionId,
@@ -185,9 +197,6 @@ function synthesizeProgressUpdate(
   const folded = foldToolCallContent(content);
   if (folded.body !== undefined) {
     event.body = folded.body;
-  }
-  if (folded.output !== undefined) {
-    event.output = folded.output;
   }
   if (folded.diff !== undefined) {
     event.diff = folded.diff;
@@ -211,7 +220,6 @@ function adaptPlan(sessionId: AgentSessionId, entries: AcpPlanEntry[]): AgentEve
 
 interface FoldedToolContent {
   body?: string;
-  output?: string;
   diff?: { unified: string; path?: string };
 }
 
@@ -221,27 +229,23 @@ function foldToolCallContent(content: AcpToolCallContent[] | undefined): FoldedT
   }
 
   const bodyParts: string[] = [];
-  let output: string | undefined;
   let diff: { unified: string; path?: string } | undefined;
 
   for (const entry of content) {
     if (entry.type === 'content') {
-      const block = (entry as { content?: unknown }).content;
-      if (block !== undefined) {
-        const text = extractTextFromContentBlock(block as AcpContentBlock);
-        if (text) bodyParts.push(text);
-      }
-    } else if (entry.type === 'diff' && typeof (entry as { path?: unknown }).path === 'string' && typeof (entry as { newText?: unknown }).newText === 'string') {
-      const diffEntry = entry as { path: string; oldText?: unknown; newText: string };
+      const text = extractTextFromContentBlock(entry.content);
+      if (text) bodyParts.push(text);
+    } else if (entry.type === 'diff') {
+      const diffEntry = requireDiffToolContent(entry);
       const oldText = typeof diffEntry.oldText === 'string' ? diffEntry.oldText : '';
       diff = {
         path: diffEntry.path,
         unified: buildUnifiedDiff(diffEntry.path, oldText, diffEntry.newText),
       };
     } else if (entry.type === 'terminal') {
-      // Terminal-content entries reference a terminal lifecycle that
-      // Termy does not yet host; reflect the reference in the body.
-      bodyParts.push(`_(terminal output id: ${'terminalId' in entry ? String(entry.terminalId) : '?'})_`);
+      bodyParts.push(`_(terminal output id: ${entry.terminalId})_`);
+    } else {
+      assertNever(entry);
     }
   }
 
@@ -249,7 +253,6 @@ function foldToolCallContent(content: AcpToolCallContent[] | undefined): FoldedT
   if (bodyParts.length > 0) {
     folded.body = bodyParts.join('\n\n');
   }
-  if (output !== undefined) folded.output = output;
   if (diff) folded.diff = diff;
   return folded;
 }
@@ -271,21 +274,26 @@ function buildUnifiedDiff(path: string, oldText: string, newText: string): strin
 
 function extractTextFromContentBlock(block: AcpContentBlock): string {
   if (typeof block !== 'object' || block === null) {
-    return '';
+    throw new Error('ACP content block must be an object');
   }
   const type = (block as { type?: unknown }).type;
   if (type === 'text' && typeof (block as { text?: unknown }).text === 'string') {
     return (block as { text: string }).text;
   }
   if (type === 'resource_link') {
-    const rl = block as { uri?: string; name?: string };
-    return rl.name ? `[${rl.name}](${rl.uri ?? ''})` : rl.uri ?? '';
+    const rl = block as { uri?: unknown; name?: unknown };
+    const uri = requireString(rl.uri, 'ACP resource_link.uri');
+    return typeof rl.name === 'string' && rl.name.length > 0
+      ? `[${rl.name}](${uri})`
+      : uri;
   }
   if (type === 'resource') {
     const r = block as { resource?: { uri?: string; text?: string } };
-    return r.resource?.text ?? r.resource?.uri ?? '';
+    if (typeof r.resource?.text === 'string') return r.resource.text;
+    if (typeof r.resource?.uri === 'string') return r.resource.uri;
+    throw new Error('ACP resource block must include resource.text or resource.uri');
   }
-  return '';
+  throw new Error(`Unsupported ACP content block type: ${String(type)}`);
 }
 
 function mapToolKind(kind: AcpToolKind | undefined): AgentToolKind {
@@ -300,14 +308,15 @@ function mapToolKind(kind: AcpToolKind | undefined): AgentToolKind {
     case 'think':
     case 'other':
     case undefined:
-    default:
       return 'other';
+    default:
+      throw new Error(`Unsupported ACP tool kind: ${String(kind)}`);
   }
 }
 
 function mapToolStatus(
   status: AcpToolStatus | undefined,
-  fallback: AgentToolStatus,
+  defaultStatus: AgentToolStatus,
 ): AgentToolStatus {
   switch (status) {
     case 'pending': return 'pending';
@@ -316,8 +325,9 @@ function mapToolStatus(
     case 'failed': return 'failed';
     case 'cancelled': return 'cancelled';
     case undefined:
+      return defaultStatus;
     default:
-      return fallback;
+      throw new Error(`Unsupported ACP tool status: ${String(status)}`);
   }
 }
 
@@ -330,7 +340,39 @@ function mapPlanStatus(
     case 'failed': return 'failed';
     case 'pending':
     case undefined:
-    default:
       return 'pending';
+    default:
+      throw new Error(`Unsupported ACP plan status: ${String(status)}`);
   }
+}
+
+function requireString(value: unknown, fieldName: string): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`${fieldName} must be a non-empty string`);
+  }
+  return value;
+}
+
+function requireArray(value: unknown, fieldName: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${fieldName} must be an array`);
+  }
+  return value;
+}
+
+function requireDiffToolContent(entry: AcpToolCallContent): {
+  readonly path: string;
+  readonly oldText?: unknown;
+  readonly newText: string;
+} {
+  const candidate = entry as { path?: unknown; oldText?: unknown; newText?: unknown };
+  return {
+    path: requireString(candidate.path, 'ACP diff content path'),
+    oldText: candidate.oldText,
+    newText: requireString(candidate.newText, 'ACP diff content newText'),
+  };
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unsupported ACP variant: ${JSON.stringify(value)}`);
 }
