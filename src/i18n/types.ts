@@ -606,6 +606,17 @@ export interface TranslationKeys {
     statusConnected: string;
     statusRunning: string;
     statusPending: string;
+    terminalProvider: string;
+    terminalThreadSubtitle: string;
+    terminalThreadSubtitleEmpty: string;
+    terminalInputPlaceholder: string;
+    terminalThreadsHeading: string;
+    terminalThreadsRefresh: string;
+    terminalThreadsNewThread: string;
+    terminalThreadsClose: string;
+    terminalThreadsEmptyTitle: string;
+    terminalThreadsEmpty: string;
+    terminalThreadsUnavailable: string;
     /** Provider tab labels */
     providerOpenCode: string;
     providerClaudeCode: string;

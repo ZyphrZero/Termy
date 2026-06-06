@@ -333,6 +333,8 @@ export default class TerminalPlugin extends Plugin {
         getClaudeCodeHistoryService: () => this.getClaudeCodeHistoryService(),
         getCodexHistoryService: () => this.getCodexHistoryService(),
         getAgentContextBridge: () => this._agentContextBridge,
+        getTerminalService: () => this.getTerminalService(),
+        getSettings: () => this.settings,
       }),
     );
 
@@ -1765,6 +1767,17 @@ export default class TerminalPlugin extends Plugin {
     // Otherwise return the first terminal view
     const leaves = this.app.workspace.getLeavesOfType(TERMINAL_VIEW_TYPE);
     const view = leaves.map((item) => item.view).find((item) => this.isTerminalView(item));
+    return view ?? null;
+  }
+
+  private getAgentOutputView(): AgentOutputView | null {
+    const activeView = this.app.workspace.getActiveViewOfType(AgentOutputView);
+    if (activeView) {
+      return activeView;
+    }
+
+    const leaves = this.app.workspace.getLeavesOfType(AGENT_OUTPUT_VIEW_TYPE);
+    const view = leaves.map((item) => item.view).find((item) => item instanceof AgentOutputView);
     return view ?? null;
   }
 
@@ -3239,6 +3252,12 @@ export default class TerminalPlugin extends Plugin {
       return;
     }
 
+    const launcherEntry = getAiLauncherEntry(normalizedScript.id);
+    if (launcherEntry?.category === 'coding-agent') {
+      await this.runPresetScriptInAgentTerminalThread(normalizedScript, terminalCommand);
+      return;
+    }
+
     let terminalView = this.getActiveTerminalView();
     if (normalizedScript.runInNewTerminal) {
       await this.activateTerminalView(this.getLeafForNewTerminal());
@@ -3262,6 +3281,21 @@ export default class TerminalPlugin extends Plugin {
     const normalizedCommand = this.normalizePresetScriptCommand(terminalCommand);
     terminal.write(normalizedCommand);
     this.focusTerminalView(terminalView, terminal);
+  }
+
+  private async runPresetScriptInAgentTerminalThread(
+    script: PresetScript,
+    terminalCommand: string,
+  ): Promise<void> {
+    await this.activateAgentOutputView();
+    const agentView = this.getAgentOutputView();
+    if (!agentView) {
+      throw new Error(t('agent.terminalThreadsUnavailable'));
+    }
+
+    const title = (script.terminalTitle || script.name || '').trim();
+    const normalizedCommand = this.normalizePresetScriptCommand(terminalCommand);
+    await agentView.startTerminalThread(normalizedCommand, title || undefined);
   }
 
   private buildWorkflowTerminalCommand(actions: PresetWorkflowAction[]): string {

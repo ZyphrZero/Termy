@@ -42,14 +42,21 @@ import { renderAgentSnapshot, type AgentSnapshotRenderer } from './agentMarkdown
 import { createAgentSnapshotRenderer } from './agentMarkdownRendererFactory';
 import { enrichPromptWithContext } from '../../services/agent/panelContextEncoder';
 import type { AgentContextBridge } from '../../services/context/agentContextBridge';
-import { renderProviderTabs, renderStatusIndicator, type TabRenderContext } from './agentOutputView.tabs';
+import { renderProviderTabs, renderStatusIndicator, type ProviderTabConfig, type TabRenderContext } from './agentOutputView.tabs';
 import { renderInputBar } from './agentOutputView.input';
 import { t } from '../../i18n';
 import { errorLog } from '../../utils/logger';
+import type { TerminalService } from '../../services/terminal/terminalService';
+import type { TerminalSettings } from '../../settings/settings';
+import {
+  AgentTerminalThreadController,
+  type TerminalThreadSnapshot,
+} from './agentTerminalThreadController';
 
 export const AGENT_OUTPUT_VIEW_TYPE = 'termy-agent-output-view';
 const AGENT_OUTPUT_ICON = 'sparkles';
 const SESSION_LIST_REFRESH_INTERVAL_MS = 30_000;
+const TERMINAL_PROVIDER_ID = 'terminal';
 
 export interface AgentOutputViewOptions {
   /** Bus the view subscribes to. */
@@ -72,16 +79,26 @@ export interface AgentOutputViewOptions {
   getCodexHistoryService?: () => CodexReadOnlyHistoryService | null;
   /** Returns the agent context bridge. */
   getAgentContextBridge?: () => AgentContextBridge | null;
+  /** Returns the terminal service used for terminal threads. */
+  getTerminalService?: () => Promise<TerminalService>;
+  /** Returns live plugin settings used for terminal appearance refreshes. */
+  getSettings?: () => TerminalSettings;
   /** Factory hook for renderers (tests). */
   rendererFactory?: (view: AgentOutputView) => AgentSnapshotRenderer;
 }
 
 interface ProviderState {
-  sessions: Array<OpenCodeHistorySession | ClaudeCodeSession | (CodexHistorySession & { id: string })>;
+  sessions: Array<ProviderSession>;
   loading: boolean;
   error: string | null;
   activeSessionId: string | null;
 }
+
+type ProviderSession =
+  | OpenCodeHistorySession
+  | ClaudeCodeSession
+  | (CodexHistorySession & { id: string })
+  | TerminalThreadSnapshot;
 
 export class AgentOutputView extends ItemView {
   private readonly bus: AgentEventBus;
@@ -96,6 +113,7 @@ export class AgentOutputView extends ItemView {
   private readonly getClaudeCodeHistoryService?: () => ClaudeCodeReadOnlyHistoryService | null;
   private readonly getCodexHistoryService?: () => CodexReadOnlyHistoryService | null;
   private readonly getAgentContextBridge?: () => AgentContextBridge | null;
+  private readonly terminalThreads: AgentTerminalThreadController | null = null;
   private unsubscribeBus: (() => void) | null = null;
   private unsubscribeModel: (() => void) | null = null;
   private unsubscribeAgentsChange: (() => void) | null = null;
@@ -136,7 +154,14 @@ export class AgentOutputView extends ItemView {
     this.getClaudeCodeHistoryService = options.getClaudeCodeHistoryService;
     this.getCodexHistoryService = options.getCodexHistoryService;
     this.getAgentContextBridge = options.getAgentContextBridge;
-    const enabled = this.settings?.getEnabledAgents() ?? [];
+    if (options.getTerminalService) {
+      this.terminalThreads = new AgentTerminalThreadController({
+        getTerminalService: options.getTerminalService,
+        getSettings: options.getSettings ?? missingTerminalSettings,
+        onChanged: () => this.handleTerminalThreadsChanged(),
+      });
+    }
+    const enabled = this.getProviderTabs();
     this.selectedAgentId = enabled[0]?.id ?? null;
   }
 
@@ -168,14 +193,14 @@ export class AgentOutputView extends ItemView {
     return Promise.resolve();
   }
 
-  protected onClose(): Promise<void> {
+  protected async onClose(): Promise<void> {
     if (this.renderHandle !== null) { window.cancelAnimationFrame?.(this.renderHandle); this.renderHandle = null; }
     if (this.unsubscribeBus) { this.unsubscribeBus(); this.unsubscribeBus = null; }
     if (this.unsubscribeModel) { this.unsubscribeModel(); this.unsubscribeModel = null; }
     if (this.unsubscribeAgentsChange) { this.unsubscribeAgentsChange(); this.unsubscribeAgentsChange = null; }
     if (this.sessionsRefreshTimer !== null) { window.clearInterval(this.sessionsRefreshTimer); this.sessionsRefreshTimer = null; }
+    await this.terminalThreads?.dispose();
     this.contentEl.empty();
-    return Promise.resolve();
   }
 
   clear(): void {
@@ -204,7 +229,7 @@ export class AgentOutputView extends ItemView {
     const clearBtn = actions.createEl('button', { cls: 'clickable-icon termy-agent-header-action', attr: { type: 'button' } });
     setIcon(clearBtn, 'eraser');
     setTooltip(clearBtn, t('agent.clearTooltip'));
-    clearBtn.addEventListener('click', () => this.clear());
+    clearBtn.addEventListener('click', () => this.handleClearAction());
     const menuBtn = actions.createEl('button', { cls: 'clickable-icon termy-agent-header-action', attr: { type: 'button' } });
     setIcon(menuBtn, 'more-vertical');
     setTooltip(menuBtn, t('agent.moreActions'));
@@ -242,7 +267,7 @@ export class AgentOutputView extends ItemView {
 
   private doRenderTabs(): void {
     if (!this.providerTabsEl) return;
-    const enabledAgents = this.settings?.getEnabledAgents() ?? [];
+    const enabledAgents = this.getProviderTabs();
     const ctx: TabRenderContext = {
       providerTabsEl: this.providerTabsEl,
       headerStatusEl: this.headerStatusEl,
@@ -262,13 +287,14 @@ export class AgentOutputView extends ItemView {
   /* ── Agent config change handling (Property 6.2) ─────────────── */
 
   private handleAgentsChange(): void {
-    const enabledAgents = this.settings?.getEnabledAgents() ?? [];
+    const enabledAgents = this.getProviderTabs();
     const stillExists = enabledAgents.some((a) => a.id === this.selectedAgentId);
     if (!stillExists) {
       this.showBanner(t('agent.agentRemoved'));
       this.selectedAgentId = enabledAgents[0]?.id ?? null;
     }
     this.doRenderTabs();
+    this.renderSessionsHeader();
     this.renderSessionsList();
     this.scheduleRender();
   }
@@ -286,8 +312,12 @@ export class AgentOutputView extends ItemView {
     this.selectedAgentId = agentId;
     this.isReadOnlyHistory = false;
     this.doRenderTabs();
+    this.renderSessionsHeader();
     this.renderSessionsList();
     this.refocusActiveSession();
+    if (!this.isTerminalProviderSelected()) {
+      this.terminalThreads?.detach();
+    }
     this.scheduleRender();
     this.refreshActiveAgentSessions();
   }
@@ -297,6 +327,10 @@ export class AgentOutputView extends ItemView {
   private async handleSubmit(text: string): Promise<void> {
     if (!this.selectedAgentId) {
       new Notice(t('agent.noticeSubmitFailed'));
+      return;
+    }
+    if (this.isTerminalProviderSelected()) {
+      this.submitTerminalInput(text);
       return;
     }
     try {
@@ -359,6 +393,10 @@ export class AgentOutputView extends ItemView {
   /* ── Cancel handling (Req 6 AC 6) ────────────────────────────── */
 
   private handleCancel(): void {
+    if (this.isTerminalProviderSelected()) {
+      this.terminalThreads?.getActiveTerminal()?.write('\x03');
+      return;
+    }
     if (!this.agentManager || !this.selectedAgentId) {
       this.cancelTurn?.();
       return;
@@ -375,6 +413,11 @@ export class AgentOutputView extends ItemView {
   /* ── New session handling (Req 6 AC 4) ───────────────────────── */
 
   private async handleNewSession(): Promise<void> {
+    if (this.isTerminalProviderSelected()) {
+      await this.createTerminalThread();
+      return;
+    }
+
     if (!this.agentManager || !this.selectedAgentId) {
       new Notice(t('agent.sessionsProviderUnavailable'));
       return;
@@ -442,6 +485,22 @@ export class AgentOutputView extends ItemView {
   /* ── Input disabled state (Property 6.3) ─────────────────────── */
 
   private updateInputDisabledState(forceRunning?: boolean): void {
+    if (this.isTerminalProviderSelected()) {
+      const hasTerminal = !!this.terminalThreads?.getActiveTerminal();
+      if (this.inputSendBtnEl) {
+        this.inputSendBtnEl.disabled = !hasTerminal;
+        this.inputSendBtnEl.toggleClass('is-disabled', !hasTerminal);
+      }
+      if (this.inputTextareaEl) {
+        this.inputTextareaEl.disabled = !hasTerminal;
+        this.inputTextareaEl.placeholder = t('agent.terminalInputPlaceholder');
+      }
+      if (this.inputCancelBtnEl) {
+        this.inputCancelBtnEl.toggleClass('is-hidden', !hasTerminal);
+      }
+      return;
+    }
+
     const isRunning = forceRunning ?? this.isSessionRunning();
     const pendingPermission = this.permissionQueue?.pendingCount() ?? 0;
     // Disable input when viewing read-only history (Req 4 AC 4d).
@@ -453,6 +512,7 @@ export class AgentOutputView extends ItemView {
     }
     if (this.inputTextareaEl) {
       this.inputTextareaEl.disabled = disabled;
+      this.inputTextareaEl.placeholder = t('agent.inputPlaceholder');
     }
     // Cancel button is only useful when running.
     if (this.inputCancelBtnEl) {
@@ -477,7 +537,9 @@ export class AgentOutputView extends ItemView {
 
   private refreshActiveAgentSessions(force = false): void {
     if (!this.selectedAgentId) return;
-    if (this.selectedAgentId === 'claude-code') {
+    if (this.isTerminalProviderSelected()) {
+      this.refreshTerminalThreads();
+    } else if (this.selectedAgentId === 'claude-code') {
       this.refreshClaudeCodeSessions();
     } else if (this.selectedAgentId === 'codex') {
       void this.refreshCodexSessions(force).catch((e) => errorLog('[AgentOutputView] Codex refresh:', e));
@@ -593,15 +655,24 @@ export class AgentOutputView extends ItemView {
   private renderSessionsHeader(): void {
     if (!this.sessionsHeaderEl) return;
     this.sessionsHeaderEl.empty();
-    this.sessionsHeaderEl.createDiv({ cls: 'termy-agent-sidebar-title', text: t('agent.sessionsHeading') });
+    this.sessionsHeaderEl.createDiv({
+      cls: 'termy-agent-sidebar-title',
+      text: this.isTerminalProviderSelected()
+        ? t('agent.terminalThreadsHeading')
+        : t('agent.sessionsHeading'),
+    });
     const actions = this.sessionsHeaderEl.createDiv({ cls: 'termy-agent-sidebar-actions' });
     const refreshBtn = actions.createEl('button', { cls: 'clickable-icon termy-agent-sidebar-action', attr: { type: 'button' } });
     setIcon(refreshBtn, 'refresh-cw');
-    setTooltip(refreshBtn, t('agent.sessionsRefresh'));
+    setTooltip(refreshBtn, this.isTerminalProviderSelected()
+      ? t('agent.terminalThreadsRefresh')
+      : t('agent.sessionsRefresh'));
     refreshBtn.addEventListener('click', () => this.refreshActiveAgentSessions(true));
     const newBtn = actions.createEl('button', { cls: 'clickable-icon termy-agent-sidebar-action', attr: { type: 'button' } });
     setIcon(newBtn, 'plus');
-    setTooltip(newBtn, t('agent.sessionsNewSession'));
+    setTooltip(newBtn, this.isTerminalProviderSelected()
+      ? t('agent.terminalThreadsNewThread')
+      : t('agent.sessionsNewSession'));
     newBtn.addEventListener('click', () => { void this.handleNewSession(); });
   }
 
@@ -618,14 +689,31 @@ export class AgentOutputView extends ItemView {
       return;
     }
     if (state.sessions.length === 0) {
-      this.sessionsListEl.createDiv({ cls: 'termy-agent-sidebar-status', text: t('agent.sessionsEmpty') });
+      this.sessionsListEl.createDiv({
+        cls: 'termy-agent-sidebar-status',
+        text: this.isTerminalProviderSelected()
+          ? t('agent.terminalThreadsEmpty')
+          : t('agent.sessionsEmpty'),
+      });
       return;
     }
     for (const session of state.sessions) {
       const item = this.sessionsListEl.createDiv({ cls: 'termy-agent-session-item' });
       if (session.id === state.activeSessionId) item.addClass('is-active');
       const titleText = session.title && session.title.length > 0 ? session.title : t('agent.sessionItemUntitled');
-      item.createDiv({ cls: 'termy-agent-session-title', text: titleText });
+      const itemHeader = item.createDiv({ cls: 'termy-agent-session-title-row' });
+      itemHeader.createDiv({ cls: 'termy-agent-session-title', text: titleText });
+      if (this.isTerminalProviderSelected()) {
+        const closeBtn = itemHeader.createEl('button', {
+          cls: 'clickable-icon termy-agent-session-close',
+          attr: { type: 'button', 'aria-label': t('agent.terminalThreadsClose') },
+        });
+        setIcon(closeBtn, 'x');
+        closeBtn.addEventListener('click', (event) => {
+          event.stopPropagation();
+          void this.terminalThreads?.closeThread(session.id);
+        });
+      }
       const updated = 'updatedAt' in session
         ? (session as { updatedAt: number }).updatedAt
         : ('time' in session ? ((session as { time?: { updated?: number } }).time?.updated ?? Date.now()) : Date.now());
@@ -636,7 +724,11 @@ export class AgentOutputView extends ItemView {
   }
 
   private handleSessionClick(sessionId: string): void {
-    if (this.selectedAgentId === 'claude-code') {
+    if (this.isTerminalProviderSelected()) {
+      this.terminalThreads?.setActiveThread(sessionId);
+      this.refreshTerminalThreads();
+      this.scheduleRender();
+    } else if (this.selectedAgentId === 'claude-code') {
       try { this.loadClaudeCodeSession(sessionId); }
       catch (error) { new Notice(this.formatLoadFailure(error)); }
     } else if (this.selectedAgentId === 'codex') {
@@ -658,6 +750,11 @@ export class AgentOutputView extends ItemView {
 
   private renderNow(): void {
     if (!this.bodyEl) return;
+    if (this.isTerminalProviderSelected()) {
+      this.renderTerminalThreadBody();
+      return;
+    }
+    this.bodyEl.removeClass('is-terminal-thread');
     const snapshot = this.getActiveSnapshot();
     this.updateHeader(snapshot);
     if (this.providerTabsEl) {
@@ -727,6 +824,15 @@ export class AgentOutputView extends ItemView {
 
   private updateHeader(snapshot: AgentSessionSnapshot | null): void {
     if (!this.headerTitleEl || !this.headerSubtitleEl) return;
+    if (this.isTerminalProviderSelected()) {
+      this.headerTitleEl.setText(this.terminalThreads?.getActiveTitle() ?? t('agent.terminalProvider'));
+      this.headerSubtitleEl.setText(
+        this.terminalThreads?.hasThreads()
+          ? t('agent.terminalThreadSubtitle')
+          : t('agent.terminalThreadSubtitleEmpty'),
+      );
+      return;
+    }
     if (!snapshot) {
       this.headerTitleEl.setText(t('agent.headerIdle'));
       this.headerSubtitleEl.setText(t('agent.headerSubtitleIdle'));
@@ -771,6 +877,10 @@ export class AgentOutputView extends ItemView {
   }
 
   private refocusActiveSession(): void {
+    if (this.isTerminalProviderSelected()) {
+      this.focusedSessionId = null;
+      return;
+    }
     const state = this.getProviderState(this.selectedAgentId);
     if (state?.activeSessionId && this.selectedAgentId) {
       this.focusedSessionId = sessionIdFor(this.selectedAgentId, state.activeSessionId);
@@ -794,8 +904,24 @@ export class AgentOutputView extends ItemView {
 
   private showHeaderMenu(event: MouseEvent): void {
     const menu = new Menu();
-    menu.addItem((item) => { item.setTitle(t('agent.menuClear')); item.setIcon('eraser'); item.onClick(() => this.clear()); });
-    menu.addItem((item) => { item.setTitle(t('agent.menuCopyTranscript')); item.setIcon('clipboard-copy'); item.onClick(() => { void this.copyTranscriptToClipboard(); }); });
+    if (this.isTerminalProviderSelected()) {
+      menu.addItem((item) => {
+        item.setTitle(t('agent.terminalThreadsNewThread'));
+        item.setIcon('terminal');
+        item.onClick(() => { void this.createTerminalThread(); });
+      });
+      menu.addItem((item) => {
+        item.setTitle(t('agent.terminalThreadsClose'));
+        item.setIcon('x');
+        item.onClick(() => {
+          const activeId = this.terminalThreads?.getActiveThreadId();
+          if (activeId) void this.terminalThreads?.closeThread(activeId);
+        });
+      });
+    } else {
+      menu.addItem((item) => { item.setTitle(t('agent.menuClear')); item.setIcon('eraser'); item.onClick(() => this.clear()); });
+      menu.addItem((item) => { item.setTitle(t('agent.menuCopyTranscript')); item.setIcon('clipboard-copy'); item.onClick(() => { void this.copyTranscriptToClipboard(); }); });
+    }
     menu.showAtMouseEvent(event);
   }
 
@@ -819,6 +945,144 @@ export class AgentOutputView extends ItemView {
       this.providerState.set(agentId, state);
     }
     return state;
+  }
+
+  private getProviderTabs(): ProviderTabConfig[] {
+    const agents = this.settings?.getEnabledAgents() ?? [];
+    const tabs: ProviderTabConfig[] = this.terminalThreads
+      ? [{
+        id: TERMINAL_PROVIDER_ID,
+        label: t('agent.terminalProvider'),
+        icon: 'terminal',
+        fallbackIcon: 'terminal',
+      }]
+      : [];
+    return tabs.concat(agents.map((agent) => ({
+      id: agent.id,
+      label: agent.label,
+      icon: agent.icon,
+    })));
+  }
+
+  private isTerminalProviderSelected(): boolean {
+    return this.selectedAgentId === TERMINAL_PROVIDER_ID;
+  }
+
+  private refreshTerminalThreads(): void {
+    if (!this.terminalThreads) return;
+    const state = this.ensureProviderState(TERMINAL_PROVIDER_ID);
+    state.sessions = this.terminalThreads.listThreads();
+    state.activeSessionId = this.terminalThreads.getActiveThreadId();
+    state.loading = false;
+    state.error = null;
+    this.renderSessionsList();
+  }
+
+  private async createTerminalThread(command?: string, title?: string): Promise<void> {
+    if (!this.terminalThreads) return;
+    try {
+      const snapshot = await this.terminalThreads.createThread();
+      const terminal = this.terminalThreads.getActiveTerminal();
+      if (terminal && title) {
+        terminal.setSuggestedTitle(title);
+      }
+      if (terminal && command) {
+        terminal.write(command);
+      }
+      this.refreshTerminalThreads();
+      this.scheduleRender();
+      if (this.inputTextareaEl) {
+        this.inputTextareaEl.value = '';
+      }
+      void snapshot;
+    } catch (error) {
+      errorLog('[AgentOutputView] Failed to create terminal thread:', error);
+      new Notice(this.formatLoadFailure(error));
+    }
+  }
+
+  private submitTerminalInput(text: string): void {
+    const terminal = this.terminalThreads?.getActiveTerminal();
+    if (!terminal) {
+      new Notice(t('notices.presetScript.terminalUnavailable'));
+      return;
+    }
+    terminal.pasteText(text);
+    terminal.write('\r');
+    terminal.focus();
+    if (this.inputTextareaEl) {
+      this.inputTextareaEl.value = '';
+    }
+  }
+
+  private renderTerminalThreadBody(): void {
+    if (!this.bodyEl) return;
+    this.updateHeader(null);
+    this.renderStatusIndicatorOnly();
+
+    this.bodyEl.empty();
+    this.emptyStateEl = null;
+
+    if (!this.terminalThreads?.hasThreads()) {
+      this.bodyEl.removeClass('is-terminal-thread');
+      const empty = this.bodyEl.createDiv({ cls: 'termy-agent-empty' });
+      empty.createDiv({ cls: 'termy-agent-empty-title', text: t('agent.terminalThreadsEmptyTitle') });
+      empty.createDiv({ cls: 'termy-agent-empty-body', text: t('agent.terminalThreadsEmpty') });
+      this.terminalThreads?.detach();
+      this.updateInputDisabledState();
+      return;
+    }
+
+    this.bodyEl.addClass('is-terminal-thread');
+    const wrapper = this.bodyEl.createDiv({ cls: 'terminal-view-container termy-agent-terminal-view-container' });
+    const terminalContainer = wrapper.createDiv({ cls: 'terminal-container termy-agent-terminal-container' });
+    this.terminalThreads.attach(wrapper, terminalContainer);
+    this.updateInputDisabledState();
+  }
+
+  private renderStatusIndicatorOnly(): void {
+    if (!this.providerTabsEl) return;
+    const ctx: TabRenderContext = {
+      providerTabsEl: this.providerTabsEl,
+      headerStatusEl: this.headerStatusEl,
+      selectedAgentId: this.selectedAgentId,
+      agentManager: this.agentManager,
+      permissionQueue: this.permissionQueue,
+      getActiveSnapshot: () => this.getActiveSnapshot(),
+      onTabClick: (id) => this.switchAgent(id),
+      onOpenSettings: () => {
+        const a = this.app as { setting?: { open?: () => void } };
+        a.setting?.open?.();
+      },
+    };
+    renderStatusIndicator(ctx);
+  }
+
+  private handleTerminalThreadsChanged(): void {
+    if (this.isTerminalProviderSelected()) {
+      this.refreshTerminalThreads();
+      this.scheduleRender();
+    }
+  }
+
+  private handleClearAction(): void {
+    if (this.isTerminalProviderSelected()) {
+      this.terminalThreads?.getActiveTerminal()?.clearBuffer();
+      return;
+    }
+    this.clear();
+  }
+
+  async startTerminalThread(command: string, title?: string): Promise<void> {
+    if (!this.terminalThreads) {
+      throw new Error('Terminal threads are unavailable');
+    }
+    if (this.selectedAgentId !== TERMINAL_PROVIDER_ID) {
+      this.selectedAgentId = TERMINAL_PROVIDER_ID;
+      this.doRenderTabs();
+      this.renderSessionsHeader();
+    }
+    await this.createTerminalThread(command, title);
   }
 }
 
@@ -865,4 +1129,8 @@ function serializeSnapshotToMarkdown(snapshot: AgentSessionSnapshot): string {
     }
   }
   return parts.join('\n\n');
+}
+
+function missingTerminalSettings(): TerminalSettings {
+  throw new Error('Terminal settings are unavailable');
 }

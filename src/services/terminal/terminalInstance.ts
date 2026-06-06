@@ -716,6 +716,14 @@ export class TerminalInstance {
       this.xterm.parser.registerOscHandler(52, (data) => {
         return this.handleOsc52ClipboardData(data, 'OSC 52');
       }),
+      this.xterm.parser.registerOscHandler(0, (data) => {
+        this.applyTitleChange(this.titleState.setProcessTitle(data));
+        return false;
+      }),
+      this.xterm.parser.registerOscHandler(2, (data) => {
+        this.applyTitleChange(this.titleState.setProcessTitle(data));
+        return false;
+      }),
       this.xterm.parser.registerCsiHandler({ prefix: '>', final: 'm' }, (params) => {
         if (params[0] !== 4) {
           return false;
@@ -1886,6 +1894,10 @@ export class TerminalInstance {
 
   setTitle(title: string): void {
     this.applyTitleChange(this.titleState.setCustomTitle(title));
+  }
+
+  setSuggestedTitle(title: string): void {
+    this.applyTitleChange(this.titleState.setProcessTitle(title));
   }
 
 

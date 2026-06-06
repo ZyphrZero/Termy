@@ -41,9 +41,12 @@ import {
 import { TERMINAL_FILE_URI_REGEX } from '../../services/terminal/terminalFileLinks';
 import type { TerminalSettings } from '../../settings/settings';
 import { debugLog, errorLog } from '../../utils/logger';
-import { clamp, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
 import { t } from '../../i18n';
 import { RenameTerminalModal } from './renameTerminalModal';
+import {
+  clearTerminalAppearanceStyles,
+  syncTerminalAppearanceStyles,
+} from './terminalAppearance';
 type XtermTerminal = import('@xterm/xterm').Terminal;
 
 export const TERMINAL_VIEW_TYPE = 'terminal-view';
@@ -1048,39 +1051,13 @@ export class TerminalView extends ItemView {
   private updateAppearanceStyles(): void {
     if (!this.terminalContainer || !this.terminalInstance) return;
 
-    const options = this.terminalInstance.getOptions();
-    const canUseBackgroundImage = !!options?.backgroundImage
-      && !options?.useObsidianTheme
-      && this.terminalInstance.getCurrentRenderer() !== 'webgl';
+    const viewContainer = this.containerEl.querySelector<HTMLElement>('.terminal-view-container');
+    if (!viewContainer) return;
 
-    if (canUseBackgroundImage) {
-      this.terminalContainer.addClass('has-background-image');
-      this.containerEl.querySelector('.terminal-view-container')?.addClass('has-background-image');
-      this.ensureBackgroundLayer();
-    } else {
-      this.terminalContainer.removeClass('has-background-image');
-      this.containerEl.querySelector('.terminal-view-container')?.removeClass('has-background-image');
-      this.terminalContainer.querySelector('.terminal-background-image')?.remove();
-    }
-
-    const backgroundImageOpacity = options?.backgroundImageOpacity ?? 0.5;
-    const overlayOpacity = canUseBackgroundImage
-      ? clamp(1 - backgroundImageOpacity, 0, 1)
-      : 0;
-    const blurAmount = options?.blurAmount ?? 0;
-    const blurEnabled = canUseBackgroundImage && !!options?.enableBlur && blurAmount > 0;
-
-    this.applyAppearanceStyleRule({
-      backgroundImage: canUseBackgroundImage ? toCssUrl(options?.backgroundImage) : 'none',
-      overlayOpacity,
-      backgroundSize: normalizeBackgroundSize(options?.backgroundImageSize),
-      backgroundPosition: normalizeBackgroundPosition(options?.backgroundImagePosition),
-      blur: blurEnabled ? `${blurAmount}px` : '0px',
-      scale: blurEnabled ? '1.05' : '1',
-      textOpacity: canUseBackgroundImage ? String(options?.textOpacity ?? 1.0) : '1',
-      backgroundColor: canUseBackgroundImage
-        ? 'transparent'
-        : this.terminalInstance.getEffectiveBackgroundColor(),
+    syncTerminalAppearanceStyles({
+      terminalContainer: this.terminalContainer,
+      viewContainer,
+      terminal: this.terminalInstance,
     });
   }
 
@@ -1169,53 +1146,9 @@ export class TerminalView extends ItemView {
     this.updateAppearanceStyles();
   }
 
-  private ensureBackgroundLayer(): void {
-    if (!this.terminalContainer) return;
-    const existingLayer = this.terminalContainer.querySelector('.terminal-background-image');
-    if (existingLayer) return;
-
-    const bgLayer = activeDocument.createElement('div');
-    bgLayer.className = 'terminal-background-image';
-    this.terminalContainer.prepend(bgLayer);
-  }
-
-  private applyAppearanceStyleRule(vars: {
-    backgroundImage: string;
-    overlayOpacity: number;
-    backgroundSize: string;
-    backgroundPosition: string;
-    blur: string;
-    scale: string;
-    textOpacity: string;
-    backgroundColor: string;
-  }): void {
-    if (!this.terminalContainer) return;
-    const style = this.terminalContainer.style;
-    style.setProperty('--terminal-bg-image', vars.backgroundImage);
-    style.setProperty('--terminal-bg-overlay-opacity', String(vars.overlayOpacity));
-    style.setProperty('--terminal-bg-size', vars.backgroundSize);
-    style.setProperty('--terminal-bg-position', vars.backgroundPosition);
-    style.setProperty('--terminal-bg-blur', vars.blur);
-    style.setProperty('--terminal-bg-scale', vars.scale);
-    style.setProperty('--terminal-text-opacity', vars.textOpacity);
-    style.setProperty('--terminal-bg-color', vars.backgroundColor);
-    const viewContainer = this.containerEl.querySelector<HTMLElement>('.terminal-view-container');
-    viewContainer?.style.setProperty('--terminal-bg-color', vars.backgroundColor);
-  }
-
   private disposeAppearanceStyle(): void {
-    if (!this.terminalContainer) return;
-    const style = this.terminalContainer.style;
-    style.removeProperty('--terminal-bg-image');
-    style.removeProperty('--terminal-bg-overlay-opacity');
-    style.removeProperty('--terminal-bg-size');
-    style.removeProperty('--terminal-bg-position');
-    style.removeProperty('--terminal-bg-blur');
-    style.removeProperty('--terminal-bg-scale');
-    style.removeProperty('--terminal-text-opacity');
-    style.removeProperty('--terminal-bg-color');
     const viewContainer = this.containerEl.querySelector<HTMLElement>('.terminal-view-container');
-    viewContainer?.style.removeProperty('--terminal-bg-color');
+    clearTerminalAppearanceStyles(this.terminalContainer, viewContainer);
   }
 
   /**

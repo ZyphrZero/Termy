@@ -1,5 +1,7 @@
 type TerminalTitleSource = 'default' | 'custom' | 'automatic';
 
+const BLANK_TITLE = '';
+
 export class TerminalTitleState {
   private readonly defaultTitle: string;
   private title: string;
@@ -30,6 +32,14 @@ export class TerminalTitleState {
     }
 
     return this.setTitle(title, 'automatic');
+  }
+
+  setProcessTitle(title: string): boolean {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle || trimmedTitle === BLANK_TITLE) {
+      return false;
+    }
+    return this.setAutomaticTitle(trimmedTitle);
   }
 
   clearAutomaticTitle(): boolean {

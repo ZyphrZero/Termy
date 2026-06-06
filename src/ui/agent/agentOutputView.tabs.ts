@@ -8,12 +8,18 @@
 
 import { setIcon } from 'obsidian';
 
-import type { AgentConfig } from '../../services/agentStream/agentConfig';
 import type { AgentManager } from '../../services/agentStream/agentManager';
 import type { PermissionQueue } from '../../services/agentStream/permissionQueue';
 import type { AgentSessionSnapshot } from '../../services/agentStream/agentSessionModel';
 import { renderAgentBrandIcon } from './agentBrandIcon';
 import { t } from '../../i18n';
+
+export interface ProviderTabConfig {
+  readonly id: string;
+  readonly label: string;
+  readonly icon?: string;
+  readonly fallbackIcon?: string;
+}
 
 export interface TabRenderContext {
   readonly providerTabsEl: HTMLElement;
@@ -31,7 +37,7 @@ export interface TabRenderContext {
  * Returns early with an empty-state render when no agents are enabled.
  */
 export function renderProviderTabs(
-  enabledAgents: readonly AgentConfig[],
+  enabledAgents: readonly ProviderTabConfig[],
   ctx: TabRenderContext,
 ): void {
   ctx.providerTabsEl.empty();
@@ -52,9 +58,9 @@ export function renderProviderTabs(
     }
     const iconEl = button.createSpan({ cls: 'termy-agent-provider-tab-icon' });
     if (agent.icon) {
-      renderAgentBrandIcon(iconEl, agent.icon, 'sparkles');
+      renderAgentBrandIcon(iconEl, agent.icon, agent.fallbackIcon ?? 'sparkles');
     } else {
-      setIcon(iconEl, 'sparkles');
+      setIcon(iconEl, agent.fallbackIcon ?? 'sparkles');
     }
     button.createSpan({ cls: 'termy-agent-provider-tab-label', text: agent.label });
     button.addEventListener('click', () => {

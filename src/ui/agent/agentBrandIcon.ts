@@ -27,6 +27,8 @@ let agentBrandInstanceCounter = 0;
 
 export function renderAgentBrandIcon(el: HTMLElement, lobeIconKey: string, fallbackLucideIcon: string): void {
   el.empty();
+  el.removeClass('termy-agent-brand-icon');
+  el.removeAttribute('data-icon');
   const asset = getLobeIconAsset(lobeIconKey);
   if (!asset) {
     setIcon(el, fallbackLucideIcon);
