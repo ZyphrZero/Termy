@@ -315,9 +315,9 @@ export const ru: TranslationKeys = {
       aiLauncherTitleInstall: 'Установить {{name}}',
       aiLauncherTitleUpdate: 'Обновить {{name}}',
       hideUnavailableAiLaunchers: 'Скрывать недоступные AI-лаунчеры',
-      hideUnavailableAiLaunchersDesc: 'Скрывает встроенные AI-лаунчеры (Claude Code, Codex, OpenCode, Hermes, DeepSeek TUI), CLI которых не установлен на вашем компьютере. Влияет только на меню статусной строки.',
+      hideUnavailableAiLaunchersDesc: 'Скрывает встроенные AI-лаунчеры (Claude Code, Codex, OpenCode, Hermes), CLI которых не установлен на вашем компьютере. Влияет только на меню статусной строки.',
       checkAiLauncherUpdates: 'Проверять обновления AI-лаунчеров',
-      checkAiLauncherUpdatesDesc: 'Сравнивает установленные версии Claude Code, Codex, OpenCode, Hermes и DeepSeek TUI с реестрами upstream (npm и GitHub Releases). По умолчанию отключено; в офлайн-режиме также отключается независимо от переключателя.',
+      checkAiLauncherUpdatesDesc: 'Сравнивает установленные версии Claude Code, Codex, OpenCode и Hermes с реестрами upstream (npm и GitHub Releases). По умолчанию отключено; в офлайн-режиме также отключается независимо от переключателя.',
       aiLauncherOfflineHint: 'Офлайн-режим включён, поэтому проверка обновлений подавлена. Отключите «Офлайн-режим» в разделе «Подключение к серверу», чтобы получать уведомления об обновлениях.',
     },
     agents: {

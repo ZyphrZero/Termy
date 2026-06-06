@@ -218,9 +218,6 @@ export const OPENCODE_LAUNCH_COMMAND =
 export const HERMES_LAUNCH_COMMAND =
   'hermes';
 
-export const DEEPSEEK_TUI_LAUNCH_COMMAND =
-  'deepseek';
-
 const CONTEXT_AWARE_PRESET_SCRIPT_IDS = new Set(['claude-code', 'codex', 'opencode']);
 
 export function isContextAwarePresetScript(script: Pick<PresetScript, 'id'>): boolean {
@@ -299,25 +296,6 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
       },
     ],
     terminalTitle: 'Hermes',
-    showInStatusBar: true,
-    showInCommandPalette: true,
-    autoOpenTerminal: true,
-    runInNewTerminal: false,
-  },
-  {
-    id: 'deepseek-tui',
-    name: 'DeepSeek TUI',
-    icon: 'deepseek',
-    actions: [
-      {
-        id: 'action-deepseek-tui',
-        type: 'terminal-command',
-        value: DEEPSEEK_TUI_LAUNCH_COMMAND,
-        enabled: true,
-        note: 'Launch DeepSeek TUI in the current vault',
-      },
-    ],
-    terminalTitle: 'DeepSeek TUI',
     showInStatusBar: true,
     showInCommandPalette: true,
     autoOpenTerminal: true,

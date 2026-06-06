@@ -315,9 +315,9 @@ export const ko: TranslationKeys = {
       aiLauncherTitleInstall: '{{name}} 설치',
       aiLauncherTitleUpdate: '{{name}} 업데이트',
       hideUnavailableAiLaunchers: '사용 불가능한 AI 런처 숨기기',
-      hideUnavailableAiLaunchersDesc: 'CLI가 로컬 컴퓨터에 설치되어 있지 않은 내장 AI 런처(Claude Code, Codex, OpenCode, Hermes, DeepSeek TUI)를 숨깁니다. 상태 표시줄 메뉴에만 영향을 줍니다.',
+      hideUnavailableAiLaunchersDesc: 'CLI가 로컬 컴퓨터에 설치되어 있지 않은 내장 AI 런처(Claude Code, Codex, OpenCode, Hermes)를 숨깁니다. 상태 표시줄 메뉴에만 영향을 줍니다.',
       checkAiLauncherUpdates: 'AI 런처 업데이트 확인',
-      checkAiLauncherUpdatesDesc: '설치된 Claude Code, Codex, OpenCode, Hermes, DeepSeek TUI 버전을 업스트림 레지스트리(npm 및 GitHub Releases)와 비교합니다. 기본적으로 비활성화되어 있으며 오프라인 모드에서는 토글에 관계없이 비활성화됩니다.',
+      checkAiLauncherUpdatesDesc: '설치된 Claude Code, Codex, OpenCode, Hermes 버전을 업스트림 레지스트리(npm 및 GitHub Releases)와 비교합니다. 기본적으로 비활성화되어 있으며 오프라인 모드에서는 토글에 관계없이 비활성화됩니다.',
       aiLauncherOfflineHint: '오프라인 모드가 켜져 있어 업데이트 확인이 억제됩니다. "서버 연결"의 "오프라인 모드"를 끄면 업데이트 알림을 받을 수 있습니다.',
     },
     agents: {

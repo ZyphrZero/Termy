@@ -30,14 +30,13 @@ test('partitionLaunchers groups catalog scripts and leaves regular ones in regul
     { id: 'codex' },
     { id: 'opencode' },
     { id: 'hermes' },
-    { id: 'deepseek-tui' },
     { id: 'my-custom-workflow' },
   ];
 
   const partition = partitionLaunchers(scripts);
   assert.deepEqual(
     partition.codingAgent.map((script) => script.id),
-    ['claude-code', 'codex', 'opencode', 'hermes', 'deepseek-tui'],
+    ['claude-code', 'codex', 'opencode', 'hermes'],
   );
   assert.deepEqual(partition.regular.map((script) => script.id), ['my-custom-workflow']);
 });
@@ -47,13 +46,12 @@ test('partitionLaunchers preserves the original order within each bucket', () =>
     { id: 'opencode' },
     { id: 'hermes' },
     { id: 'claude-code' },
-    { id: 'deepseek-tui' },
     { id: 'codex' },
   ];
   const partition = partitionLaunchers(scripts);
   assert.deepEqual(
     partition.codingAgent.map((script) => script.id),
-    ['opencode', 'hermes', 'claude-code', 'deepseek-tui', 'codex'],
+    ['opencode', 'hermes', 'claude-code', 'codex'],
   );
 });
 
@@ -73,9 +71,9 @@ test('AI_LAUNCHER_CATALOG only contains coding agent entries today', () => {
     .sort();
   assert.deepEqual(
     codingAgentIds,
-    ['claude-code', 'codex', 'deepseek-tui', 'hermes', 'opencode'],
+    ['claude-code', 'codex', 'hermes', 'opencode'],
   );
-  assert.equal(AI_LAUNCHER_CATALOG.length, 5);
+  assert.equal(AI_LAUNCHER_CATALOG.length, 4);
 });
 
 test('commandAvailabilityToLauncherStatus maps probe results to badge statuses', () => {
@@ -158,7 +156,6 @@ test('version registry sources match the documented endpoints', () => {
     ['codex', 'npm:@openai/codex'],
     ['opencode', 'github-release:anomalyco/opencode'],
     ['hermes', 'github-release:NousResearch/hermes-agent'],
-    ['deepseek-tui', 'npm:deepseek-tui'],
   ]);
   for (const entry of AI_LAUNCHER_CATALOG) {
     const registry = entry.versionRegistry;
@@ -174,7 +171,6 @@ test('npm-backed launchers declare the package Termy can prepare through fnm', (
   const expected = new Map([
     ['codex', '@openai/codex'],
     ['opencode', 'opencode-ai'],
-    ['deepseek-tui', 'deepseek-tui'],
   ]);
 
   for (const [presetId, packageName] of expected) {

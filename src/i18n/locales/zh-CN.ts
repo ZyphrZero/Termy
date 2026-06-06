@@ -315,9 +315,9 @@ export const zhCN: TranslationKeys = {
       aiLauncherTitleInstall: '安装 {{name}}',
       aiLauncherTitleUpdate: '更新 {{name}}',
       hideUnavailableAiLaunchers: '隐藏未安装的 AI 启动器',
-      hideUnavailableAiLaunchersDesc: '隐藏 CLI 未安装在本机上的内置 AI 启动器（Claude Code、Codex、OpenCode、Hermes、DeepSeek TUI）。仅影响状态栏菜单。',
+      hideUnavailableAiLaunchersDesc: '隐藏 CLI 未安装在本机上的内置 AI 启动器（Claude Code、Codex、OpenCode、Hermes）。仅影响状态栏菜单。',
       checkAiLauncherUpdates: '检查 AI 启动器更新',
-      checkAiLauncherUpdatesDesc: '将本地安装的 Claude Code、Codex、OpenCode、Hermes 与 DeepSeek TUI 版本与上游注册表（npm 与 GitHub 发布版本）进行对比。默认关闭；离线模式下也会忽略此开关。',
+      checkAiLauncherUpdatesDesc: '将本地安装的 Claude Code、Codex、OpenCode 与 Hermes 版本与上游注册表（npm 与 GitHub 发布版本）进行对比。默认关闭；离线模式下也会忽略此开关。',
       aiLauncherOfflineHint: '当前处于离线模式，更新检查已被屏蔽。请在“服务器连接”中关闭“离线模式”以接收更新通知。',
     },
     agents: {

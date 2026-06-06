@@ -315,9 +315,9 @@ export const ja: TranslationKeys = {
       aiLauncherTitleInstall: '{{name}} をインストール',
       aiLauncherTitleUpdate: '{{name}} を更新',
       hideUnavailableAiLaunchers: '利用できない AI ランチャーを非表示',
-      hideUnavailableAiLaunchersDesc: 'CLI がローカルにインストールされていない組み込み AI ランチャー (Claude Code、Codex、OpenCode、Hermes、DeepSeek TUI) を非表示にします。ステータスバーメニューにのみ反映されます。',
+      hideUnavailableAiLaunchersDesc: 'CLI がローカルにインストールされていない組み込み AI ランチャー (Claude Code、Codex、OpenCode、Hermes) を非表示にします。ステータスバーメニューにのみ反映されます。',
       checkAiLauncherUpdates: 'AI ランチャーの更新を確認',
-      checkAiLauncherUpdatesDesc: 'ローカルの Claude Code、Codex、OpenCode、Hermes、DeepSeek TUI のバージョンを上流レジストリ (npm および GitHub Releases) と比較します。デフォルトでは無効です。オフラインモードでもこのトグルは無視されます。',
+      checkAiLauncherUpdatesDesc: 'ローカルの Claude Code、Codex、OpenCode、Hermes のバージョンを上流レジストリ (npm および GitHub Releases) と比較します。デフォルトでは無効です。オフラインモードでもこのトグルは無視されます。',
       aiLauncherOfflineHint: 'オフラインモードが有効なため、更新チェックは抑制されます。「サーバー接続」の「オフラインモード」をオフにすると更新通知を受け取れます。',
     },
     agents: {

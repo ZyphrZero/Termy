@@ -3,7 +3,6 @@ import test from 'node:test';
 
 import {
   CODEX_LAUNCH_COMMAND,
-  DEEPSEEK_TUI_LAUNCH_COMMAND,
   DEFAULT_PRESET_SCRIPTS,
   HERMES_LAUNCH_COMMAND,
   OPENCODE_LAUNCH_COMMAND,
@@ -34,31 +33,19 @@ test('Hermes built-in launcher invokes the upstream `hermes` CLI', () => {
   assert.equal(launchAction?.value, HERMES_LAUNCH_COMMAND);
 });
 
-test('DeepSeek TUI built-in launcher invokes the upstream `deepseek` dispatcher', () => {
-  const deepseek = DEFAULT_PRESET_SCRIPTS.find((script) => script.id === 'deepseek-tui');
-  const launchAction = deepseek?.actions.find((action) => action.id === 'action-deepseek-tui');
-
-  // The DeepSeek TUI npm package is `deepseek-tui`, but the dispatcher
-  // binary it exposes on PATH is named `deepseek`. We call the
-  // dispatcher directly so we go through the documented entry point.
-  assert.equal(DEEPSEEK_TUI_LAUNCH_COMMAND, 'deepseek');
-  assert.equal(launchAction?.value, DEEPSEEK_TUI_LAUNCH_COMMAND);
-});
-
-test('built-in workflow order keeps Claude Code, Codex, OpenCode, Hermes, and DeepSeek TUI', () => {
+test('built-in workflow order keeps Claude Code, Codex, OpenCode, and Hermes', () => {
   assert.deepEqual(
     DEFAULT_PRESET_SCRIPTS.map((script) => script.id),
-    ['claude-code', 'codex', 'opencode', 'hermes', 'deepseek-tui'],
+    ['claude-code', 'codex', 'opencode', 'hermes'],
   );
 
-  assert.equal(DEFAULT_PRESET_SCRIPTS[4]?.id, 'deepseek-tui');
+  assert.equal(DEFAULT_PRESET_SCRIPTS[3]?.id, 'hermes');
 });
 
 test('built-in context-aware workflow marker covers IDE-bridge launchers only', () => {
-  // Hermes and DeepSeek TUI do not consume Termy's IDE bridge or the
-  // vault-local Codex skill yet, so they are intentionally excluded
-  // from the context-aware marker until upstream documents an
-  // Obsidian context handoff.
+  // Hermes does not consume Termy's IDE bridge or the vault-local Codex
+  // skill yet, so it is intentionally excluded from the context-aware
+  // marker until upstream documents an Obsidian context handoff.
   const contextAwareIds = DEFAULT_PRESET_SCRIPTS
     .filter((script) => isContextAwarePresetScript(script))
     .map((script) => script.id);

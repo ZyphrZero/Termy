@@ -191,7 +191,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
    * never accumulate listeners across re-renders.
    */
   private launcherSnapshotUnsubscribers: Array<() => void> = [];
-  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'opencode', 'hermes', 'deepseek-tui']);
+  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'opencode', 'hermes']);
   /**
    * Refresh hook for the "AI launcher update check is suppressed by
    * offline mode" hint. Set when the preset-scripts card mounts; called

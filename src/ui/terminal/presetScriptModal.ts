@@ -44,7 +44,7 @@ const ACTION_OPTIONS: ActionOption[] = [
 const COMMAND_SUGGESTION_LIMIT = 50;
 
 export class PresetScriptModal extends Modal {
-  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'opencode', 'hermes', 'deepseek-tui']);
+  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'opencode', 'hermes']);
   private draft: PresetScript;
   private onSubmit: (script: PresetScript) => void;
   private isNew: boolean;
