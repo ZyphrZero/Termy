@@ -26,6 +26,7 @@ export interface KeyboardDecisionContext {
   hasSelection: boolean;
   shiftEnterMode?: 'newline' | 'win32-input-mode';
   extendedKeyboardMode?: ClaudeCodeExtendedKeyboardMode;
+  isComposing?: boolean;
 }
 
 export type KeyboardDecision =
@@ -35,7 +36,8 @@ export type KeyboardDecision =
   | { type: 'block-default' }
   | { type: 'send-input'; data: string }
   | { type: 'write-text'; text: string }
-  | { type: 'paste-newline' };
+  | { type: 'paste-newline' }
+  | { type: 'block-terminal-allow-browser' };
 
 export { WIN32_SHIFT_ENTER_SEQUENCE } from './win32InputModeEncoder.ts';
 
@@ -66,20 +68,25 @@ export function formatPastedTerminalText(text: string, bracketedPasteMode: boole
 }
 
 function isImeCompositionKeyboardEvent(event: KeyboardEventLike): boolean {
-  return event.isComposing === true || event.key === 'Process' || event.keyCode === 229;
+  return (
+    event.isComposing === true ||
+    event.key === 'Process' ||
+    event.keyCode === 229 ||
+    (!!event.key && event.key.length === 1 && /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(event.key))
+  );
 }
 
 export function evaluateKeyboardDecision(
   event: KeyboardEventLike,
   context: KeyboardDecisionContext
 ): KeyboardDecision {
-  if (context.shiftEnterMode === 'win32-input-mode') {
-    // Let xterm's textarea/composition pipeline handle IME process keys so
-    // win32-input-mode does not send raw phonetic keystrokes before commit.
-    if (isImeCompositionKeyboardEvent(event)) {
-      return { type: 'allow-default' };
-    }
+  // Let xterm's textarea/composition pipeline handle IME process keys so
+  // we do not send raw phonetic keystrokes or interrupt IME composition before commit.
+  if (context.isComposing === true || isImeCompositionKeyboardEvent(event)) {
+    return { type: 'allow-default' };
+  }
 
+  if (context.shiftEnterMode === 'win32-input-mode') {
     if (event.type === 'keypress') {
       return { type: 'block-default' };
     }
@@ -223,6 +230,8 @@ export class EnhancedKeyboardProtocol {
         event.preventDefault?.();
         this.handlers.flushPendingInput();
         this.handlers.pasteText('\n');
+        return false;
+      case 'block-terminal-allow-browser':
         return false;
     }
   }
