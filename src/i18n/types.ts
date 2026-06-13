@@ -340,6 +340,7 @@ export interface TranslationKeys {
     };
     agents: {
       heading: string;
+      headingDesc: string;
       addAgent: string;
       editAgent: string;
       deleteAgent: string;
@@ -347,10 +348,15 @@ export interface TranslationKeys {
       moveDown: string;
       resetAgent: string;
       installAcpAdapter: string;
+      installAcpAdapterShort: string;
+      capabilityTerminal: string;
+      capabilityAcp: string;
+      emptyCustomAgents: string;
       acpAdapterStatusReady: string;
       acpAdapterStatusMissing: string;
       acpAdapterStatusChecking: string;
       acpAdapterStatusUnknown: string;
+      acpAdapterStatusUnsupported: string;
       acpAdapterTitleInstall: string;
       cannotDeleteBuiltIn: string;
       editAgentTitle: string;

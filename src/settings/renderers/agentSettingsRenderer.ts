@@ -17,6 +17,7 @@ import {
   type CommandAvailability,
 } from '../../services/terminal/commandAvailability';
 import type { SettingsAccessor } from '../settingsAccessor';
+import { getCustomAgentSettingsRows } from '../agentSettingsRows';
 import { BaseSettingsRenderer } from './baseRenderer';
 import { t } from '../../i18n';
 
@@ -31,7 +32,10 @@ export class AgentSettingsRenderer extends BaseSettingsRenderer {
 
   private renderAgentList(containerEl: HTMLElement): void {
     const card = containerEl.createDiv({ cls: 'settings-card' });
-    new Setting(card).setName(t('settingsDetails.agents.heading')).setHeading();
+    new Setting(card)
+      .setName(t('settingsDetails.agents.heading'))
+      .setDesc(t('settingsDetails.agents.headingDesc'))
+      .setHeading();
 
     const headerActions = card.createDiv({ cls: 'agent-settings-header-actions' });
     const addBtn = headerActions.createEl('button', {
@@ -46,7 +50,14 @@ export class AgentSettingsRenderer extends BaseSettingsRenderer {
 
   private renderAgentRows(listEl: HTMLElement): void {
     listEl.empty();
-    const agents = this.settingsAccessor?.getAllAgents() ?? [];
+    const agents = getCustomAgentSettingsRows(this.settingsAccessor?.getAllAgents() ?? []);
+    if (agents.length === 0) {
+      listEl.createDiv({
+        cls: 'agent-settings-empty',
+        text: t('settingsDetails.agents.emptyCustomAgents'),
+      });
+      return;
+    }
     for (let i = 0; i < agents.length; i++) {
       this.renderAgentRow(listEl, agents[i], i, agents.length);
     }
@@ -193,10 +204,15 @@ export class AgentSettingsRenderer extends BaseSettingsRenderer {
 
   private async moveAgent(from: number, to: number): Promise<void> {
     const agents = this.settingsAccessor?.getAllAgents() ?? [];
-    const ids = agents.map((a) => a.id);
-    const [moved] = ids.splice(from, 1);
-    ids.splice(to, 0, moved);
-    await this.settingsAccessor?.reorderAgents(ids);
+    const customAgents = agents.filter((agent) => !agent.isBuiltIn);
+    const customIds = customAgents.map((agent) => agent.id);
+    const [moved] = customIds.splice(from, 1);
+    customIds.splice(to, 0, moved);
+    const orderedIds = [
+      ...agents.filter((agent) => agent.isBuiltIn).map((agent) => agent.id),
+      ...customIds,
+    ];
+    await this.settingsAccessor?.reorderAgents(orderedIds);
     this.rerender();
   }
 

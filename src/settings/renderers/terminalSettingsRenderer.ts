@@ -32,6 +32,16 @@ import {
   readinessToBadge,
   type AiLauncherStatusSnapshot,
 } from '../../services/terminal/aiLauncherStatus';
+import type { AgentConfig } from '../../services/agentStream/agentConfig';
+import type { AcpAgentInstallEntry } from '../../services/agentStream/acpAgentInstallRegistry';
+import {
+  getAcpAgentInstallEntry,
+  isAcpAgentUsingRegistryCommand,
+} from '../../services/agentStream/acpAgentInstallRegistry';
+import {
+  detectCommandAvailability,
+  type CommandAvailability,
+} from '../../services/terminal/commandAvailability';
 import { clearCommandVersionCache } from '../../services/terminal/commandVersionProbe';
 import {
   clearNodeRuntimeCache,
@@ -935,10 +945,14 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       });
       this.attachLauncherSnapshotInfo(badge, versionEl, launcherEntry);
     }
-    contentEl.createDiv({
-      cls: 'preset-script-command',
-      text: this.getPresetScriptCommandPreview(script)
-    });
+    if (launcherEntry?.category === 'coding-agent') {
+      this.renderAgentCapabilities(contentEl, script);
+    } else {
+      contentEl.createDiv({
+        cls: 'preset-script-command',
+        text: this.getPresetScriptCommandPreview(script)
+      });
+    }
 
     const actionsEl = row.createDiv({ cls: 'preset-script-actions' });
 
@@ -1086,6 +1100,125 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     header.dataset.category = category;
     header.createDiv({ cls: 'preset-scripts-list-section-title', text: title });
     header.createDiv({ cls: 'preset-scripts-list-section-desc', text: description });
+  }
+
+  private renderAgentCapabilities(
+    contentEl: HTMLElement,
+    script: PresetScript,
+  ): void {
+    const capabilitiesEl = contentEl.createDiv({ cls: 'preset-agent-capabilities' });
+    this.renderTerminalCapability(capabilitiesEl, script);
+    const acp = this.getBuiltInAcpCapability(script.id);
+    if (acp) {
+      this.renderAcpCapability(capabilitiesEl, acp.agent, acp.entry);
+    } else {
+      this.renderUnavailableAcpCapability(capabilitiesEl);
+    }
+  }
+
+  private renderTerminalCapability(
+    parent: HTMLElement,
+    script: PresetScript,
+  ): void {
+    const row = parent.createDiv({ cls: 'preset-agent-capability' });
+    row.createDiv({
+      cls: 'preset-agent-capability-kind',
+      text: t('settingsDetails.agents.capabilityTerminal'),
+    });
+    row.createDiv({
+      cls: 'preset-agent-capability-command',
+      text: this.getTerminalCommandValue(script),
+    });
+  }
+
+  private renderAcpCapability(
+    parent: HTMLElement,
+    agent: AgentConfig,
+    entry: AcpAgentInstallEntry,
+  ): void {
+    const row = parent.createDiv({ cls: 'preset-agent-capability' });
+    row.createDiv({
+      cls: 'preset-agent-capability-kind',
+      text: t('settingsDetails.agents.capabilityAcp'),
+    });
+    row.createDiv({
+      cls: 'preset-agent-capability-command',
+      text: [agent.command, ...(agent.args ?? [])].join(' '),
+    });
+    const badge = row.createDiv({
+      cls: 'preset-scripts-menu-status-badge is-checking',
+      text: t('settingsDetails.agents.acpAdapterStatusChecking'),
+    });
+    const installBtn = row.createEl('button', {
+      cls: 'preset-agent-capability-install is-hidden',
+      text: t('settingsDetails.agents.installAcpAdapterShort'),
+    });
+    installBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      this.context.plugin.openAcpAgentInstallModal(agent);
+    });
+    void this.refreshAcpCapabilityStatus(entry.command, badge, installBtn);
+  }
+
+  private renderUnavailableAcpCapability(parent: HTMLElement): void {
+    const row = parent.createDiv({ cls: 'preset-agent-capability is-unavailable' });
+    row.createDiv({
+      cls: 'preset-agent-capability-kind',
+      text: t('settingsDetails.agents.capabilityAcp'),
+    });
+    row.createDiv({
+      cls: 'preset-agent-capability-command',
+      text: t('settingsDetails.agents.acpAdapterStatusUnsupported'),
+    });
+  }
+
+  private getBuiltInAcpCapability(
+    presetId: string,
+  ): { agent: AgentConfig; entry: AcpAgentInstallEntry } | null {
+    const agent = this.context.plugin.getSettingsAccessor().getAgent(presetId);
+    if (!agent || !agent.isBuiltIn) return null;
+    const entry = getAcpAgentInstallEntry(agent.id);
+    if (!entry || !isAcpAgentUsingRegistryCommand(agent, entry)) return null;
+    return { agent, entry };
+  }
+
+  private getTerminalCommandValue(script: PresetScript): string {
+    const action = script.actions.find((item) => (
+      item.enabled !== false && item.type === 'terminal-command'
+    ));
+    return action?.value.trim() || this.getPresetScriptCommandPreview(script);
+  }
+
+  private async refreshAcpCapabilityStatus(
+    command: string,
+    badge: HTMLElement,
+    installBtn: HTMLElement,
+  ): Promise<void> {
+    const status = await detectCommandAvailability(command);
+    if (!badge.isConnected) return;
+    this.applyAcpCapabilityStatus(badge, installBtn, status);
+  }
+
+  private applyAcpCapabilityStatus(
+    badge: HTMLElement,
+    installBtn: HTMLElement,
+    status: CommandAvailability,
+  ): void {
+    badge.removeClass('is-ready');
+    badge.removeClass('is-not-installed');
+    badge.removeClass('is-checking');
+    const missing = status === 'not-installed';
+    if (status === 'ready') {
+      badge.addClass('is-ready');
+      badge.setText(t('settingsDetails.agents.acpAdapterStatusReady'));
+    } else if (missing) {
+      badge.addClass('is-not-installed');
+      badge.setText(t('settingsDetails.agents.acpAdapterStatusMissing'));
+    } else {
+      badge.addClass('is-checking');
+      badge.setText(t('settingsDetails.agents.acpAdapterStatusUnknown'));
+    }
+    installBtn.toggleClass('is-hidden', !missing);
   }
 
   /**
