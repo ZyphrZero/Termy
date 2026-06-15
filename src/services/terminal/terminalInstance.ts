@@ -180,6 +180,7 @@ export class TerminalInstance {
   private titleState: TerminalTitleState;
   private isInitialized = false;
   private isDestroyed = false;
+  private isComposing = false;
   private titleChangeCallbacks: Set<(title: string) => void> = new Set();
   
   // Search-related state
@@ -453,9 +454,6 @@ export class TerminalInstance {
   }
 
   private async loadRendererInternal(renderer: 'canvas' | 'webgl'): Promise<void> {
-    if (!this.checkRendererSupport(renderer)) {
-      throw new Error(t('terminalInstance.rendererNotSupported', { renderer: renderer.toUpperCase() }));
-    }
 
     const { CanvasAddon, WebglAddon } = await loadXtermModules();
 
@@ -680,6 +678,7 @@ export class TerminalInstance {
     }, () => ({
       shiftEnterMode: this.win32InputModeEnabled ? 'win32-input-mode' : 'newline',
       extendedKeyboardMode: this.getClaudeCodeExtendedKeyboardMode(),
+      isComposing: this.isComposing,
     }));
 
     this.xterm.onData((data) => {
@@ -824,15 +823,8 @@ export class TerminalInstance {
       return;
     }
 
-    const buffer = `${this.pendingControlSequenceText}${data}`;
-    // eslint-disable-next-line no-control-regex -- Need to match ANSI control sequences
-    const modeRegex = /\x1b\[\?9001([hl])/g;
-    let match: RegExpExecArray | null = null;
-    while ((match = modeRegex.exec(buffer)) !== null) {
-      this.win32InputModeEnabled = match[1] === 'h';
-    }
-
-    this.pendingControlSequenceText = buffer.slice(-32);
+    // Temporarily force win32InputMode to false to test if it solves the Korean IME lag/spacing bug in PowerShell conpty
+    this.win32InputModeEnabled = false;
   }
 
   /**
@@ -1013,6 +1005,16 @@ export class TerminalInstance {
     this.disposeDomEventHandlers();
     this.setupKeyboardShortcuts(container);
     this.setupContextMenu(container);
+
+    // Track IME composition states on the terminal container (using bubbling)
+    const startHandler = () => {
+      this.isComposing = true;
+    };
+    const endHandler = () => {
+      this.isComposing = false;
+    };
+    this.addDomEventListener(container, 'compositionstart', startHandler);
+    this.addDomEventListener(container, 'compositionend', endHandler);
   }
 
   private addDomEventListener<K extends keyof HTMLElementEventMap>(

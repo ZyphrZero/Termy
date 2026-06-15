@@ -2242,3 +2242,15 @@
 .preset-script-row .preset-scripts-menu-status-badge {
   margin-left: 8px;
 }
+
+
+
+/* Force show the terminal-internal CJK composition text with proper coloring and styling */
+.xterm .xterm-composition {
+  display: inline-block !important;
+  color: var(--text-normal) !important;
+  border-bottom: 2px solid var(--interactive-accent) !important;
+  background: transparent !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
