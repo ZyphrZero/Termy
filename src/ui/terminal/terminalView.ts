@@ -1,5 +1,5 @@
 import type { WorkspaceLeaf, Menu } from 'obsidian';
-import { FileSystemAdapter, ItemView, Notice, TFile, TFolder, setIcon } from 'obsidian';
+import { FileSystemAdapter, ItemView, Notice, Scope, TFile, TFolder, setIcon } from 'obsidian';
 import { shell, webUtils } from 'electron';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 
@@ -84,6 +84,17 @@ export class TerminalView extends ItemView {
       this.initResolve = resolve;
       this.initReject = reject;
     });
+
+    // Block Obsidian global hotkeys while the terminal view is focused.
+    // Obsidian's keymap listens on window in the capture phase and consumes
+    // keystrokes before xterm.js can see them. Giving this view a catch-all
+    // Scope takes the keys back from Obsidian: the Scope callback returns
+    // true → handleKey short-circuits → Obsidian neither executes any command
+    // hotkey nor calls preventDefault/stopPropagation → the event continues
+    // propagating to xterm. Mirrors polyipseity/obsidian-terminal's
+    // focusedScope + newHotkeyListener approach.
+    this.scope = new Scope(this.app.scope);
+    this.scope.register(null, null, () => true);
   }
 
   getViewType(): string { return TERMINAL_VIEW_TYPE; }
