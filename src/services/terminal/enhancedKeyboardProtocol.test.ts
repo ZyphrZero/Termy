@@ -210,6 +210,20 @@ test('handleKeyboardEvent pastes clipboard text through the terminal write path'
   assert.deepEqual(harness.operations, ['flush', 'paste:clipboard text']);
 });
 
+test('handleKeyboardEvent pastes clipboard text for Cmd+V', async () => {
+  const harness = createProtocolHarness();
+  const event = createKeyboardEvent('v', { metaKey: true });
+
+  const allowed = harness.protocol.handleKeyboardEvent(event);
+  await Promise.resolve();
+
+  assert.equal(allowed, false);
+  assert.equal(event.prevented, true);
+  assert.deepEqual(harness.pastedTexts, ['clipboard text']);
+  assert.deepEqual(harness.insertedTexts, []);
+  assert.deepEqual(harness.operations, ['flush', 'paste:clipboard text']);
+});
+
 test('handleKeyboardEvent pastes a newline for Shift+Enter using the bracketed paste path', () => {
   const harness = createProtocolHarness();
   const event = createKeyboardEvent('Enter', { shiftKey: true });
@@ -324,6 +338,19 @@ test('handleKeyboardEvent lets xterm handle win32 IME process keys even when bro
   assert.deepEqual(harness.queuedInput, []);
   assert.deepEqual(harness.insertedTexts, []);
   assert.deepEqual(harness.pastedTexts, []);
+});
+
+test('handleKeyboardEvent pastes clipboard text for Cmd+V in win32-input-mode', async () => {
+  const { harness, protocol } = createWin32ProtocolHarness();
+  const event = createKeyboardEvent('v', { code: 'KeyV', metaKey: true });
+
+  const allowed = protocol.handleKeyboardEvent(event);
+  await Promise.resolve();
+
+  assert.equal(allowed, false);
+  assert.equal(event.prevented, true);
+  assert.deepEqual(harness.pastedTexts, ['clipboard text']);
+  assert.deepEqual(harness.queuedInput, []);
 });
 
 test('handleKeyboardEvent suppresses follow-up win32 shortcut events after local paste handling', async () => {

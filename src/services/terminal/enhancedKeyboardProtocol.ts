@@ -95,7 +95,7 @@ export function evaluateKeyboardDecision(
       return { type: 'copy-selection' };
     }
 
-    if (event.type === 'keydown' && event.ctrlKey && event.key === 'v') {
+    if (event.type === 'keydown' && (event.ctrlKey || event.metaKey) && event.key === 'v') {
       return { type: 'paste-from-clipboard' };
     }
 
@@ -127,7 +127,7 @@ export function evaluateKeyboardDecision(
     return { type: 'copy-selection' };
   }
 
-  if (event.ctrlKey && event.key === 'v') {
+  if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
     return { type: 'paste-from-clipboard' };
   }
 
