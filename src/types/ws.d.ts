@@ -17,7 +17,7 @@ declare module 'ws' {
   }
 
   export class WebSocketServer extends EventEmitter {
-    constructor(options: { port: number });
+    constructor(options: { host?: string; port: number });
 
     address(): { port: number } | string | null;
     close(cb?: () => void): void;
