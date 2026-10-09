@@ -23,20 +23,20 @@ use uuid::Uuid;
 /// Logging macros
 macro_rules! log_info {
     ($($arg:tt)*) => {
-        eprintln!("[INFO] [PTY] {}", format!($($arg)*));
+        crate::logging::write_line(format_args!("[INFO] [PTY] {}", format_args!($($arg)*)));
     };
 }
 
 macro_rules! log_error {
     ($($arg:tt)*) => {
-        eprintln!("[ERROR] [PTY] {}", format!($($arg)*));
+        crate::logging::write_line(format_args!("[ERROR] [PTY] {}", format_args!($($arg)*)));
     };
 }
 
 macro_rules! log_debug {
     ($($arg:tt)*) => {
         if cfg!(debug_assertions) {
-            eprintln!("[DEBUG] [PTY] {}", format!($($arg)*));
+            crate::logging::write_line(format_args!("[DEBUG] [PTY] {}", format_args!($($arg)*)));
         }
     };
 }

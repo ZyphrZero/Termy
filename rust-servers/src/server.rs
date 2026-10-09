@@ -4,6 +4,7 @@
 use tokio::net::TcpListener;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 use futures_util::{StreamExt, SinkExt};
+use std::io::Write;
 use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
 
@@ -12,20 +13,20 @@ use crate::router::{MessageRouter, ModuleType, RouterError, ServerResponse};
 /// Logging macro
 macro_rules! log_info {
     ($($arg:tt)*) => {
-        eprintln!("[INFO] {}", format!($($arg)*));
+        crate::logging::write_line(format_args!("[INFO] {}", format_args!($($arg)*)));
     };
 }
 
 macro_rules! log_error {
     ($($arg:tt)*) => {
-        eprintln!("[ERROR] {}", format!($($arg)*));
+        crate::logging::write_line(format_args!("[ERROR] {}", format_args!($($arg)*)));
     };
 }
 
 macro_rules! log_debug {
     ($($arg:tt)*) => {
         if cfg!(debug_assertions) {
-            eprintln!("[DEBUG] {}", format!($($arg)*));
+            crate::logging::write_line(format_args!("[DEBUG] {}", format_args!($($arg)*)));
         }
     };
 }
@@ -60,11 +61,12 @@ impl Server {
 
         // Write port information to stdout in JSON format
         // The TypeScript side parses this JSON to get the port number
-        println!(
+        writeln!(
+            std::io::stdout().lock(),
             r#"{{"port": {}, "pid": {}}}"#,
             port,
             std::process::id()
-        );
+        )?;
 
         // Main loop: accept WebSocket connections
         let router = Arc::new(MessageRouter::new());

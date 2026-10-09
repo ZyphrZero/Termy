@@ -8,21 +8,21 @@ use crate::server::WsSender;
 /// Logging macro
 macro_rules! log_info {
     ($($arg:tt)*) => {
-        eprintln!("[INFO] {}", format!($($arg)*));
+        crate::logging::write_line(format_args!("[INFO] {}", format_args!($($arg)*)));
     };
 }
 
 #[allow(unused_macros)]
 macro_rules! log_error {
     ($($arg:tt)*) => {
-        eprintln!("[ERROR] {}", format!($($arg)*));
+        crate::logging::write_line(format_args!("[ERROR] {}", format_args!($($arg)*)));
     };
 }
 
 macro_rules! log_debug {
     ($($arg:tt)*) => {
         if cfg!(debug_assertions) {
-            eprintln!("[DEBUG] {}", format!($($arg)*));
+            crate::logging::write_line(format_args!("[DEBUG] {}", format_args!($($arg)*)));
         }
     };
 }

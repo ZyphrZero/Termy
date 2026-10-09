@@ -726,6 +726,7 @@ version = "1.0.0"
 dependencies = [
  "async-trait",
  "futures-util",
+ "libc",
  "portable-pty",
  "serde",
  "serde_json",
