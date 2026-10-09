@@ -1,9 +1,10 @@
 import type { App, Editor, EventRef, TFile } from 'obsidian';
-import { FileSystemAdapter, MarkdownView, normalizePath } from 'obsidian';
+import { FileSystemAdapter, MarkdownView } from 'obsidian';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import { buildIdeBridgeTerminalEnv } from '../context/agentContext';
 import { debugLog, errorLog } from '@/utils/logger';
 import { getHomeDir } from '@/utils/platform';
+import { getVaultBasePath } from '@/utils/pluginPath';
 
 /**
  * Node built-in modules are resolved on demand inside the
@@ -428,7 +429,7 @@ export class IdeBridge {
   private getVaultPath(): string | null {
     const adapter = this.app.vault.adapter;
     if (adapter instanceof FileSystemAdapter) {
-      return normalizePath(adapter.getBasePath());
+      return getVaultBasePath(adapter);
     }
 
     return null;
