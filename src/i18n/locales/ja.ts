@@ -427,6 +427,9 @@ export const ja: TranslationKeys = {
     cannotConnect: 'ターミナルサーバーに接続できません',
     xtermLoadFailed: 'xterm.js モジュールの読み込みに失敗しました: {{message}}',
     xtermInitFailed: 'xterm.js の初期化に失敗しました: {{message}}',
+    connectionLost: 'WebSocket 接続が切断されました。再接続中...',
+    sessionRecoveryInProgress: '接続が復元されました。ターミナルセッションを復元中...',
+    sessionRecovered: 'ターミナルセッションが復元されました',
   },
 
   terminalService: {
