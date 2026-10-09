@@ -18,6 +18,7 @@ type CryptoModule = typeof import('crypto');
 type UrlModule = typeof import('url');
 
 const CLAUDE_IDE_DIR_NAME = '.claude/ide';
+const IDE_BRIDGE_HOST = '127.0.0.1';
 /**
  * MCP protocol revisions Termy's IDE bridge knows how to speak.
  *
@@ -209,7 +210,10 @@ export class IdeBridge {
 
     this.fs.mkdirSync(this.claudeIdeDir, { recursive: true });
 
-    this.server = new WebSocketServer({ port: 0 });
+    this.server = new WebSocketServer({
+      host: IDE_BRIDGE_HOST,
+      port: 0,
+    });
     this.server.on('connection', (socket, request) => {
       this.handleConnection(socket, request.headers['x-claude-code-ide-authorization']);
     });
