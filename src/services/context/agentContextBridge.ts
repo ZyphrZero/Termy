@@ -6,7 +6,6 @@ import type {
   TFile,
   WorkspaceLeaf,
 } from "obsidian";
-import { normalizePath } from "obsidian";
 
 /**
  * Node built-ins are resolved on demand inside the
@@ -28,6 +27,7 @@ import {
   TERMY_CODEX_SKILL_RELATIVE_PATH,
 } from "./agentContext";
 import { debugLog, errorLog } from "@/utils/logger";
+import { getVaultBasePath, type VaultPathAdapter } from "@/utils/pluginPath";
 
 const CONTEXT_DIR_NAME = "agent-context";
 const CONTEXT_FILE_NAME = "obsidian-context.json";
@@ -350,11 +350,6 @@ export class AgentContextBridge {
   }
 
   private getVaultRoot(): string | null {
-    const adapter = this.app.vault.adapter as { getBasePath?: () => string };
-    if (adapter && typeof adapter.getBasePath === "function") {
-      return normalizePath(adapter.getBasePath());
-    }
-
-    return null;
+    return getVaultBasePath(this.app.vault.adapter as VaultPathAdapter);
   }
 }

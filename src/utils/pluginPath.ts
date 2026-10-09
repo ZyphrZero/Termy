@@ -1,5 +1,14 @@
 import { posix as posixPath, win32 as win32Path } from 'node:path';
 
+export interface VaultPathAdapter {
+  getBasePath?: () => string;
+}
+
+export function getVaultBasePath(adapter: VaultPathAdapter): string | null {
+  // getBasePath already returns an OS path; vault normalization would strip Unix roots.
+  return typeof adapter.getBasePath === 'function' ? adapter.getBasePath() : null;
+}
+
 export function resolvePluginDir(
   vaultPath: string,
   configDir: string,
