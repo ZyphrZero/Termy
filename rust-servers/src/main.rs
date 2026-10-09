@@ -3,6 +3,7 @@
 
 mod server;
 mod router;
+mod logging;
 
 // Feature modules
 pub mod pty;
@@ -18,14 +19,14 @@ const SERVER_VERSION: &str = match option_env!("TERMINAL_SERVER_VERSION") {
 /// Logging macro
 macro_rules! log_info {
     ($($arg:tt)*) => {
-        eprintln!("[INFO] {}", format!($($arg)*));
+        crate::logging::write_line(format_args!("[INFO] {}", format_args!($($arg)*)));
     };
 }
 
 macro_rules! log_debug {
     ($($arg:tt)*) => {
         if cfg!(debug_assertions) {
-            eprintln!("[DEBUG] {}", format!($($arg)*));
+            crate::logging::write_line(format_args!("[DEBUG] {}", format_args!($($arg)*)));
         }
     };
 }
@@ -48,11 +49,11 @@ fn parse_args() -> u16 {
                 port = arg.trim_start_matches("--port=").parse().unwrap_or(0);
             }
             "-h" | "--help" => {
-                eprintln!("Usage: termy-server [OPTIONS]");
-                eprintln!("Options:");
-                eprintln!("  -p, --port <PORT>         监听端口 (0 表示随机端口) [默认: 0]");
-                eprintln!("  -h, --help                显示帮助信息");
-                eprintln!("  -V, --version             显示版本信息");
+                logging::write_line(format_args!("Usage: termy-server [OPTIONS]"));
+                logging::write_line(format_args!("Options:"));
+                logging::write_line(format_args!("  -p, --port <PORT>         监听端口 (0 表示随机端口) [默认: 0]"));
+                logging::write_line(format_args!("  -h, --help                显示帮助信息"));
+                logging::write_line(format_args!("  -V, --version             显示版本信息"));
                 std::process::exit(0);
             }
             "-V" | "--version" => {
