@@ -1,12 +1,12 @@
 /**
  * ServerManager - unified server manager
- * 
+ *
  * Responsibilities:
  * 1. Manage the lifecycle of the unified Rust server process
  * 2. Manage a single WebSocket connection
  * 3. Provide modular APIs (pty/voice/llm/utils)
  * 4. Handle server crashes and automatic restarts
- * 
+ *
  */
 
 import { Notice } from 'obsidian';
@@ -18,12 +18,12 @@ type FsModule = typeof import('fs');
 type PathModule = typeof import('path');
 type ChildProcessModule = typeof import('child_process');
 type ChildProcess = import('child_process').ChildProcess;
-import type { 
-  ServerInfo, 
+import type {
+  ServerInfo,
   ServerEvents,
   ServerMessage} from './types';
-import { 
-  ServerErrorCode, 
+import {
+  ServerErrorCode,
   ServerManagerError
 } from './types';
 import { PtyClient } from './ptyClient';
@@ -31,7 +31,7 @@ import { BinaryDownloader } from './binaryDownloader';
 import type { BinaryDownloadConfig } from './binaryDownloadUrls';
 
 type BinaryUpdateResult = 'skipped-offline' | 'already-ready' | 'downloaded' | 'updated';
-const DEV_RELOAD_REQUEST_FILE = '.termy-dev-reload.json';
+const DEV_RELOAD_REQUEST_FILE = '.termy-reload.json';
 const DEV_RELOAD_PHASE_INSTALLING = 'installing';
 
 interface ServerExitDetails {
@@ -63,70 +63,70 @@ interface ReconnectConfig {
 
 /**
  * Unified server manager
- * 
+ *
  * Replaces BinaryManager + TerminalService + VoiceServerManager
  */
 export class ServerManager {
   /** Plugin directory */
   private pluginDir: string;
-  
+
   /** Plugin version */
   private version: string;
-  
+
   /** Debug mode (controls logging output only) */
   private debugMode: boolean;
-  
+
   /** Offline mode (skips version checks and automatic downloads) */
   private offlineMode: boolean;
-  
+
   /** Binary downloader */
   private binaryDownloader: BinaryDownloader;
-  
+
   /** Server process */
   private process: ChildProcess | null = null;
-  
+
   /** WebSocket connection */
   private ws: WebSocket | null = null;
-  
+
   /** Server port */
   private port: number | null = null;
-  
+
   /** Whether shutdown is in progress */
   private isShuttingDown = false;
-  
+
   /** Server restart attempt count */
   private restartAttempts = 0;
-  
+
   /** Maximum server restart attempts */
   private readonly maxRestartAttempts = 3;
-  
+
   /** WebSocket reconnect attempt count */
   private wsReconnectAttempts = 0;
-  
+
   /** Reconnect config */
   private reconnectConfig: ReconnectConfig = {
     maxAttempts: 5,
     interval: 3000,
   };
-  
+
   /** Whether reconnection is in progress */
   private isReconnecting = false;
-  
+
   /** Reconnect timer */
   private reconnectTimer: number | null = null;
-  
+
   /** Server startup Promise */
   private serverStartPromise: Promise<void> | null = null;
-  
+
   /** WebSocket connection Promise */
   private wsConnectPromise: Promise<void> | null = null;
 
   /** Binary update Promise */
   private binaryUpdatePromise: Promise<BinaryUpdateResult> | null = null;
-  
+
   /** Event listeners */
   private eventListeners: Map<keyof ServerEvents, Set<EventListener<keyof ServerEvents>>> = new Map();
-  
+
   // Module clients (lazy-loaded)
   private _ptyClient: PtyClient | null = null;
 
@@ -164,7 +164,7 @@ export class ServerManager {
 
   /**
    * Ensure the server is running
-   * 
+   *
 
    */
   async ensureServer(): Promise<void> {
@@ -196,7 +196,7 @@ export class ServerManager {
 
   /**
    * Get the PTY client
-   * 
+   *
 
    */
   pty(): PtyClient {
@@ -211,17 +211,17 @@ export class ServerManager {
 
   /**
    * Shut down the server
-   * 
+   *
 
    */
   async shutdown(): Promise<void> {
     this.isShuttingDown = true;
-    
+
     debugLog('[ServerManager] 关闭服务器...');
-    
+
     // Cancel the reconnect timer
     this.cancelReconnect();
-    
+
     // Close the WebSocket connection
     if (this.ws) {
       try {
@@ -231,12 +231,12 @@ export class ServerManager {
       }
       this.ws = null;
     }
-    
+
     // Stop the server process
     if (this.process) {
       try {
         this.process.kill('SIGTERM');
-        
+
         // Wait for the process to exit
         await new Promise<void>((resolve) => {
           const timeout = window.setTimeout(() => {
@@ -260,19 +260,19 @@ export class ServerManager {
         this.process = null;
       }
     }
-    
+
     // Clear state
     this.port = null;
     this.serverStartPromise = null;
     this.wsConnectPromise = null;
-    
+
     // Destroy module clients
     this._ptyClient?.destroy();
-    
+
     this._ptyClient = null;
-    
+
     this.emit('server-stopped');
-    
+
     debugLog('[ServerManager] 服务器已关闭');
   }
 
@@ -341,14 +341,14 @@ export class ServerManager {
   private async startServer(): Promise<void> {
     try {
       debugLog('[ServerManager] 启动统一服务器...');
-      
+
       const binaryPath = this.getBinaryPath();
-      
+
       await this.ensureBinaryReady();
-      
+
       // Ensure executable permission (Unix)
       await this.ensureExecutable(binaryPath);
-      
+
       // Start the process
       this.process = this.spawn(binaryPath, ['--port', '0'], {
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -359,38 +359,38 @@ export class ServerManager {
         windowsHide: true,
         detached: false,
       });
-      
+
       debugLog('[ServerManager] 服务器进程已启动, PID:', this.process.pid);
-      
+
       // Listen for process errors
       this.process.on('error', (error) => {
         errorLog('[ServerManager] 服务器进程错误:', error);
         this.handleServerError(error);
       });
-      
+
       // Wait for port information
       const port = await this.waitForServerPort();
       this.port = port;
       this.restartAttempts = 0;
-      
+
       debugLog(`[ServerManager] 服务器已启动，端口: ${port}`);
-      
+
       // Set up the exit handler
       this.setupServerExitHandler();
-      
+
       // Establish the WebSocket connection
       await this.connectWebSocket();
-      
+
       this.emit('server-started', port);
-      
+
     } catch (error) {
       this.serverStartPromise = null;
-      
+
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorLog('[ServerManager] 启动服务器失败:', errorMessage);
-      
+
       new Notice(t('notices.serverStartFailed', { message: errorMessage }), 0);
-      
+
       this.emit('server-error', error instanceof Error ? error : new Error(errorMessage));
       throw error;
     }
@@ -404,7 +404,7 @@ export class ServerManager {
     const arch = process.arch;
     const ext = platform === 'win32' ? '.exe' : '';
     const filename = `termy-server-${platform}-${arch}${ext}`;
-    
+
     return this.path.join(this.pluginDir, 'binaries', filename);
   }
 
@@ -419,7 +419,7 @@ export class ServerManager {
       }
       return 'skipped-offline';
     }
-    
+
     if (this.binaryUpdatePromise) {
       return this.binaryUpdatePromise;
     }
@@ -517,11 +517,11 @@ export class ServerManager {
     if (process.platform === 'win32') {
       return;
     }
-    
+
     try {
       const stats = await this.fs.promises.stat(filePath);
       const isExecutable = (stats.mode & 0o111) !== 0;
-      
+
       if (!isExecutable) {
         debugLog('[ServerManager] 添加可执行权限:', filePath);
         await this.fs.promises.chmod(filePath, 0o755);
@@ -545,7 +545,7 @@ export class ServerManager {
       }
 
       let buffer = '';
-      
+
       const timeout = window.setTimeout(() => {
         this.process?.stdout?.off('data', onData);
         reject(new ServerManagerError(
@@ -556,7 +556,7 @@ export class ServerManager {
 
       const onData = (chunk: Buffer) => {
         buffer += chunk.toString();
-        
+
         try {
           const match = buffer.match(/\{[^}]+\}/);
           if (match) {
@@ -574,7 +574,7 @@ export class ServerManager {
       };
 
       this.process.stdout.on('data', onData);
-      
+
       // Listen to stderr for debugging
       this.process.stderr?.on('data', (data: Buffer) => {
         debugLog('[ServerManager] stderr:', data.toString());
@@ -612,10 +612,10 @@ export class ServerManager {
 
       const wsUrl = `ws://127.0.0.1:${this.port}`;
       debugLog('[ServerManager] 连接 WebSocket:', wsUrl);
-      
+
       this.ws = new WebSocket(wsUrl);
       const ws = this.ws;
-      
+
       const timeout = window.setTimeout(() => {
         if (this.ws === ws) {
           this.wsConnectPromise = null;
@@ -629,14 +629,14 @@ export class ServerManager {
       ws.onopen = () => {
         window.clearTimeout(timeout);
         debugLog('[ServerManager] WebSocket 已连接');
-        
+
         // Reset the reconnect counter
         this.wsReconnectAttempts = 0;
         this.isReconnecting = false;
-        
+
         // Update the WebSocket on all module clients
         this.updateClientsWebSocket();
-        
+
         this.emit('ws-connected');
         resolve();
       };
@@ -647,7 +647,7 @@ export class ServerManager {
           this.ws = null;
           this.wsConnectPromise = null;
         }
-        
+
         // Clear the WebSocket on module clients
         this._ptyClient?.setWebSocket(null);
 
@@ -655,9 +655,9 @@ export class ServerManager {
           debugLog('[ServerManager] 开发安装进行中，跳过 WebSocket 重连通知');
           return;
         }
-        
+
         this.emit('ws-disconnected');
-        
+
         // If this was not an intentional shutdown, try to reconnect
         if (!this.isShuttingDown && this.port !== null) {
           this.scheduleReconnect();
@@ -696,7 +696,7 @@ export class ServerManager {
       this._ptyClient?.handleBinaryMessage(event.data);
       return;
     }
-    
+
     if (event.data instanceof Blob) {
       void event.data.arrayBuffer()
         .then(buffer => {
@@ -707,11 +707,11 @@ export class ServerManager {
         });
       return;
     }
-    
+
     // Handle JSON messages
     try {
       const msg = JSON.parse(event.data as string) as ServerMessage;
-      
+
       // Dispatch messages by module
       switch (msg.module) {
         case 'pty':
@@ -738,34 +738,34 @@ export class ServerManager {
       debugLog('[ServerManager] 开发安装进行中，跳过 WebSocket 自动重连');
       return;
     }
-    
+
     // Check whether the maximum reconnect attempts has been exceeded
     if (this.wsReconnectAttempts >= this.reconnectConfig.maxAttempts) {
       errorLog(
         `[ServerManager] WebSocket 重连失败，已达到最大重试次数 (${this.reconnectConfig.maxAttempts})`
       );
-      
+
       new Notice(
         t('notices.wsReconnectFailed') || 'WebSocket 连接断开，请重新加载插件',
         0
       );
-      
+
       this.emit('ws-reconnect-failed');
       return;
     }
-    
+
     this.isReconnecting = true;
     this.wsReconnectAttempts++;
-    
+
     const delay = this.reconnectConfig.interval;
-    
+
     debugLog(
       `[ServerManager] 将在 ${delay}ms 后尝试重连 WebSocket ` +
       `(${this.wsReconnectAttempts}/${this.reconnectConfig.maxAttempts})`
     );
-    
+
     this.emit('ws-reconnecting', this.wsReconnectAttempts, delay);
-    
+
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
       void this.attemptReconnect();
@@ -780,22 +780,22 @@ export class ServerManager {
       this.isReconnecting = false;
       return;
     }
-    
+
     debugLog('[ServerManager] 尝试重连 WebSocket...');
-    
+
     try {
       await this.connectWebSocket();
-      
+
       debugLog('[ServerManager] WebSocket 重连成功');
       new Notice(
         t('notices.wsReconnectSuccess') || 'WebSocket 重连成功',
         3000
       );
-      
+
     } catch (error) {
       errorLog('[ServerManager] WebSocket 重连失败:', error);
       this.isReconnecting = false;
-      
+
       // Keep trying to reconnect
       this.scheduleReconnect();
     }
@@ -815,7 +815,7 @@ export class ServerManager {
 
   /**
    * Set up the server exit handler
-   * 
+   *
 
    */
   private setupServerExitHandler(): void {
@@ -831,12 +831,12 @@ export class ServerManager {
         this.serverStartPromise = null;
         this.wsConnectPromise = null;
       }
-      
+
       if (this.isShuttingDown) {
         debugLog(`[ServerManager] 服务器已停止: code=${code}, signal=${signal}`);
         return;
       }
-      
+
       const exitDetails: ServerExitDetails = {
         code,
         signal,
@@ -867,9 +867,9 @@ export class ServerManager {
         `[ServerManager] 尝试重启服务器 ` +
         `(${this.restartAttempts}/${this.maxRestartAttempts})`
       );
-      
+
       const delay = 1000 * Math.pow(2, this.restartAttempts - 1);
-      
+
       window.setTimeout(() => {
         this.ensureServer()
           .then(() => {
@@ -944,7 +944,7 @@ export class ServerManager {
    */
   private handleServerError(error: Error): void {
     const errorCode = (error as NodeJS.ErrnoException).code;
-    
+
     if (errorCode === 'ENOENT') {
       new Notice(
         '❌ 无法启动服务器\n\n' +
@@ -967,7 +967,7 @@ export class ServerManager {
         0
       );
     }
-    
+
     this.emit('server-error', error);
   }
 
@@ -1010,17 +1010,17 @@ export class ServerManager {
         '服务器正在关闭'
       );
     }
-    
+
     // Reset the reconnect counter
     this.wsReconnectAttempts = 0;
     this.cancelReconnect();
-    
+
     // Close the existing connection
     if (this.ws) {
       this.ws.close(1000, 'Manual reconnect');
       this.ws = null;
     }
-    
+
     // If the server is still running, reconnect the WebSocket directly
     if (this.port !== null && this.process !== null) {
       await this.connectWebSocket();
@@ -1039,13 +1039,13 @@ export class ServerManager {
     const hasChanges = Object.entries(config).some(
       ([key, value]) => this.reconnectConfig[key as keyof ReconnectConfig] !== value
     );
-    
+
     if (hasChanges) {
       Object.assign(this.reconnectConfig, config);
       debugLog('[ServerManager] 更新重连配置:', this.reconnectConfig);
     }
   }
-  
+
   updateDebugMode(debugMode: boolean): void {
     if (this.debugMode === debugMode) {
       return;
@@ -1053,7 +1053,7 @@ export class ServerManager {
     this.debugMode = debugMode;
     debugLog('[ServerManager] 更新调试模式:', this.debugMode);
   }
-  
+
   updateOfflineMode(offlineMode: boolean): void {
     if (this.offlineMode === offlineMode) {
       return;
