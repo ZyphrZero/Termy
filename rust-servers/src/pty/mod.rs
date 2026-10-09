@@ -198,9 +198,7 @@ impl PtyHandler {
         let read_task = self.start_read_task(
             session_id.clone(),
             pty_reader,
-            pty_writer,
             ended,
-            shell_type,
         ).await?;
         context.read_task = Some(read_task);
         
@@ -255,9 +253,7 @@ impl PtyHandler {
         &self,
         session_id: String,
         reader: Arc<Mutex<PtyReader>>,
-        _writer: Arc<Mutex<PtyWriter>>,
         ended: Arc<AtomicBool>,
-        _shell_type: Option<String>,
     ) -> Result<tokio::task::JoinHandle<()>, RouterError> {
         const OUTPUT_BATCH_INTERVAL_MS: u64 = 4;
         const READ_BUFFER_SIZE: usize = 8192;
@@ -323,10 +319,6 @@ impl PtyHandler {
                     ReadEvent::Error(e) => pending_error = Some(e),
                 }
 
-                if pending_exit || pending_error.is_some() {
-                    ended.store(true, Ordering::Release);
-                }
-
                 if pending_error.is_none() && !pending_exit {
                     let deadline = Instant::now() + Duration::from_millis(OUTPUT_BATCH_INTERVAL_MS);
                     loop {
@@ -351,6 +343,10 @@ impl PtyHandler {
                             }
                         }
                     }
+                }
+
+                if pending_exit || pending_error.is_some() {
+                    ended.store(true, Ordering::Release);
                 }
 
                 if !batch_buffer.is_empty() {
@@ -420,6 +416,7 @@ impl PtyHandler {
                     break;
                 }
             }
+            ended.store(true, Ordering::Release);
         });
         
         Ok(task)
@@ -584,6 +581,25 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn reader_marks_ended_after_final_output_and_eof() {
+        let handler = PtyHandler::new();
+        let reader = Arc::new(Mutex::new(PtyReader::from_reader(
+            std::io::Cursor::new(b"final output".to_vec()),
+        )));
+        let ended = Arc::new(AtomicBool::new(false));
+        let task = handler
+            .start_read_task("test-session".to_string(), reader, Arc::clone(&ended))
+            .await
+            .unwrap();
+
+        time::timeout(Duration::from_secs(5), task)
+            .await
+            .expect("reader should finish after EOF")
+            .unwrap();
+        assert!(ended.load(Ordering::Acquire));
+    }
+
+    #[tokio::test]
     async fn attach_rejects_a_marked_ended_session() {
         let handler = PtyHandler::new();
         let init_response = handler
@@ -603,6 +619,10 @@ mod tests {
             .expect("attach should return a response");
         assert_eq!(attached.payload["success"], true);
 
+        {
+            let sessions = handler.sessions.lock().await;
+            sessions.get(&session_id).unwrap().session.lock().await.kill().unwrap();
+        }
         handler
             .sessions
             .lock()

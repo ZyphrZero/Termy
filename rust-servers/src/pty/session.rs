@@ -135,6 +135,11 @@ impl PtySession {
 }
 
 impl PtyReader {
+    #[cfg(test)]
+    pub(super) fn from_reader(reader: impl Read + Send + 'static) -> Self {
+        Self { reader: Box::new(reader) }
+    }
+
     /// Read data from the PTY
     pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, Box<dyn std::error::Error>> {
         let n = self.reader.read(buf)?;
