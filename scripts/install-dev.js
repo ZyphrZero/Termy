@@ -16,7 +16,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { execSync, spawn } from 'child_process';
+import { execFileSync, execSync, spawn } from 'child_process';
 import readline from 'readline';
 import { fileURLToPath } from 'url';
 import {
@@ -52,6 +52,7 @@ const colors = {
   yellow: '\x1b[33m',
   red: '\x1b[31m',
   cyan: '\x1b[36m',
+  gray: '\x1b[90m',
 };
 
 function log(message, color = 'reset') {
@@ -130,9 +131,9 @@ function killObsidian() {
 
 function getWindowsTermyImageNames() {
   return [
-    'termy-server-win32-x64.exe',
-    'termy-server-win32-arm64.exe',
-    'termy-server.exe',
+    'termy-server-win32-x64',
+    'termy-server-win32-arm64',
+    'termy-server',
   ];
 }
 
@@ -142,9 +143,7 @@ function killTermyProcesses() {
   let killedAny = false;
 
   if (platform === 'windows') {
-    for (const imageName of getWindowsTermyImageNames()) {
-      killedAny = execIgnore(`taskkill /F /T /IM ${imageName} 2>nul`) || killedAny;
-    }
+    killedAny = stopWindowsTermyProcesses();
   } else if (platform === 'macos') {
     killedAny = execIgnore(`pkill -f ${SERVER_CONFIG.name}-darwin 2>/dev/null || true`) || killedAny;
   } else {
@@ -152,6 +151,38 @@ function killTermyProcesses() {
   }
 
   return killedAny;
+}
+
+function stopWindowsTermyProcesses() {
+  const names = getWindowsTermyImageNames();
+  const script = [
+    '$ErrorActionPreference = "Stop";',
+    `$names = @(${names.map((name) => `'${name}'`).join(', ')});`,
+    '$processes = Get-Process -Name $names -ErrorAction SilentlyContinue;',
+    'if (-not $processes) { exit 2 }',
+    '$processes | Stop-Process -Force;',
+    'exit 0',
+  ].join(' ');
+
+  try {
+    execFileSync('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      script,
+    ], {
+      stdio: 'ignore',
+      timeout: 5000,
+      windowsHide: true,
+    });
+    return true;
+  } catch (error) {
+    if (error.status === 2) {
+      return false;
+    }
+    throw new Error(`Failed to stop Termy server processes: ${error.message}`);
+  }
 }
 
 // Start Obsidian
