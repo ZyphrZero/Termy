@@ -37,3 +37,19 @@ test('TerminalTitleState replaces automatic titles with custom titles', () => {
   assert.equal(state.clearAutomaticTitle(), false);
   assert.equal(state.getTitle(), 'Claude Scratch');
 });
+
+test('TerminalTitleState applies process titles as automatic titles', () => {
+  const state = new TerminalTitleState('Terminal');
+
+  assert.equal(state.setProcessTitle(' npm test '), true);
+  assert.equal(state.getTitle(), 'npm test');
+  assert.equal(state.clearAutomaticTitle(), true);
+  assert.equal(state.getTitle(), 'Terminal');
+});
+
+test('TerminalTitleState ignores blank process titles', () => {
+  const state = new TerminalTitleState('Terminal');
+
+  assert.equal(state.setProcessTitle('   '), false);
+  assert.equal(state.getTitle(), 'Terminal');
+});
