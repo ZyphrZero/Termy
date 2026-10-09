@@ -22,7 +22,7 @@
 // runner can resolve the sibling module — it never falls back to extension
 // guessing the way esbuild does. Other sibling imports in this folder do
 // the same.
-import { compareVersions } from './commandVersionProbe.ts';
+import { compareVersions, type CommandInstallation } from './commandVersionProbe.ts';
 import type { NodeRuntimeSnapshot } from './nodeRuntime.ts';
 
 export type AiLauncherReadiness =
@@ -43,6 +43,9 @@ export interface AiLauncherStatusSnapshot {
   resolvedFrom?: string | null;
   /** Node.js/npm/fnm readiness, only populated for npm-backed launchers. */
   nodeRuntime?: NodeRuntimeSnapshot | null;
+  installations: readonly CommandInstallation[];
+  installationIssue: 'multiple' | 'version-conflict' | null;
+  discoveryErrors: readonly string[];
 }
 
 export interface BuildSnapshotInput {
@@ -56,7 +59,12 @@ export interface BuildSnapshotInput {
    * the registry check is enabled — the menu still wants to display the
    * local version where it can.
    */
-  local: { version: string | null; resolvedFrom: string | null };
+  local: {
+    version: string | null;
+    resolvedFrom: string | null;
+    installations?: readonly CommandInstallation[];
+    discoveryErrors?: readonly string[];
+  };
   /**
    * Output of {@link fetchLatestVersion}. Pass `null` when the user has
    * not opted in to update checks.
@@ -81,6 +89,15 @@ export function buildAiLauncherStatusSnapshot(
   input: BuildSnapshotInput,
 ): AiLauncherStatusSnapshot {
   const { pathAvailable, local, latest, nodeRuntime = null } = input;
+  const installations = local.installations ?? [];
+  const versions = new Set(installations.map((item) => item.version).filter((version) => version !== null));
+  const installationIssue = versions.size > 1 ? 'version-conflict'
+    : installations.length > 1 ? 'multiple' : null;
+  const diagnostics = {
+    installations,
+    installationIssue,
+    discoveryErrors: local.discoveryErrors ?? [],
+  } as const;
 
   if (pathAvailable === 'not-installed' && !local.version) {
     return {
@@ -89,6 +106,7 @@ export function buildAiLauncherStatusSnapshot(
       latest: latest?.version ?? null,
       registryError: latest?.error,
       nodeRuntime,
+      ...diagnostics,
     };
   }
 
@@ -101,6 +119,7 @@ export function buildAiLauncherStatusSnapshot(
       latest: latest?.version ?? null,
       registryError: latest?.error,
       nodeRuntime,
+      ...diagnostics,
     };
   }
 
@@ -114,6 +133,7 @@ export function buildAiLauncherStatusSnapshot(
         registryError: latest.error,
         resolvedFrom: local.resolvedFrom,
         nodeRuntime,
+        ...diagnostics,
       };
     }
   }
@@ -125,6 +145,7 @@ export function buildAiLauncherStatusSnapshot(
     registryError: latest?.error,
     resolvedFrom: local.resolvedFrom,
     nodeRuntime,
+    ...diagnostics,
   };
 }
 

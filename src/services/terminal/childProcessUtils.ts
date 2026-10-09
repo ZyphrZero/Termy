@@ -59,7 +59,7 @@ interface ChildProcessLike {
   stdout?: { on(event: 'data', listener: (chunk: Buffer | string) => void): void };
   stderr?: { on(event: 'data', listener: (chunk: Buffer | string) => void): void };
   on(event: 'error', listener: (error: Error) => void): void;
-  on(event: 'exit', listener: (code: number | null) => void): void;
+  on(event: 'close', listener: (code: number | null) => void): void;
   kill(): void;
 }
 
@@ -108,10 +108,19 @@ export function runProbeCommand(
     let proc: ChildProcessLike;
     try {
       if (process.platform === 'win32' && useWindowsShell) {
+        // Keep bare command lookup intact so batch files retain their resolved
+        // directory in %~dp0. Exact paths need protected, single-pass expansion.
+        const commandReference = /^[A-Za-z0-9._-]+$/.test(command) ? command : '%TERMY_PROBE_COMMAND%';
         proc = childProcess.spawn(
-          'cmd.exe',
-          ['/C', formatWindowsCommandLine(command, args)],
-          { windowsHide: true, env: spawnEnv },
+          spawnEnv.ComSpec ?? process.env.ComSpec ?? 'cmd.exe',
+          ['/D', '/V:OFF', '/S', '/C', `"${formatWindowsCommandLine(commandReference, args)}"`],
+          {
+            windowsHide: true,
+            windowsVerbatimArguments: true,
+            // Expand the path once inside quotes; percent signs and other
+            // shell metacharacters in installation directories stay literal.
+            env: { ...spawnEnv, TERMY_PROBE_COMMAND: command },
+          },
         );
       } else {
         proc = childProcess.spawn(command, args, {
@@ -155,7 +164,7 @@ export function runProbeCommand(
       finish(null);
     });
 
-    proc.on('exit', (code) => {
+    proc.on('close', (code) => {
       window.clearTimeout(timer);
       finish({ stdout, stderr, code });
     });

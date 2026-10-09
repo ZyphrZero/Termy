@@ -39,10 +39,10 @@ import {
 } from './services/terminal/aiLauncherCatalog';
 import {
   clearCommandAvailabilityCache,
-  detectCommandAvailability,
   type CommandAvailability,
 } from './services/terminal/commandAvailability';
-import { clearCommandVersionCache, probeCommandVersion } from './services/terminal/commandVersionProbe';
+import { clearCommandVersionCache, probeCommandVersion, type CommandVersionResult } from './services/terminal/commandVersionProbe';
+import { getPathEnvKey, withEnrichedPath } from './services/terminal/envHelpers';
 import { clearLatestVersionCache, fetchLatestVersion } from './services/terminal/latestVersionRegistry';
 import {
   buildNodeRuntimeEnvironment,
@@ -61,8 +61,13 @@ import {
 import {
   clearEnrichedShellEnvCache,
   getEnrichedShellEnv,
+  getCachedEnrichedShellPath,
 } from './services/terminal/enrichedShellEnv';
 import { LauncherInstallModal } from './ui/terminal/launcherInstallModal';
+import {
+  LauncherInstallationsModal,
+  getLauncherInstallationTooltip,
+} from './ui/terminal/launcherInstallationsModal';
 import { resolveChangelogSection } from './utils/changelog';
 import embeddedChangelogContent from '../CHANGELOG.md';
 
@@ -2022,9 +2027,8 @@ export default class TerminalPlugin extends Plugin {
    * answer for most launchers.
    *
    * Pipeline per launcher:
-   *   1. PATH probe (`where` / `which`) — always runs, zero network.
-   *   2. Local `--version` probe — always runs, zero network. Falls back to
-   *      well-known directories when PATH is sparse.
+   *   1. Discover executables on terminal PATH and in common installation directories.
+   *   2. Probe each exact executable with `--version` and report multiple installations.
    *   3. Remote latest-version lookup — only runs when the user enabled
    *      `checkAiLauncherUpdates`. Off by default so the README's "no
    *      extra outbound traffic" promise holds out of the box.
@@ -2056,7 +2060,7 @@ export default class TerminalPlugin extends Plugin {
 
       const snapshot = buildAiLauncherStatusSnapshot({
         pathAvailable: probe.pathAvailable,
-        local: { version: probe.localVersion.version, resolvedFrom: probe.localVersion.resolvedFrom },
+        local: probe.localVersion,
         latest,
         nodeRuntime,
       });
@@ -2169,6 +2173,23 @@ export default class TerminalPlugin extends Plugin {
     refreshUpdateBtnVisibility(cachedSnapshot ?? null);
     item.appendChild(updateBtn);
 
+    const installationsBtn = activeDocument.createElement('button');
+    installationsBtn.className = 'preset-scripts-menu-action-btn preset-scripts-menu-action-installations is-installation-warning';
+    setIcon(installationsBtn, 'alert-triangle');
+    installationsBtn.setAttribute('aria-label', t('settingsDetails.terminal.aiLauncherVersionConflict'));
+    const refreshInstallationsButton = (next: AiLauncherStatusSnapshot | null): void => {
+      const visible = next?.installationIssue === 'version-conflict';
+      installationsBtn.classList.toggle('is-hidden', !visible);
+      if (next && visible) setTooltip(installationsBtn, getLauncherInstallationTooltip(next));
+    };
+    refreshInstallationsButton(cachedSnapshot ?? null);
+    installationsBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      this.closePresetScriptsMenu();
+      this.openAiLauncherInstallationsModalForPreset(script);
+    });
+    item.appendChild(installationsBtn);
+
     // Refresh in the background so the badge & click route stay accurate
     // when the user re-opens the menu after an install or upgrade. We do
     // not block menu render on this — the cached snapshot is good enough.
@@ -2179,6 +2200,7 @@ export default class TerminalPlugin extends Plugin {
         this.applyLauncherBadgeStatus(badge, readinessToBadge(next.readiness));
         item.dataset.availability = next.readiness;
         refreshUpdateBtnVisibility(next);
+        refreshInstallationsButton(next);
         setTooltip(item, this.buildLauncherTooltip(script, next), {
           placement: 'top',
           classes: ['preset-script-tooltip'],
@@ -2247,7 +2269,7 @@ export default class TerminalPlugin extends Plugin {
 
     const snapshot = buildAiLauncherStatusSnapshot({
       pathAvailable: probe.pathAvailable,
-      local: { version: probe.localVersion.version, resolvedFrom: probe.localVersion.resolvedFrom },
+      local: probe.localVersion,
       latest,
       nodeRuntime,
     });
@@ -2256,30 +2278,47 @@ export default class TerminalPlugin extends Plugin {
   }
 
   /**
-   * Resolve a launcher's PATH availability and local version. Both
-   * probes inherit the enriched login-shell PATH (see
-   * {@link getEnrichedShellEnv}) so npm-installed CLIs registered
-   * inside the user's shell profile — fnm, nvm, asdf, mise, volta,
-   * scoop, brew, manual installs — are picked up uniformly without
-   * Termy needing per-tool knowledge.
+   * Discover installations using the same PATH as newly spawned terminals.
+   * Additional copies in common install directories remain separate from
+   * the PATH-selected default, and each version belongs to an exact path.
    */
   private async probeLauncher(command: string): Promise<{
     pathAvailable: CommandAvailability;
-    localVersion: { version: string | null; resolvedFrom: string | null };
+    localVersion: CommandVersionResult;
   }> {
-    const [pathAvailable, localVersion] = await Promise.all([
-      detectCommandAvailability(command).catch((): CommandAvailability => 'unknown'),
-      probeCommandVersion(command).catch(() => ({
-        version: null,
-        resolvedFrom: null as string | null,
-        rawOutput: null,
-      })),
-    ]);
-
+    const baseEnv = withEnrichedPath(process.env, getCachedEnrichedShellPath());
+    const terminalPath = this.getNodeRuntimeTerminalEnv().PATH;
+    const env = terminalPath ? { ...baseEnv, [getPathEnvKey(baseEnv)]: terminalPath } : baseEnv;
+    const localVersion = await probeCommandVersion(command, { env }).catch((error: unknown): CommandVersionResult => {
+      errorLog('[TerminalPlugin] Launcher installation detection failed:', error);
+      return {
+        version: null, resolvedFrom: null, rawOutput: null, installations: [],
+        discoveryErrors: [error instanceof Error ? error.message : String(error)],
+      };
+    });
+    const pathAvailable: CommandAvailability = localVersion.resolvedFrom ? 'ready'
+      : localVersion.discoveryErrors.length > 0 ? 'unknown' : 'not-installed';
     return {
       pathAvailable,
-      localVersion: { version: localVersion.version, resolvedFrom: localVersion.resolvedFrom },
+      localVersion,
     };
+  }
+
+  openAiLauncherInstallationsModalForPreset(script: PresetScript): void {
+    const entry = getAiLauncherEntry(script.id);
+    if (!entry?.detectCommand) return;
+    const snapshot = this.getAiLauncherSnapshot(entry.presetId);
+    if (snapshot?.installationIssue !== 'version-conflict') return;
+    const modal = new LauncherInstallationsModal(
+      this.app,
+      script.name || entry.presetId,
+      snapshot,
+      async () => {
+        clearCommandVersionCache(entry.detectCommand);
+        return await this.refreshAiLauncherSnapshot(entry);
+      },
+    );
+    modal.open();
   }
 
   private async detectNodeRuntimeForLauncher(
@@ -2353,14 +2392,13 @@ export default class TerminalPlugin extends Plugin {
       errorLog('[TerminalPlugin] Enriched shell PATH probe failed:', error);
       return null;
     });
-    await Promise.all([
-      this.refreshNodeRuntimeSnapshot({ force: options.force }).catch((error) => {
-        errorLog('[TerminalPlugin] Failed to refresh Node.js runtime status:', error);
-      }),
-      this.refreshAiLauncherAvailability().catch((error) => {
-        errorLog('[TerminalPlugin] Failed to refresh AI launcher availability:', error);
-      }),
-    ]);
+    await this.refreshNodeRuntimeSnapshot({ force: options.force }).catch((error) => {
+      errorLog('[TerminalPlugin] Failed to refresh Node.js runtime status:', error);
+    });
+    // The selected runtime contributes to terminal PATH and must be settled before discovery.
+    await this.refreshAiLauncherAvailability().catch((error) => {
+      errorLog('[TerminalPlugin] Failed to refresh AI launcher availability:', error);
+    });
   }
 
   /**
@@ -2373,13 +2411,16 @@ export default class TerminalPlugin extends Plugin {
     snapshot: AiLauncherStatusSnapshot | null | undefined,
   ): string {
     const base = this.buildPresetScriptTooltip(script);
-    if (!snapshot || (!snapshot.local && !snapshot.latest)) {
+    if (!snapshot) {
       return base;
     }
     const lines: string[] = [];
     if (snapshot.local) lines.push(t('settingsDetails.terminal.aiLauncherTooltipInstalled', { version: snapshot.local }));
     if (snapshot.latest) lines.push(t('settingsDetails.terminal.aiLauncherTooltipLatest', { version: snapshot.latest }));
     if (snapshot.resolvedFrom) lines.push(t('settingsDetails.terminal.aiLauncherTooltipResolvedFrom', { path: snapshot.resolvedFrom }));
+    if (snapshot.installationIssue === 'version-conflict') {
+      lines.push(getLauncherInstallationTooltip(snapshot));
+    }
     return `${base}\n${lines.join('\n')}`;
   }
 

@@ -4,6 +4,10 @@
  * Runs `<tool> --version` and extracts the first MAJOR.MINOR.PATCH(-suffix)?
  * token from its output.
  *
+ * Each discovered installation is invoked by its absolute executable path.
+ * PATH order identifies the default; common install locations expose copies
+ * shadowed by PATH or missing from it. Symlinks are deduplicated before probing.
+ *
  * Why direct invocation:
  *   - Maximum accuracy. Every launcher's `--version` is the upstream's
  *     own answer for "what version is installed?" — no guessing about
@@ -12,12 +16,9 @@
  *     single-binary), npm packages, and Homebrew casks all surface
  *     the same answer through `--version`, so one code path covers
  *     every install method.
- *   - Minimal system intrusion. We do not walk `~/.claude`,
- *     `~/.opencode`, `%APPDATA%\npm`, or any other user-data
- *     directory looking for a manifest. The probe only invokes the
- *     CLI the user already authorized us to launch via the preset
- *     workflow, with a fixed `--version` argument; it cannot pick up
- *     secrets or read files outside the launcher itself.
+ *   - No agent configuration or credential files are read. Discovery only
+ *     checks executable names and installed Node.js version directories;
+ *     probes use the fixed `--version` argument and never contact a registry.
  *
  * Spawn details live in {@link childProcessUtils}; the wrapper there
  * routes Windows calls through `cmd.exe` so PATHEXT resolves
@@ -27,63 +28,88 @@
  */
 
 import { runProbeCommand } from './childProcessUtils.ts';
+import { discoverCommandInstallations, type CommandDiscoveryOptions, type CommandInstallationCandidate } from './commandInstallationDiscovery.ts';
+import { getCachedEnrichedShellPath } from './enrichedShellEnv.ts';
+import { getPathEnvKey, withEnrichedPath } from './envHelpers.ts';
+
+export interface CommandInstallation extends CommandInstallationCandidate {
+  version: string | null;
+  /** A failed probe stays visible instead of being mistaken for an absent installation. */
+  error?: string;
+}
 
 export interface CommandVersionResult {
   /** Extracted MAJOR.MINOR.PATCH(-suffix)? token, or null when not found. */
   version: string | null;
   /**
-   * Absolute path of the binary that satisfied the probe, when known.
-   * Currently always null because we let `cmd.exe` / PATH do
-   * resolution internally; kept on the result shape so callers and
-   * the snapshot builder stay source-compatible with the historical
-   * fallback-scan implementation.
+   * Absolute path of the first PATH match, including failed version probes.
    */
   resolvedFrom: string | null;
   /** Trimmed `--version` output. Useful for diagnostics in the modal. */
   rawOutput: string | null;
+  installations: CommandInstallation[];
+  discoveryErrors: string[];
 }
 
 interface CacheEntry {
   result: CommandVersionResult;
   expiresAt: number;
+  fingerprint: string;
 }
 
 /**
  * 60s cache keeps repeated menu opens from re-spawning the CLI every
- * time. Users hit "refresh" in the install modal to invalidate
+ * time. Users hit "refresh" in the installation details modal to invalidate
  * eagerly when they know they just upgraded.
  */
 const CACHE_TTL_MS = 60_000;
 /**
- * 3s timeout. We are blocking the menu render path, so we cap
- * aggressively. Every supported CLI replies within ~200ms in
- * practice; if one hangs we'd rather show the badge with no version
- * than freeze the popup.
+ * Each executable has a 3s timeout. Probes run in the background and
+ * failed installations remain listed with an unavailable version.
  */
 const PROBE_TIMEOUT_MS = 3_000;
 const VERSION_REGEX = /\d+\.\d+\.\d+(-[\w.]+)?/;
 
 const cache = new Map<string, CacheEntry>();
+const inFlight = new Map<string, { fingerprint: string; promise: Promise<CommandVersionResult> }>();
 
 /**
  * Probe `<command> --version` and return the extracted version
  * string. Caches results for {@link CACHE_TTL_MS} so a status bar
  * menu can be re-rendered without re-spawning the CLI.
  */
-export async function probeCommandVersion(command: string): Promise<CommandVersionResult> {
+export function probeCommandVersion(
+  command: string,
+  options: Partial<CommandDiscoveryOptions> = {},
+): Promise<CommandVersionResult> {
   const trimmed = command.trim();
   if (!trimmed) {
-    return { version: null, resolvedFrom: null, rawOutput: null };
+    return Promise.resolve({ version: null, resolvedFrom: null, rawOutput: null, installations: [], discoveryErrors: [] });
   }
 
+  const env = options.env ?? withEnrichedPath(process.env, getCachedEnrichedShellPath());
+  const fingerprint = JSON.stringify([
+    env[getPathEnvKey(env)], env.PATHEXT, options.commonDirectories, options.cwd ?? process.cwd(),
+    env.APPDATA, env.LOCALAPPDATA, env.ProgramFiles, env.PROGRAMFILES, env.VOLTA_HOME,
+    env.FNM_DIR, env.NVM_DIR, env.NVM_HOME, env.ASDF_DATA_DIR, env.MISE_DATA_DIR,
+    env.npm_config_prefix, env.NPM_CONFIG_PREFIX,
+  ]);
   const cached = cache.get(trimmed);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.result;
+  if (cached && cached.fingerprint === fingerprint && cached.expiresAt > Date.now()) {
+    return Promise.resolve(cached.result);
   }
-
-  const result = await runProbe(trimmed);
-  cache.set(trimmed, { result, expiresAt: Date.now() + CACHE_TTL_MS });
-  return result;
+  const pending = inFlight.get(trimmed);
+  if (pending?.fingerprint === fingerprint) return pending.promise;
+  const promise = runProbe(trimmed, { ...options, env }).then((result) => {
+    if (inFlight.get(trimmed)?.promise === promise) {
+      cache.set(trimmed, { result, expiresAt: Date.now() + CACHE_TTL_MS, fingerprint });
+    }
+    return result;
+  }).finally(() => {
+    if (inFlight.get(trimmed)?.promise === promise) inFlight.delete(trimmed);
+  });
+  inFlight.set(trimmed, { fingerprint, promise });
+  return promise;
 }
 
 /**
@@ -94,8 +120,10 @@ export async function probeCommandVersion(command: string): Promise<CommandVersi
 export function clearCommandVersionCache(command?: string): void {
   if (command) {
     cache.delete(command.trim());
+    inFlight.delete(command.trim());
   } else {
     cache.clear();
+    inFlight.clear();
   }
 }
 
@@ -138,23 +166,42 @@ export function extractVersionString(raw: string): string | null {
   return match ? match[0] : null;
 }
 
-async function runProbe(command: string): Promise<CommandVersionResult> {
-  const result = await runProbeCommand({
-    command,
-    args: ['--version'],
-    timeoutMs: PROBE_TIMEOUT_MS,
+async function runProbe(command: string, options: CommandDiscoveryOptions): Promise<CommandVersionResult> {
+  const discovery = await discoverCommandInstallations(command, options);
+  const installations: CommandInstallation[] = [];
+  let next = 0;
+  let defaultOutput: string | null = null;
+  // Bound process concurrency when several Node.js versions have global copies installed.
+  const workers = Array.from({ length: Math.min(3, discovery.candidates.length) }, async () => {
+    while (next < discovery.candidates.length) {
+      const index = next++;
+      const candidate = discovery.candidates[index];
+      const result = await runProbeCommand({
+        command: candidate.path,
+        args: ['--version'],
+        timeoutMs: PROBE_TIMEOUT_MS,
+        env: options.env,
+        useWindowsShell: process.platform === 'win32' && /\.(cmd|bat)$/i.test(candidate.path),
+      });
+      const output = result ? `${result.stdout}\n${result.stderr}`.trim() : '';
+      const version = result?.code === 0 ? extractVersionString(output) : null;
+      installations[index] = {
+        ...candidate,
+        version,
+        error: !result ? 'Version probe failed or timed out'
+          : result.code !== 0 ? `Version probe exited with code ${result.code ?? 'unknown'}`
+            : !version ? 'Version output could not be recognized' : undefined,
+      };
+      if (candidate.isDefault) defaultOutput = output || null;
+    }
   });
-
-  if (!result) {
-    return { version: null, resolvedFrom: null, rawOutput: null };
-  }
-
-  // Prefer stdout, fall back to stderr — some CLIs emit `--version`
-  // on stderr (e.g. older Codex builds).
-  const merged = (result.stdout || result.stderr).trim();
+  await Promise.all(workers);
+  const defaultInstallation = installations.find((item) => item.isDefault);
   return {
-    version: merged ? extractVersionString(merged) : null,
-    resolvedFrom: null,
-    rawOutput: merged || null,
+    version: defaultInstallation?.version ?? null,
+    resolvedFrom: defaultInstallation?.path ?? null,
+    rawOutput: defaultOutput,
+    installations,
+    discoveryErrors: discovery.errors,
   };
 }

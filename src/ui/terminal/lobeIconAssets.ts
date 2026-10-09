@@ -1,5 +1,5 @@
 /**
- * AI/LLM brand icon assets sourced from `@lobehub/icons-static-svg`.
+ * AI/LLM brand icon assets from `@lobehub/icons-static-svg` and local assets.
  *
  * The lobehub package ships hundreds of SVG files, so importing it as a
  * whole would bloat `main.js` and force users to download branding for
@@ -9,9 +9,9 @@
  *
  * Each entry corresponds to a key the user can type into the preset
  * script icon field (or that ships with a built-in launcher). The
- * `mono` markup follows `currentColor`, while the optional `color`
- * markup carries the official brand palette via inline fills and
- * gradients.
+ * `mono` markup usually follows `currentColor`; local assets can keep
+ * their palette. Optional `color` markup carries the official brand
+ * palette via inline fills and gradients.
  *
  * License notes:
  *   - `@lobehub/icons-static-svg` is MIT-licensed.
@@ -35,13 +35,14 @@ import geminiCliMonoMarkup from '@lobehub/icons-static-svg/icons/geminicli.svg';
 import hermesAgentMonoMarkup from '@lobehub/icons-static-svg/icons/hermesagent.svg';
 import openAiMonoMarkup from '@lobehub/icons-static-svg/icons/openai.svg';
 import openCodeMonoMarkup from '@lobehub/icons-static-svg/icons/opencode.svg';
+import piLogoAutoMarkup from '../../../assets/pi-logo-auto.svg';
 
 export interface LobeIconAsset {
   /** Lookup key (lowercase). */
   key: string;
   /** Friendly label used for tooltips and aria-label. */
   label: string;
-  /** Single-color SVG markup (uses `currentColor`). */
+  /** Default SVG markup; monochrome icons use `currentColor`. */
   mono: string;
   /** Optional brand-color SVG markup. */
   color?: string;
@@ -71,6 +72,7 @@ const LOBE_ICONS: readonly LobeIconAsset[] = [
   { key: 'hermesagent', label: 'Hermes', mono: hermesAgentMonoMarkup, solidBackground: true },
   { key: 'openai', label: 'OpenAI', mono: openAiMonoMarkup },
   { key: 'opencode', label: 'OpenCode', mono: openCodeMonoMarkup },
+  { key: 'pi', label: 'Pi', mono: piLogoAutoMarkup },
 ];
 
 /**
@@ -115,6 +117,7 @@ export const LOBE_ICON_PICKER_ORDER: readonly string[] = [
   'geminicli',
   'opencode',
   'hermes',
+  'pi',
   'deepseek',
 ];
 

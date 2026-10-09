@@ -4,8 +4,10 @@ import test from 'node:test';
 import {
   CODEX_LAUNCH_COMMAND,
   DEFAULT_PRESET_SCRIPTS,
+  DEFAULT_TERMINAL_SETTINGS,
   HERMES_LAUNCH_COMMAND,
   OPENCODE_LAUNCH_COMMAND,
+  PI_LAUNCH_COMMAND,
   isContextAwarePresetScript,
 } from './settings.ts';
 
@@ -33,22 +35,35 @@ test('Hermes built-in launcher invokes the upstream `hermes` CLI', () => {
   assert.equal(launchAction?.value, HERMES_LAUNCH_COMMAND);
 });
 
-test('built-in workflow order keeps Claude Code, Codex, OpenCode, and Hermes', () => {
+test('Pi built-in launcher invokes the upstream `pi` CLI', () => {
+  const pi = DEFAULT_PRESET_SCRIPTS.find((script) => script.id === 'pi');
+  const launchAction = pi?.actions.find((action) => action.id === 'action-pi');
+
+  assert.equal(PI_LAUNCH_COMMAND, 'pi');
+  assert.equal(launchAction?.value, PI_LAUNCH_COMMAND);
+  assert.equal(pi?.icon, 'pi');
+  assert.equal(pi?.showInStatusBar, true);
+  assert.equal(pi?.showInCommandPalette, true);
+});
+
+test('built-in workflow order keeps Claude Code, Codex, OpenCode, Hermes, and Pi', () => {
   assert.deepEqual(
     DEFAULT_PRESET_SCRIPTS.map((script) => script.id),
-    ['claude-code', 'codex', 'opencode', 'hermes'],
+    ['claude-code', 'codex', 'opencode', 'hermes', 'pi'],
   );
 
-  assert.equal(DEFAULT_PRESET_SCRIPTS[3]?.id, 'hermes');
+  assert.equal(DEFAULT_PRESET_SCRIPTS[4]?.id, 'pi');
 });
 
 test('built-in context-aware workflow marker covers IDE-bridge launchers only', () => {
-  // Hermes does not consume Termy's IDE bridge or the vault-local Codex
-  // skill yet, so it is intentionally excluded from the context-aware
-  // marker until upstream documents an Obsidian context handoff.
+  // Keep the context-aware marker limited to integrations Termy configures.
   const contextAwareIds = DEFAULT_PRESET_SCRIPTS
     .filter((script) => isContextAwarePresetScript(script))
     .map((script) => script.id);
 
   assert.deepEqual(contextAwareIds, ['claude-code', 'codex', 'opencode']);
+});
+
+test('AI launcher update checks require opt-in by default', () => {
+  assert.equal(DEFAULT_TERMINAL_SETTINGS.checkAiLauncherUpdates, false);
 });

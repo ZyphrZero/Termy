@@ -190,6 +190,9 @@ export const OPENCODE_LAUNCH_COMMAND =
 export const HERMES_LAUNCH_COMMAND =
   'hermes';
 
+export const PI_LAUNCH_COMMAND =
+  'pi';
+
 const CONTEXT_AWARE_PRESET_SCRIPT_IDS = new Set(['claude-code', 'codex', 'opencode']);
 
 export function isContextAwarePresetScript(script: Pick<PresetScript, 'id'>): boolean {
@@ -268,6 +271,25 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
       },
     ],
     terminalTitle: 'Hermes',
+    showInStatusBar: true,
+    showInCommandPalette: true,
+    autoOpenTerminal: true,
+    runInNewTerminal: false,
+  },
+  {
+    id: 'pi',
+    name: 'Pi',
+    icon: 'pi',
+    actions: [
+      {
+        id: 'action-pi',
+        type: 'terminal-command',
+        value: PI_LAUNCH_COMMAND,
+        enabled: true,
+        note: 'Launch Pi in the current vault',
+      },
+    ],
+    terminalTitle: 'Pi',
     showInStatusBar: true,
     showInCommandPalette: true,
     autoOpenTerminal: true,
@@ -387,7 +409,7 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   serverConnection: { ...DEFAULT_SERVER_CONNECTION_SETTINGS },
   presetScripts: [...DEFAULT_PRESET_SCRIPTS],
   hideUnavailableAiLaunchers: false,
-  checkAiLauncherUpdates: true,
+  checkAiLauncherUpdates: false,
   customNodePath: '',
   lastSeenChangelogVersion: '',
   enableDebugLog: false,

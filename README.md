@@ -53,7 +53,7 @@ Termy is built for people who already live in Obsidian and do real work in a ter
 - Combine terminal commands, Obsidian commands, and external links in a single workflow.
 - Launch workflows from the status bar menu, command palette, or built-in workflow commands.
 - Decide whether each workflow appears in the status bar, opens a terminal, starts a fresh terminal instance, or renames the target tab.
-- Start quickly with built-in launchers for Claude Code, Codex CLI, OpenCode, Gemini CLI, and Hermes.
+- Start quickly with built-in launchers for Claude Code, Codex CLI, OpenCode, Gemini CLI, Hermes, and Pi.
 
 ### Obsidian Interactions
 
@@ -70,6 +70,7 @@ Termy is built for people who already live in Obsidian and do real work in a ter
 - Termy starts AI CLIs inside the current vault context, where the active note, selection, open files, and workspace root can be available to coding tasks.
 - Claude Code and OpenCode use Termy's IDE bridge; Codex uses a vault-local Skill at `.agents/skills/termy-obsidian-context/SKILL.md`.
 - The built-in Codex launcher starts `codex` directly, without MCP registration or global CLI configuration changes.
+- Built-in AI launchers detect multiple installations and version conflicts in PATH and common install directories. A version-conflict marker appears only when different versions are found; open it to see each path and version, identify the first match, and refresh detection. Custom directories outside these locations, shell aliases, and profiles are not exhaustively scanned; installations are never automatically changed.
 
 ### Privacy and Network Access
 
@@ -78,7 +79,7 @@ Termy is built for people who already live in Obsidian and do real work in a ter
 - Terminal sessions run local shell commands and user-configured workflows. Those commands may read files, modify files, or access the network according to the shell command or external CLI being run.
 - Termy starts local WebSocket connections for its PTY backend and optional IDE bridge. These connections are used for local terminal transport and editor-context handoff.
 - Context-aware AI launchers can pass the active note path, selection, editor context, and vault/workspace path to local CLI tools. The Codex integration writes a vault-local helper skill under `.agents/skills/termy-obsidian-context/`.
-- Optional: when **Check for AI launcher updates** is enabled in settings, Termy queries `https://registry.npmjs.org` for the latest Claude Code and Codex CLI releases, and `https://api.github.com` for the latest OpenCode and Hermes releases. The setting is **off by default** and offline mode disables it regardless of the toggle.
+- Optional: when **Check for AI launcher updates** is enabled in settings, Termy queries `https://registry.npmjs.org` for the latest Claude Code, Codex CLI, and Pi releases, and `https://api.github.com` for the latest OpenCode and Hermes releases. The setting is **off by default** and offline mode disables it regardless of the toggle.
 
 ### Appearance & Ergonomics
 

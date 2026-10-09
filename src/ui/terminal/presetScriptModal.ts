@@ -9,6 +9,7 @@ import type {
   PresetWorkflowAction,
   PresetWorkflowActionType,
 } from '@/settings/settings';
+import { DEFAULT_PRESET_SCRIPTS } from '@/settings/settings';
 import { t } from '@/i18n';
 import { PRESET_SCRIPT_ICON_OPTIONS, renderPresetScriptIcon } from './presetScriptIcons';
 import {
@@ -44,7 +45,7 @@ const ACTION_OPTIONS: ActionOption[] = [
 const COMMAND_SUGGESTION_LIMIT = 50;
 
 export class PresetScriptModal extends Modal {
-  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'opencode', 'hermes']);
+  private readonly builtInPresetIds = new Set(DEFAULT_PRESET_SCRIPTS.map((script) => script.id));
   private draft: PresetScript;
   private onSubmit: (script: PresetScript) => void;
   private isNew: boolean;

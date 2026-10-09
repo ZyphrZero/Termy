@@ -33,6 +33,7 @@ import {
   type AiLauncherStatusSnapshot,
 } from '../../services/terminal/aiLauncherStatus';
 import { clearCommandVersionCache } from '../../services/terminal/commandVersionProbe';
+import { getLauncherInstallationTooltip } from '../../ui/terminal/launcherInstallationsModal';
 import {
   clearNodeRuntimeCache,
   type NodeRuntimeSnapshot,
@@ -191,7 +192,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
    * never accumulate listeners across re-renders.
    */
   private launcherSnapshotUnsubscribers: Array<() => void> = [];
-  private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'opencode', 'hermes']);
+  private readonly builtInPresetIds = new Set(DEFAULT_PRESET_SCRIPTS.map((script) => script.id));
   /**
    * Refresh hook for the "AI launcher update check is suppressed by
    * offline mode" hint. Set when the preset-scripts card mounts; called
@@ -933,7 +934,15 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       const versionEl = nameRowEl.createDiv({
         cls: 'preset-scripts-menu-version is-hidden',
       });
-      this.attachLauncherSnapshotInfo(badge, versionEl, launcherEntry);
+      const installationsButton = nameRowEl.createEl('button', {
+        cls: 'termy-launcher-installations-button is-installation-warning is-hidden',
+        text: t('settingsDetails.terminal.aiLauncherVersionConflict'),
+      });
+      installationsButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        this.context.plugin.openAiLauncherInstallationsModalForPreset(script);
+      });
+      this.attachLauncherSnapshotInfo(badge, versionEl, installationsButton, launcherEntry);
     }
     contentEl.createDiv({
       cls: 'preset-script-command',
@@ -1103,11 +1112,12 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   private attachLauncherSnapshotInfo(
     badge: HTMLElement,
     versionEl: HTMLElement,
+    installationsButton: HTMLButtonElement,
     entry: AiLauncherCatalogEntry,
   ): void {
     const cached = this.context.plugin.getAiLauncherSnapshot(entry.presetId);
     if (cached) {
-      this.applyLauncherSnapshotToRow(badge, versionEl, cached);
+      this.applyLauncherSnapshotToRow(badge, versionEl, installationsButton, cached);
     }
 
     // Subscribe so future probe results (forced refresh after offline
@@ -1117,7 +1127,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     const unsubscribe = this.context.plugin.onAiLauncherSnapshotsChanged(
       (presetId, snapshot) => {
         if (presetId !== entry.presetId) return;
-        this.applyLauncherSnapshotToRow(badge, versionEl, snapshot);
+        this.applyLauncherSnapshotToRow(badge, versionEl, installationsButton, snapshot);
       },
     );
     this.launcherSnapshotUnsubscribers.push(unsubscribe);
@@ -1141,9 +1151,13 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   private applyLauncherSnapshotToRow(
     badge: HTMLElement,
     versionEl: HTMLElement,
+    installationsButton: HTMLButtonElement,
     snapshot: AiLauncherStatusSnapshot,
   ): void {
     const status = readinessToBadge(snapshot.readiness);
+    const hasConflict = snapshot.installationIssue === 'version-conflict';
+    installationsButton.toggleClass('is-hidden', !hasConflict);
+    if (hasConflict) installationsButton.setAttribute('title', getLauncherInstallationTooltip(snapshot));
     badge.classList.remove(
       'is-checking',
       'is-ready',

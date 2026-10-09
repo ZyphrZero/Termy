@@ -289,9 +289,7 @@ export function renderPresetScriptIcon(el: HTMLElement, iconName: string): void 
     return;
   }
 
-  // AI / LLM brand marks — sourced from @lobehub/icons-static-svg.
-  // Lobehub takes precedence over simple-icons so brand updates land
-  // by bumping the lobehub package alone.
+  // Bundled AI / LLM brand marks take precedence over generic icons.
   const lobeKey = resolveLobeIconKey(raw);
   if (lobeKey) {
     if (renderLobeIcon(el, lobeKey)) {

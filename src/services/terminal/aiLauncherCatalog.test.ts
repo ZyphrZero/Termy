@@ -30,13 +30,14 @@ test('partitionLaunchers groups catalog scripts and leaves regular ones in regul
     { id: 'codex' },
     { id: 'opencode' },
     { id: 'hermes' },
+    { id: 'pi' },
     { id: 'my-custom-workflow' },
   ];
 
   const partition = partitionLaunchers(scripts);
   assert.deepEqual(
     partition.codingAgent.map((script) => script.id),
-    ['claude-code', 'codex', 'opencode', 'hermes'],
+    ['claude-code', 'codex', 'opencode', 'hermes', 'pi'],
   );
   assert.deepEqual(partition.regular.map((script) => script.id), ['my-custom-workflow']);
 });
@@ -71,9 +72,9 @@ test('AI_LAUNCHER_CATALOG only contains coding agent entries today', () => {
     .sort();
   assert.deepEqual(
     codingAgentIds,
-    ['claude-code', 'codex', 'hermes', 'opencode'],
+    ['claude-code', 'codex', 'hermes', 'opencode', 'pi'],
   );
-  assert.equal(AI_LAUNCHER_CATALOG.length, 4);
+  assert.equal(AI_LAUNCHER_CATALOG.length, 5);
 });
 
 test('commandAvailabilityToLauncherStatus maps probe results to badge statuses', () => {
@@ -156,6 +157,7 @@ test('version registry sources match the documented endpoints', () => {
     ['codex', 'npm:@openai/codex'],
     ['opencode', 'github-release:anomalyco/opencode'],
     ['hermes', 'github-release:NousResearch/hermes-agent'],
+    ['pi', 'npm:@earendil-works/pi-coding-agent'],
   ]);
   for (const entry of AI_LAUNCHER_CATALOG) {
     const registry = entry.versionRegistry;

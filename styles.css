@@ -1393,7 +1393,8 @@
   color: var(--interactive-accent);
 }
 
-.preset-scripts-menu-action-update.is-hidden {
+.preset-scripts-menu-action-update.is-hidden,
+.preset-scripts-menu-action-installations.is-hidden {
   display: none;
 }
 
@@ -2240,6 +2241,56 @@
 
 .preset-scripts-menu-version.is-update-available {
   color: var(--interactive-accent);
+}
+
+.termy-launcher-installations-button {
+  margin-left: 8px;
+  height: auto;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.termy-launcher-installations-button.is-hidden {
+  display: none;
+}
+
+.termy-launcher-installations-button.is-installation-warning,
+.preset-scripts-menu-action-btn.is-installation-warning,
+.termy-launcher-installations-modal .termy-launcher-installation-warning {
+  color: var(--color-orange);
+}
+
+.termy-launcher-installations-modal .termy-launcher-installation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.termy-launcher-installations-modal .termy-launcher-installation-row {
+  padding: 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+}
+
+.termy-launcher-installations-modal .termy-launcher-installation-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.termy-launcher-installations-modal .termy-launcher-installation-marker {
+  color: var(--text-muted);
+  font-size: var(--font-smallest);
+}
+
+.termy-launcher-installations-modal .termy-launcher-installation-path {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: var(--font-smallest);
 }
 
 /* Inline hint shown beneath the "Check for AI launcher updates" toggle

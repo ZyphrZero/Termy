@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added local AI launcher installation diagnostics with paths, versions, PATH precedence, and version-conflict warnings. The conflict marker appears only when different versions are found; checks cover PATH and common installer / Node.js version-manager directories without modifying installations.
+- Added a built-in Pi launcher with the `pi` command, platform-specific installation guidance, and opt-in npm version checks.
 - Added a built-in Hermes Agent launcher to the workflow gallery, status bar menu, and command palette. The launcher detects the `hermes` CLI on PATH, surfaces install / update guidance for macOS, Linux, and Windows, and queries `https://api.github.com` for the latest `NousResearch/hermes-agent` release when **Check for AI launcher updates** is opted in.
 - Added Node.js runtime guidance and custom executable selection for AI launchers.
 - Added OSC 0/2 process title updates for terminals while preserving custom titles.
@@ -16,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Discover AI launcher commands through the login-shell PATH, including installations managed by Node.js version managers.
 
 ### Fixed
+- Fixed Windows CLI version probes for installation paths containing spaces or shell metacharacters, and wait for output streams to close before parsing versions.
+- Restored the opt-in default for AI launcher update checks to match the documented network policy.
 - Fixed a startup race that could incorrectly report Codex CLI as not installed, and restricted resolved npm paths to custom Node.js installations.
 - Improved terminal selection contrast with the canvas renderer.
 - Fixed Windows development installs to stop Termy server processes through PowerShell and surface process-stop failures.

@@ -6,7 +6,7 @@
  * is purely metadata — actual execution still goes through {@link runPresetScript}.
  *
  * Termy currently only ships "coding agent" launchers (Claude Code, Codex,
- * OpenCode, Hermes). The category type is left as a discriminated union
+ * OpenCode, Hermes, Pi). The category type is left as a discriminated union
  * with one arm so it stays explicit at every render site — adding a new
  * product category in the future means widening this type and revisiting
  * every call site, which is exactly the friction we want.
@@ -197,6 +197,24 @@ export const AI_LAUNCHER_CATALOG: readonly AiLauncherCatalogEntry[] = [
       darwin: 'curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash',
       linux: 'curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash',
       win32: 'irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1 | iex',
+    },
+  },
+  {
+    presetId: 'pi',
+    category: 'coding-agent',
+    detectCommand: 'pi',
+    installDocsUrl: 'https://pi.dev/docs/latest/quickstart',
+    // The official installers can provision Node.js and pin dependencies.
+    installCommands: {
+      darwin: 'curl -fsSL https://pi.dev/install.sh | sh',
+      linux: 'curl -fsSL https://pi.dev/install.sh | sh',
+      win32: 'powershell -c "irm https://pi.dev/install.ps1 | iex"',
+    },
+    versionRegistry: { kind: 'npm', package: '@earendil-works/pi-coding-agent' },
+    upgradeCommands: {
+      darwin: 'pi update',
+      linux: 'pi update',
+      win32: 'pi update',
     },
   },
 ];

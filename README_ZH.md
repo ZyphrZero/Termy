@@ -53,7 +53,7 @@ Termy 不是“把一个终端嵌进 Obsidian”这么简单，它更像是把�
 - 在同一个工作流中组合终端命令、Obsidian 命令和外部链接。
 - 从状态栏菜单、命令面板或自动注册的工作流命令启动。
 - 为每个工作流控制是否显示在状态栏、是否自动打开终端、是否每次新建终端实例，以及是否重命名目标标签页。
-- 内置 Claude Code、Codex CLI、OpenCode、Gemini CLI 和 Hermes 启动器，开箱即可接入常用 AI CLI。
+- 内置 Claude Code、Codex CLI、OpenCode、Gemini CLI、Hermes 和 Pi 启动器，开箱即可接入常用 AI CLI。
 
 ### Obsidian 感知交互
 
@@ -70,6 +70,7 @@ Termy 不是“把一个终端嵌进 Obsidian”这么简单，它更像是把�
 - Termy 会在当前 vault 上下文中启动 AI CLI，让活动笔记、选区、已打开文件和 workspace 根目录可用于编码任务。
 - Claude Code 和 OpenCode 使用 Termy 的 IDE bridge；Codex 使用 vault 本地 Skill：`.agents/skills/termy-obsidian-context/SKILL.md`。
 - 内置 Codex 启动器直接运行 `codex`，不需要 MCP 注册或全局 CLI 配置修改。
+- 内置 AI 启动器会检测 PATH 和常见安装目录中的多个安装及版本冲突。只有发现不同版本时才显示“版本冲突”标志，点击后可查看各路径与版本、首个匹配项并刷新检测。扫描不会覆盖任意自定义目录、命令别名或所有终端配置，也不会自动修改安装。
 
 ### 隐私与网络访问
 
@@ -78,6 +79,7 @@ Termy 不是“把一个终端嵌进 Obsidian”这么简单，它更像是把�
 - 终端会话会运行本地 shell 命令和用户配置的工作流。这些命令可能会根据实际运行的 shell 命令或外部 CLI 读取文件、修改文件或访问网络。
 - Termy 会启动本地 WebSocket 连接，用于 PTY 后端和可选 IDE bridge。这些连接仅用于本地终端传输和编辑器上下文接力。
 - 上下文感知的 AI 启动器可以把活动笔记路径、选区、编辑器上下文以及 vault/workspace 路径传递给本地 CLI 工具。Codex 集成会在 vault 内写入本地 helper skill：`.agents/skills/termy-obsidian-context/`。
+- 可选：开启“检查 AI 启动器更新”后，Termy 会查询 `https://registry.npmjs.org` 上的 Claude Code、Codex CLI 和 Pi 最新版本，以及 `https://api.github.com` 上的 OpenCode 和 Hermes 最新版本。此设置默认关闭，离线模式下也不会执行更新检查。
 
 ### 外观与体验
 
