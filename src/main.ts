@@ -18,6 +18,7 @@ import { TERMINAL_VIEW_TYPE, TerminalView } from './ui/terminal/terminalView';
 import { ChangelogModal } from './ui/changelog/changelogModal';
 import { i18n, t } from './i18n';
 import { debugLog, errorLog } from './utils/logger';
+import { resolvePluginDir } from './utils/pluginPath';
 import { createTermyLogoSvg, createTermyLogoSvgMarkup, TERMY_RIBBON_ICON_ID } from './ui/icons';
 import { FeatureVisibilityManager, EditorSelectionHighlightManager, createEditorSelectionPersistenceExtension } from './services/visibility';
 import { shell } from 'electron';
@@ -3057,21 +3058,12 @@ export default class TerminalPlugin extends Plugin {
     if (!(adapter instanceof FileSystemAdapter)) {
       throw new Error('FileSystemAdapter is not available');
     }
-    const vaultPath = normalizePath(adapter.getBasePath());
-    const configDir = normalizePath(this.app.vault.configDir);
-    const manifestDir = this.manifest.dir
-      ? normalizePath(this.manifest.dir)
-      : normalizePath(`${configDir}/plugins/${this.manifest.id}`);
-
-    if (this.isAbsolutePath(manifestDir)) {
-      return manifestDir;
-    }
-
-    return normalizePath(`${vaultPath}/${manifestDir}`);
-  }
-
-  private isAbsolutePath(path: string): boolean {
-    return path.startsWith('/') || /^[A-Za-z]:\//.test(path);
+    return resolvePluginDir(
+      adapter.getBasePath(),
+      this.app.vault.configDir,
+      this.manifest.id,
+      this.manifest.dir,
+    );
   }
 }
 
