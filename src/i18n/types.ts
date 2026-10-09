@@ -448,6 +448,9 @@ export interface TranslationKeys {
     cannotConnect: string;
     xtermLoadFailed: string;
     xtermInitFailed: string;
+    connectionLost: string;
+    sessionRecoveryInProgress: string;
+    sessionRecovered: string;
   };
 
   // Terminal service

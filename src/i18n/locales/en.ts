@@ -427,6 +427,9 @@ export const en: TranslationKeys = {
     cannotConnect: 'Cannot connect to terminal server',
     xtermLoadFailed: 'Failed to load xterm.js modules: {{message}}',
     xtermInitFailed: 'Failed to initialize xterm.js: {{message}}',
+    connectionLost: 'WebSocket connection disconnected, reconnecting...',
+    sessionRecoveryInProgress: 'Connection restored, restoring terminal session...',
+    sessionRecovered: 'Terminal session restored',
   },
 
   terminalService: {
