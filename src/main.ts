@@ -13,6 +13,7 @@ import { TerminalSettingTab } from './settings/settingsTab';
 import type { TerminalService } from './services/terminal/terminalService';
 import type { ServerManager } from './services/server/serverManager';
 import type { IdeBridge } from './services/ideBridge/ideBridge';
+import type { DshTuiBridge } from './services/dshTuiBridge/dshTuiBridge';
 import type { AgentContextBridge } from './services/context/agentContextBridge';
 import { TERMINAL_VIEW_TYPE, TerminalView } from './ui/terminal/terminalView';
 import { ChangelogModal } from './ui/changelog/changelogModal';
@@ -117,6 +118,7 @@ export default class TerminalPlugin extends Plugin {
   private _serverManager: ServerManager | null = null;
   private _terminalService: TerminalService | null = null;
   private _ideBridge: IdeBridge | null = null;
+  private _dshTuiBridge: DshTuiBridge | null = null;
   private _agentContextBridge: AgentContextBridge | null = null;
   private _changelogContentCache: string | null = null;
   private _changelogSectionCache: Map<string, ChangelogDetails> = new Map();
@@ -189,6 +191,7 @@ export default class TerminalPlugin extends Plugin {
    */
   async getTerminalService(): Promise<TerminalService> {
     await this.initializeIdeBridge();
+    await this.initializeDshTuiBridge();
     await this.initializeAgentContextBridge();
 
     if (!this._terminalService) {
@@ -204,6 +207,7 @@ export default class TerminalPlugin extends Plugin {
           () => ({
             ...this.getNodeRuntimeTerminalEnv(),
             ...(this._ideBridge?.getTerminalEnv() ?? {}),
+            ...(this._dshTuiBridge?.getTerminalEnv() ?? {}),
             ...(this._agentContextBridge?.getTerminalEnv() ?? {}),
           }),
           () => this.saveSettings(),
@@ -259,6 +263,9 @@ export default class TerminalPlugin extends Plugin {
 
     void this.initializeIdeBridge().catch((error) => {
       errorLog('[TerminalPlugin] Failed to initialize IDE bridge:', error);
+    });
+    void this.initializeDshTuiBridge().catch((error) => {
+      errorLog('[TerminalPlugin] Failed to initialize dsh-TUI bridge:', error);
     });
     void this.initializeAgentContextBridge().catch((error) => {
       errorLog('[TerminalPlugin] Failed to initialize agent context bridge:', error);
@@ -359,6 +366,16 @@ export default class TerminalPlugin extends Plugin {
       }
     }
 
+    if (this._dshTuiBridge) {
+      try {
+        debugLog('[TerminalPlugin] Shutting down dsh-TUI bridge...');
+        await this._dshTuiBridge.stop();
+        debugLog('[TerminalPlugin] dsh-TUI bridge stopped');
+      } catch (error) {
+        errorLog('[TerminalPlugin] Failed to stop dsh-TUI bridge:', error);
+      }
+    }
+
     if (this._agentContextBridge) {
       try {
         debugLog('[TerminalPlugin] Shutting down agent context bridge...');
@@ -379,6 +396,22 @@ export default class TerminalPlugin extends Plugin {
     }
 
     await this._ideBridge.start();
+  }
+
+  private async initializeDshTuiBridge(): Promise<void> {
+    if (!this._dshTuiBridge) {
+      const { DshTuiBridge } = await import('./services/dshTuiBridge/dshTuiBridge');
+      this._dshTuiBridge = new DshTuiBridge(this.app);
+    }
+
+    try {
+      await this._dshTuiBridge.start();
+    } catch (error) {
+      // The dsh-TUI channel is an optional local enhancement. A port or lock
+      // failure must leave ordinary Termy terminals usable and allow dsh-TUI
+      // to run without editor selection context.
+      errorLog('[TerminalPlugin] dsh-TUI bridge unavailable; continuing without selection sync:', error);
+    }
   }
 
   private async initializeAgentContextBridge(): Promise<void> {
@@ -2562,7 +2595,10 @@ export default class TerminalPlugin extends Plugin {
     const recommendation = getNodeRuntimeRecommendation(snapshot?.nodeRuntime);
     if (recommendation === 'npm-ready') {
       return {
-        command: buildNpmPackageInstallCommand(entry.npmPackage, snapshot?.nodeRuntime),
+        command: buildNpmPackageInstallCommand(
+          entry.npmInstallPackages?.join(' ') ?? entry.npmPackage,
+          snapshot?.nodeRuntime,
+        ),
         kind: 'launcher',
         docsUrl: entry.installDocsUrl,
       };

@@ -193,6 +193,9 @@ export const HERMES_LAUNCH_COMMAND =
 export const PI_LAUNCH_COMMAND =
   'pi';
 
+export const DSH_TUI_LAUNCH_COMMAND =
+  'dsh-tui';
+
 const CONTEXT_AWARE_PRESET_SCRIPT_IDS = new Set(['claude-code', 'codex', 'opencode']);
 
 export function isContextAwarePresetScript(script: Pick<PresetScript, 'id'>): boolean {
@@ -290,6 +293,25 @@ export const DEFAULT_PRESET_SCRIPTS: PresetScript[] = [
       },
     ],
     terminalTitle: 'Pi',
+    showInStatusBar: true,
+    showInCommandPalette: true,
+    autoOpenTerminal: true,
+    runInNewTerminal: false,
+  },
+  {
+    id: 'dsh-tui',
+    name: 'dsh-TUI',
+    icon: 'dsh-tui',
+    actions: [
+      {
+        id: 'action-dsh-tui',
+        type: 'terminal-command',
+        value: DSH_TUI_LAUNCH_COMMAND,
+        enabled: true,
+        note: 'Launch dsh-TUI in the current vault',
+      },
+    ],
+    terminalTitle: 'dsh-TUI',
     showInStatusBar: true,
     showInCommandPalette: true,
     autoOpenTerminal: true,

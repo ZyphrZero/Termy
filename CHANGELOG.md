@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added local AI launcher installation diagnostics with paths, versions, PATH precedence, and version-conflict warnings. The conflict marker appears only when different versions are found; checks cover PATH and common installer / Node.js version-manager directories without modifying installations.
 - Added a built-in Pi launcher with the `pi` command, platform-specific installation guidance, and opt-in npm version checks.
 - Added a built-in Hermes Agent launcher to the workflow gallery, status bar menu, and command palette. The launcher detects the `hermes` CLI on PATH, surfaces install / update guidance for macOS, Linux, and Windows, and queries `https://api.github.com` for the latest `NousResearch/hermes-agent` release when **Check for AI launcher updates** is opted in.
+- Added a built-in dsh-TUI launcher with the `dsh-tui` command, the official npm installation prerequisites, profile upgrade guidance, and the bundled dsh-TUI logo.
+- Added an independent dsh-TUI protocol-v2 IDE bridge. The bridge advertises `~/.dsh-tui/ide/*.lock`, injects `DSH_TUI_IDE_PORT` / `DSH_TUI_IDE_TOKEN` into Termy terminals, and forwards unsaved Obsidian selections over loopback WebSocket connections.
 - Added Node.js runtime guidance and custom executable selection for AI launchers.
 - Added OSC 0/2 process title updates for terminals while preserving custom titles.
 

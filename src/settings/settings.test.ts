@@ -5,6 +5,7 @@ import {
   CODEX_LAUNCH_COMMAND,
   DEFAULT_PRESET_SCRIPTS,
   DEFAULT_TERMINAL_SETTINGS,
+  DSH_TUI_LAUNCH_COMMAND,
   HERMES_LAUNCH_COMMAND,
   OPENCODE_LAUNCH_COMMAND,
   PI_LAUNCH_COMMAND,
@@ -46,10 +47,19 @@ test('Pi built-in launcher invokes the upstream `pi` CLI', () => {
   assert.equal(pi?.showInCommandPalette, true);
 });
 
-test('built-in workflow order keeps Claude Code, Codex, OpenCode, Hermes, and Pi', () => {
+test('dsh-TUI built-in launcher invokes the upstream `dsh-tui` CLI', () => {
+  const dshTui = DEFAULT_PRESET_SCRIPTS.find((script) => script.id === 'dsh-tui');
+  const launchAction = dshTui?.actions.find((action) => action.id === 'action-dsh-tui');
+
+  assert.equal(DSH_TUI_LAUNCH_COMMAND, 'dsh-tui');
+  assert.equal(launchAction?.value, DSH_TUI_LAUNCH_COMMAND);
+  assert.equal(dshTui?.icon, 'dsh-tui');
+});
+
+test('built-in workflow order keeps the built-in AI launchers', () => {
   assert.deepEqual(
     DEFAULT_PRESET_SCRIPTS.map((script) => script.id),
-    ['claude-code', 'codex', 'opencode', 'hermes', 'pi'],
+    ['claude-code', 'codex', 'opencode', 'hermes', 'pi', 'dsh-tui'],
   );
 
   assert.equal(DEFAULT_PRESET_SCRIPTS[4]?.id, 'pi');

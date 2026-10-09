@@ -35,6 +35,7 @@ Termy is built for people who already live in Obsidian and do real work in a ter
 - **Workflow-driven automation**: Run reusable terminal, Obsidian-command, and external-link workflows from the status bar or command palette.
 - **File-aware interactions**: Drag text, files, and folders into the terminal and open file references directly from terminal output.
 - **AI-aware context handoff**: Claude Code, Codex CLI, and OpenCode integrations can inherit active note context from Obsidian.
+- **dsh-TUI IDE bridge**: the built-in dsh-TUI launcher receives Obsidian editor selections through dsh-TUI's protocol-v2 loopback bridge, including unsaved selection text.
 - **Desktop-first customization**: Shell selection, tab/split placement rules, theme sync, background images, blur, renderer controls, and Windows input handling.
 
 ## Features
@@ -53,7 +54,7 @@ Termy is built for people who already live in Obsidian and do real work in a ter
 - Combine terminal commands, Obsidian commands, and external links in a single workflow.
 - Launch workflows from the status bar menu, command palette, or built-in workflow commands.
 - Decide whether each workflow appears in the status bar, opens a terminal, starts a fresh terminal instance, or renames the target tab.
-- Start quickly with built-in launchers for Claude Code, Codex CLI, OpenCode, Gemini CLI, Hermes, and Pi.
+- Start quickly with built-in launchers for Claude Code, Codex CLI, OpenCode, Gemini CLI, Hermes, Pi, and dsh-TUI.
 
 ### Obsidian Interactions
 
@@ -78,8 +79,9 @@ Termy is built for people who already live in Obsidian and do real work in a ter
 - Termy downloads the matching native PTY server binary when needed. The default source is `https://termy.changqiu.xyz`; GitHub Releases can be selected in settings, and offline mode disables automatic download/update checks.
 - Terminal sessions run local shell commands and user-configured workflows. Those commands may read files, modify files, or access the network according to the shell command or external CLI being run.
 - Termy starts local WebSocket connections for its PTY backend and optional IDE bridge. These connections are used for local terminal transport and editor-context handoff.
+- Termy also starts a local-only dsh-TUI IDE selection bridge on `127.0.0.1`; it writes its authenticated discovery lock under `~/.dsh-tui/ide` and never sends that selection channel over the network.
 - Context-aware AI launchers can pass the active note path, selection, editor context, and vault/workspace path to local CLI tools. The Codex integration writes a vault-local helper skill under `.agents/skills/termy-obsidian-context/`.
-- Optional: when **Check for AI launcher updates** is enabled in settings, Termy queries `https://registry.npmjs.org` for the latest Claude Code, Codex CLI, and Pi releases, and `https://api.github.com` for the latest OpenCode and Hermes releases. The setting is **off by default** and offline mode disables it regardless of the toggle.
+- Optional: when **Check for AI launcher updates** is enabled in settings, Termy queries `https://registry.npmjs.org` for the latest Claude Code, Codex CLI, Pi, and dsh-TUI releases, and `https://api.github.com` for the latest OpenCode and Hermes releases. The setting is **off by default** and offline mode disables it regardless of the toggle.
 
 ### Appearance & Ergonomics
 

@@ -11,6 +11,7 @@
  *
  *   - native PTY backend lifecycle (`<plugin>/binaries/termy-server-*`),
  *   - Claude Code IDE protocol's required `~/.claude/ide/<port>.lock` path,
+ *   - dsh-TUI IDE protocol's required `~/.dsh-tui/ide/<port>.lock` path,
  *   - shell-existence probes for the shell selector,
  *   - validating user-supplied filesystem paths in settings and drag/drop.
  *

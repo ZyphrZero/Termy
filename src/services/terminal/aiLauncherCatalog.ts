@@ -6,7 +6,7 @@
  * is purely metadata — actual execution still goes through {@link runPresetScript}.
  *
  * Termy currently only ships "coding agent" launchers (Claude Code, Codex,
- * OpenCode, Hermes, Pi). The category type is left as a discriminated union
+ * OpenCode, Hermes, Pi, dsh-TUI). The category type is left as a discriminated union
  * with one arm so it stays explicit at every render site — adding a new
  * product category in the future means widening this type and revisiting
  * every call site, which is exactly the friction we want.
@@ -96,6 +96,8 @@ export interface AiLauncherCatalogEntry {
    * preparation command instead of showing a raw npm command that would fail.
    */
   npmPackage?: string;
+  /** Additional npm package arguments required by the install command. */
+  npmInstallPackages?: readonly string[];
 }
 
 /**
@@ -216,6 +218,27 @@ export const AI_LAUNCHER_CATALOG: readonly AiLauncherCatalogEntry[] = [
       linux: 'pi update',
       win32: 'pi update',
     },
+  },
+  {
+    presetId: 'dsh-tui',
+    category: 'coding-agent',
+    detectCommand: 'dsh-tui',
+    installDocsUrl: 'https://github.com/ccch1mneyyy/dsh-TUI/blob/main/docs/getting-started.md',
+    installCommands: {
+      darwin: 'npm install -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui',
+      linux: 'npm install -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui',
+      win32: 'npm install -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui',
+    },
+    versionRegistry: { kind: 'npm', package: '@deepseek-harness-tui/dsh-tui' },
+    upgradeCommands: {
+      darwin: 'dsh plugin --profile dsh-tui add @deepseek-harness-tui/dsh-tui@latest',
+      linux: 'dsh plugin --profile dsh-tui add @deepseek-harness-tui/dsh-tui@latest',
+      win32: 'dsh plugin --profile dsh-tui add @deepseek-harness-tui/dsh-tui@latest',
+    },
+    // The upstream launcher needs both the official dsh CLI and its TUI
+    // profile package on first install.
+    npmPackage: '@deepseek-harness-tui/dsh-tui',
+    npmInstallPackages: ['@deepseek-ai/dsh', '@deepseek-harness-tui/dsh-tui'],
   },
 ];
 

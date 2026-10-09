@@ -35,6 +35,7 @@ import geminiCliMonoMarkup from '@lobehub/icons-static-svg/icons/geminicli.svg';
 import hermesAgentMonoMarkup from '@lobehub/icons-static-svg/icons/hermesagent.svg';
 import openAiMonoMarkup from '@lobehub/icons-static-svg/icons/openai.svg';
 import openCodeMonoMarkup from '@lobehub/icons-static-svg/icons/opencode.svg';
+import dshTuiLogoMarkup from '../../../assets/dsh-tui-logo.svg';
 import piLogoAutoMarkup from '../../../assets/pi-logo-auto.svg';
 
 export interface LobeIconAsset {
@@ -72,6 +73,7 @@ const LOBE_ICONS: readonly LobeIconAsset[] = [
   { key: 'hermesagent', label: 'Hermes', mono: hermesAgentMonoMarkup, solidBackground: true },
   { key: 'openai', label: 'OpenAI', mono: openAiMonoMarkup },
   { key: 'opencode', label: 'OpenCode', mono: openCodeMonoMarkup },
+  { key: 'dsh-tui', label: 'dsh-TUI', mono: dshTuiLogoMarkup },
   { key: 'pi', label: 'Pi', mono: piLogoAutoMarkup },
 ];
 
@@ -116,6 +118,7 @@ export const LOBE_ICON_PICKER_ORDER: readonly string[] = [
   'gemini',
   'geminicli',
   'opencode',
+  'dsh-tui',
   'hermes',
   'pi',
   'deepseek',

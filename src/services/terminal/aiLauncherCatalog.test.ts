@@ -6,6 +6,7 @@ import {
   commandAvailabilityToLauncherStatus,
   getAiLauncherEntry,
   getInstallCommandForPlatform,
+  getUpgradeCommandForPlatform,
   partitionLaunchers,
 } from './aiLauncherCatalog.ts';
 
@@ -31,13 +32,14 @@ test('partitionLaunchers groups catalog scripts and leaves regular ones in regul
     { id: 'opencode' },
     { id: 'hermes' },
     { id: 'pi' },
+    { id: 'dsh-tui' },
     { id: 'my-custom-workflow' },
   ];
 
   const partition = partitionLaunchers(scripts);
   assert.deepEqual(
     partition.codingAgent.map((script) => script.id),
-    ['claude-code', 'codex', 'opencode', 'hermes', 'pi'],
+    ['claude-code', 'codex', 'opencode', 'hermes', 'pi', 'dsh-tui'],
   );
   assert.deepEqual(partition.regular.map((script) => script.id), ['my-custom-workflow']);
 });
@@ -48,11 +50,12 @@ test('partitionLaunchers preserves the original order within each bucket', () =>
     { id: 'hermes' },
     { id: 'claude-code' },
     { id: 'codex' },
+    { id: 'dsh-tui' },
   ];
   const partition = partitionLaunchers(scripts);
   assert.deepEqual(
     partition.codingAgent.map((script) => script.id),
-    ['opencode', 'hermes', 'claude-code', 'codex'],
+    ['opencode', 'hermes', 'claude-code', 'codex', 'dsh-tui'],
   );
 });
 
@@ -72,9 +75,9 @@ test('AI_LAUNCHER_CATALOG only contains coding agent entries today', () => {
     .sort();
   assert.deepEqual(
     codingAgentIds,
-    ['claude-code', 'codex', 'hermes', 'opencode', 'pi'],
+    ['claude-code', 'codex', 'dsh-tui', 'hermes', 'opencode', 'pi'],
   );
-  assert.equal(AI_LAUNCHER_CATALOG.length, 5);
+  assert.equal(AI_LAUNCHER_CATALOG.length, 6);
 });
 
 test('commandAvailabilityToLauncherStatus maps probe results to badge statuses', () => {
@@ -101,6 +104,19 @@ test('getInstallCommandForPlatform returns the Windows command for Claude Code',
   assert.equal(
     getInstallCommandForPlatform(entry, 'win32'),
     'irm https://claude.ai/install.ps1 | iex',
+  );
+});
+
+test('dsh-TUI advertises its official prerequisites and profile upgrade command', () => {
+  const entry = getAiLauncherEntry('dsh-tui');
+  assert.ok(entry);
+  assert.equal(
+    getInstallCommandForPlatform(entry, 'linux'),
+    'npm install -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui',
+  );
+  assert.equal(
+    getUpgradeCommandForPlatform(entry, 'linux'),
+    'dsh plugin --profile dsh-tui add @deepseek-harness-tui/dsh-tui@latest',
   );
 });
 
@@ -158,6 +174,7 @@ test('version registry sources match the documented endpoints', () => {
     ['opencode', 'github-release:anomalyco/opencode'],
     ['hermes', 'github-release:NousResearch/hermes-agent'],
     ['pi', 'npm:@earendil-works/pi-coding-agent'],
+    ['dsh-tui', 'npm:@deepseek-harness-tui/dsh-tui'],
   ]);
   for (const entry of AI_LAUNCHER_CATALOG) {
     const registry = entry.versionRegistry;
@@ -173,6 +190,7 @@ test('npm-backed launchers declare the package Termy can prepare through fnm', (
   const expected = new Map([
     ['codex', '@openai/codex'],
     ['opencode', 'opencode-ai'],
+    ['dsh-tui', '@deepseek-harness-tui/dsh-tui'],
   ]);
 
   for (const [presetId, packageName] of expected) {
@@ -190,4 +208,11 @@ test('npm-backed launchers declare the package Termy can prepare through fnm', (
   const hermes = getAiLauncherEntry('hermes');
   assert.ok(hermes);
   assert.equal(hermes.npmPackage, undefined);
+
+  const dshTui = getAiLauncherEntry('dsh-tui');
+  assert.ok(dshTui);
+  assert.deepEqual(dshTui.npmInstallPackages, [
+    '@deepseek-ai/dsh',
+    '@deepseek-harness-tui/dsh-tui',
+  ]);
 });
