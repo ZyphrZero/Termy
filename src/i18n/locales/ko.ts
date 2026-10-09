@@ -427,6 +427,9 @@ export const ko: TranslationKeys = {
     cannotConnect: '터미널 서버에 연결할 수 없습니다',
     xtermLoadFailed: 'xterm.js 모듈 로드 실패: {{message}}',
     xtermInitFailed: 'xterm.js 초기화 실패: {{message}}',
+    connectionLost: 'WebSocket 연결이 끊어졌습니다. 다시 연결하는 중...',
+    sessionRecoveryInProgress: '연결이 복원되었습니다. 터미널 세션을 복원하는 중...',
+    sessionRecovered: '터미널 세션이 복원되었습니다',
   },
 
   terminalService: {

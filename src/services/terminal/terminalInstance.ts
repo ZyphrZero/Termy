@@ -887,7 +887,7 @@ export class TerminalInstance {
     this.clearPendingInput();
     if (this.webSocketDisconnected) return;
     this.webSocketDisconnected = true;
-    this.xterm.write('\r\n\x1b[33m[WebSocket 连接已断开，正在重连...]\x1b[0m\r\n');
+    this.xterm.write(`\r\n\x1b[33m[${t('terminalInstance.connectionLost')}]\x1b[0m\r\n`);
   }
 
   async handleWebSocketConnected(serverManager: ServerManager): Promise<void> {
@@ -901,7 +901,7 @@ export class TerminalInstance {
 
     this.sessionRecoveryInProgress = true;
     this.xterm.write(XTERM_SESSION_RECOVERY_RESET_SEQUENCE);
-    this.xterm.write('\x1b[32m[连接已恢复，正在恢复终端会话...]\x1b[0m\r\n');
+    this.xterm.write(`\x1b[32m[${t('terminalInstance.sessionRecoveryInProgress')}]\x1b[0m\r\n`);
 
     try {
       this.disposePtyClientHandlers();
@@ -923,7 +923,7 @@ export class TerminalInstance {
 
       this.sessionRecoveryNeeded = false;
       this.webSocketDisconnected = false;
-      this.xterm.write('\x1b[32m[终端会话已恢复]\x1b[0m\r\n');
+      this.xterm.write(`\x1b[32m[${t('terminalInstance.sessionRecovered')}]\x1b[0m\r\n`);
       this.fit();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

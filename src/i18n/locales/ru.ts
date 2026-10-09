@@ -427,6 +427,9 @@ export const ru: TranslationKeys = {
     cannotConnect: 'Не удаётся подключиться к серверу терминала',
     xtermLoadFailed: 'Не удалось загрузить модули xterm.js: {{message}}',
     xtermInitFailed: 'Не удалось инициализировать xterm.js: {{message}}',
+    connectionLost: 'Соединение WebSocket разорвано, выполняется повторное подключение...',
+    sessionRecoveryInProgress: 'Соединение восстановлено, выполняется восстановление сеанса терминала...',
+    sessionRecovered: 'Сеанс терминала восстановлен',
   },
 
   terminalService: {
