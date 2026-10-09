@@ -1573,13 +1573,36 @@ export default class TerminalPlugin extends Plugin {
         return;
       }
 
-      // Create the "Open terminal" button
+      // Match Obsidian's built-in empty-state actions so the entry keeps the
+      // same icon, spacing, hover state, and keyboard behavior.
       const terminalAction = activeDocument.createElement('div');
-      terminalAction.className = 'empty-state-action terminal-plugin-terminal-action';
-      terminalAction.textContent = t('commands.openTerminal');
-      terminalAction.addEventListener('click', () => {
+      terminalAction.className = 'text-icon-button tappable mod-pill empty-state-action terminal-plugin-terminal-action';
+      terminalAction.setAttribute('tabindex', '0');
+      terminalAction.setAttribute('role', 'button');
+
+      const iconEl = activeDocument.createElement('span');
+      iconEl.className = 'text-button-icon';
+      setIcon(iconEl, 'terminal');
+      terminalAction.appendChild(iconEl);
+
+      const label = t('commands.openTerminal');
+      const labelEl = activeDocument.createElement('span');
+      labelEl.className = 'text-button-label';
+      labelEl.textContent = label;
+      terminalAction.appendChild(labelEl);
+      setTooltip(terminalAction, label);
+
+      const openTerminal = (): void => {
         const leaf = this.findLeafByEmptyView(emptyView);
         void this.activateTerminalView(leaf ?? undefined);
+      };
+      terminalAction.addEventListener('click', openTerminal);
+      terminalAction.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+          return;
+        }
+        event.preventDefault();
+        openTerminal();
       });
 
       // Add it to the actions list
