@@ -4,8 +4,8 @@
  * Provides the core functionality for communicating with the unified server
  */
 
-import type { ModuleType, ClientMessage, ServerMessage } from './types';
-import { debugLog, errorLog } from '@/utils/logger';
+import type { ModuleType, ClientMessage, ServerMessage } from './types.ts';
+import { debugLog, errorLog } from '../../utils/logger.ts';
 
 /**
  * Message handler type

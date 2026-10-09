@@ -187,6 +187,11 @@ impl MessageRouter {
     pub async fn set_ws_sender(&self, sender: WsSender) {
         self.pty_handler.set_ws_sender(sender).await;
     }
+
+    /// Clear the sender when the owning connection closes.
+    pub async fn clear_ws_sender(&self, sender: &WsSender) {
+        self.pty_handler.clear_ws_sender(sender).await;
+    }
     
     /// Get a reference to the PTY handler (used to write data)
     pub fn pty_handler(&self) -> &crate::pty::PtyHandler {

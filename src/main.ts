@@ -2946,6 +2946,7 @@ export default class TerminalPlugin extends Plugin {
       this.updateLeafHeader(terminalView.leaf);
     }
     const normalizedCommand = this.normalizePresetScriptCommand(terminalCommand);
+    terminal.setRecoveryCommand(normalizedCommand);
     terminal.write(normalizedCommand);
     this.focusTerminalView(terminalView, terminal);
   }

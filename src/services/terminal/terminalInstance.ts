@@ -173,6 +173,9 @@ export class TerminalInstance {
   
   // Session ID (multi-session support)
   private sessionId: string | null = null;
+
+  // Command to replay when the original PTY no longer exists during recovery
+  private recoveryCommand: string | null = null;
   
   // Event unsubscribe callbacks
   private outputUnsubscribe: (() => void) | null = null;
@@ -900,24 +903,50 @@ export class TerminalInstance {
     }
 
     this.sessionRecoveryInProgress = true;
-    this.xterm.write(XTERM_SESSION_RECOVERY_RESET_SEQUENCE);
     this.xterm.write(`\x1b[32m[${t('terminalInstance.sessionRecoveryInProgress')}]\x1b[0m\r\n`);
 
     try {
-      this.disposePtyClientHandlers();
-      this.sessionId = null;
+      const previousSessionId = this.sessionId;
+      const previousPtyClient = this.ptyClient;
       this.clearPendingInput();
 
-      const reconnectCwd = this.currentCwd ?? this.options.cwd;
-      try {
-        await this.initializePtySession(serverManager, reconnectCwd);
-      } catch (error) {
-        if (!this.currentCwd || this.currentCwd === this.options.cwd) {
-          throw error;
+      let attached = false;
+      if (previousSessionId) {
+        this.ptyClient = serverManager.pty();
+        if (this.ptyClient !== previousPtyClient) {
+          this.disposePtyClientHandlers();
+          this.setupPtyClientHandlers();
+        }
+        try {
+          await this.ptyClient.attach(previousSessionId);
+          this.sessionId = previousSessionId;
+          attached = true;
+        } catch (error) {
+          debugWarn('[Terminal] 原 PTY 会话已不可用，创建新会话:', error);
+          this.disposePtyClientHandlers();
+          this.sessionId = null;
+        }
+      }
+
+      if (!attached) {
+        this.disposePtyClientHandlers();
+        this.xterm.write(XTERM_SESSION_RECOVERY_RESET_SEQUENCE);
+        const reconnectCwd = this.currentCwd ?? this.options.cwd;
+        try {
+          await this.initializePtySession(serverManager, reconnectCwd);
+        } catch (error) {
+          if (!this.currentCwd || this.currentCwd === this.options.cwd) {
+            throw error;
+          }
+
+          debugWarn('[Terminal] 使用当前目录恢复会话失败，回退到初始目录:', error);
+          await this.initializePtySession(serverManager, this.options.cwd);
         }
 
-        debugWarn('[Terminal] 使用当前目录恢复会话失败，回退到初始目录:', error);
-        await this.initializePtySession(serverManager, this.options.cwd);
+        if (this.recoveryCommand && this.ptyClient && this.sessionId) {
+          this.ptyClient.write(this.sessionId, this.recoveryCommand);
+          this.recoveryCommand = null;
+        }
       }
       if (this.isDestroyed) return;
 
@@ -925,6 +954,13 @@ export class TerminalInstance {
       this.webSocketDisconnected = false;
       this.xterm.write(`\x1b[32m[${t('terminalInstance.sessionRecovered')}]\x1b[0m\r\n`);
       this.fit();
+      if (attached && this.ptyClient && this.sessionId && this.xterm.cols > 0 && this.xterm.rows > 0) {
+        const cols = this.xterm.cols;
+        const rows = this.xterm.rows;
+        const refreshCols = cols > 1 ? cols - 1 : cols + 1;
+        this.ptyClient.resize(this.sessionId, refreshCols, rows);
+        this.ptyClient.resize(this.sessionId, cols, rows);
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorLog('[Terminal] 恢复终端会话失败:', error);
@@ -1857,6 +1893,10 @@ export class TerminalInstance {
 
   sendText(data: string): void {
     this.write(data);
+  }
+
+  setRecoveryCommand(command: string | null): void {
+    this.recoveryCommand = command && command.length > 0 ? command : null;
   }
 
   pasteText(text: string): void {

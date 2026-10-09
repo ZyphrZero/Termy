@@ -67,12 +67,14 @@ impl Server {
         );
 
         // Main loop: accept WebSocket connections
+        let router = Arc::new(MessageRouter::new());
         tokio::spawn(async move {
             log_info!("正在监听 WebSocket 连接...");
             while let Ok((stream, addr)) = listener.accept().await {
                 log_debug!("接受来自 {} 的连接", addr);
+                let router = Arc::clone(&router);
                 tokio::spawn(async move {
-                    if let Err(e) = handle_connection(stream).await {
+                    if let Err(e) = handle_connection(stream, router).await {
                         log_error!("连接处理错误: {}", e);
                     }
                 });
@@ -96,6 +98,7 @@ pub type WsSender = Arc<TokioMutex<futures_util::stream::SplitSink<
 /// Handle a single WebSocket connection
 async fn handle_connection(
     stream: tokio::net::TcpStream,
+    router: Arc<MessageRouter>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Upgrade to WebSocket
     let ws_stream = accept_async(stream).await?;
@@ -105,9 +108,6 @@ async fn handle_connection(
     // Split the read and write streams
     let (ws_sender, mut ws_receiver) = ws_stream.split();
     let ws_sender: WsSender = Arc::new(TokioMutex::new(ws_sender));
-    
-    // Create the message router
-    let router = Arc::new(MessageRouter::new());
     
     // Set the WebSocket sender (used for PTY output)
     router.set_ws_sender(Arc::clone(&ws_sender)).await;
@@ -186,8 +186,9 @@ async fn handle_connection(
     
     log_info!("WebSocket 连接已关闭");
     
-    // Clean up all PTY sessions
-    router.pty_handler().cleanup_all().await;
+    // Keep PTY sessions alive so a reconnect can attach to them. The sender is
+    // cleared only when it still belongs to this connection.
+    router.clear_ws_sender(&ws_sender).await;
     
     Ok(())
 }
