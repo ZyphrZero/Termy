@@ -427,6 +427,9 @@ export const zhCN: TranslationKeys = {
     cannotConnect: '无法连接到终端服务器',
     xtermLoadFailed: '加载 xterm.js 模块失败：{{message}}',
     xtermInitFailed: '初始化 xterm.js 失败：{{message}}',
+    connectionLost: 'WebSocket 连接已断开，正在重连...',
+    sessionRecoveryInProgress: '连接已恢复，正在恢复终端会话...',
+    sessionRecovered: '终端会话已恢复',
   },
 
   terminalService: {
