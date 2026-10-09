@@ -167,6 +167,8 @@ export interface TranslationKeys {
       binaryAlreadyUpToDate: string;
       binaryDownloadSkippedOffline: string;
       binaryDownloadFailed: string;
+      binaryRemoved: string;
+      binaryRemoveFailed: string;
     };
     presetScript: {
       notFound: string;
@@ -369,6 +371,10 @@ export interface TranslationKeys {
       binaryDownloadNow: string;
       binaryDownloadNowDesc: string;
       binaryDownloadNowRunning: string;
+      binaryRemove: string;
+      binaryRemoveDesc: string;
+      binaryRemoveRunning: string;
+      binaryRemoveConfirm: string;
       resetToDefaults: string;
       resetToDefaultsDesc: string;
       customServerPort: string;

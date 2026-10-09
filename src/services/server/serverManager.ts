@@ -124,6 +124,9 @@ export class ServerManager {
   /** Binary update Promise */
   private binaryUpdatePromise: Promise<BinaryUpdateResult> | null = null;
 
+  /** Whether a binary removal is waiting for an in-flight update */
+  private binaryRemovalRequested = false;
+
   /** Event listeners */
   private eventListeners: Map<keyof ServerEvents, Set<EventListener<keyof ServerEvents>>> = new Map();
 
@@ -192,6 +195,28 @@ export class ServerManager {
       return 'skipped-offline';
     }
     return this.ensureBinaryReady();
+  }
+
+  /**
+   * Stop the server and remove the current platform's native binary.
+   */
+  async removeBinary(): Promise<void> {
+    this.binaryRemovalRequested = true;
+    try {
+      if (this.binaryUpdatePromise) {
+        await this.binaryUpdatePromise;
+      }
+
+      if (this.process || this.port !== null || this.ws) {
+        await this.shutdown();
+      }
+
+      await this.binaryDownloader.remove();
+    } finally {
+      // Keep the manager reusable so the user can download the binary again.
+      this.resetShutdownState();
+      this.binaryRemovalRequested = false;
+    }
   }
 
   /**
@@ -499,7 +524,7 @@ export class ServerManager {
     } finally {
       if (shouldRestart) {
         this.resetShutdownState();
-        if (updateSucceeded) {
+        if (updateSucceeded && !this.binaryRemovalRequested) {
           window.setTimeout(() => {
             this.ensureServer().catch((error) => {
               errorLog('[ServerManager] 更新后重启服务器失败:', error);

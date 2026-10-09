@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added a server settings control to stop the local terminal server and remove the current platform's native binary and version cache for recovery or disk cleanup.
 - Added local AI launcher installation diagnostics with paths, versions, PATH precedence, and version-conflict warnings. The conflict marker appears only when different versions are found; checks cover PATH and common installer / Node.js version-manager directories without modifying installations.
 - Added a built-in Pi launcher with the `pi` command, platform-specific installation guidance, and opt-in npm version checks.
 - Added a built-in Hermes Agent launcher to the workflow gallery, status bar menu, and command palette. The launcher detects the `hermes` CLI on PATH, surfaces install / update guidance for macOS, Linux, and Windows, and queries `https://api.github.com` for the latest `NousResearch/hermes-agent` release when **Check for AI launcher updates** is opted in.

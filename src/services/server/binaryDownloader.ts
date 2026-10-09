@@ -324,6 +324,25 @@ export class BinaryDownloader {
   }
 
   /**
+   * Remove the current platform's binary and its local download metadata.
+   */
+  async remove(): Promise<void> {
+    const binaryPath = this.getBinaryPath();
+    const artifacts = [
+      binaryPath,
+      this.getTempBinaryPath(binaryPath),
+      this.getVersionCachePath(),
+    ];
+
+    for (const artifactPath of artifacts) {
+      await this.unlinkWithRetry(artifactPath);
+    }
+
+    this.installedVersionCache = null;
+    debugLog('[BinaryDownloader] 已移除二进制文件及版本缓存:', binaryPath);
+  }
+
+  /**
    * Get binary info
    * Build the download URL for the current version
    */
@@ -514,6 +533,31 @@ export class BinaryDownloader {
           this.fs.unlinkSync(destPath);
         }
         this.fs.renameSync(tempPath, destPath);
+        return;
+      } catch (error) {
+        if (this.isFileBusyError(error) && attempt < maxAttempts) {
+          await this.delay(200 * attempt);
+          continue;
+        }
+        if (this.isFileBusyError(error)) {
+          throw new Error(
+            t('notices.binaryInUse') ||
+            '二进制文件被占用，请关闭 Obsidian 或结束 termy-server 进程后重试'
+          );
+        }
+        throw error;
+      }
+    }
+  }
+
+  private async unlinkWithRetry(filePath: string): Promise<void> {
+    const maxAttempts = 5;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        if (!this.fs.existsSync(filePath)) {
+          return;
+        }
+        this.fs.unlinkSync(filePath);
         return;
       } catch (error) {
         if (this.isFileBusyError(error) && attempt < maxAttempts) {

@@ -2157,6 +2157,39 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           });
       });
 
+    new Setting(containerEl)
+      .setName(t('settingsDetails.advanced.binaryRemove'))
+      .setDesc(t('settingsDetails.advanced.binaryRemoveDesc'))
+      .addButton((button) => {
+        button
+          .setWarning()
+          .setButtonText(t('settingsDetails.advanced.binaryRemove'))
+          .onClick(async () => {
+            button.setDisabled(true);
+            button.setButtonText(t('settingsDetails.advanced.binaryRemoveRunning'));
+
+            try {
+              const confirmed = await confirmAction(
+                this.context.app,
+                t('settingsDetails.advanced.binaryRemoveConfirm')
+              );
+              if (!confirmed) {
+                return;
+              }
+
+              const serverManager = await this.context.plugin.getServerManager();
+              await serverManager.removeBinary();
+              new Notice(t('notices.settings.binaryRemoved'));
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              new Notice(t('notices.settings.binaryRemoveFailed', { message }), 5000);
+            } finally {
+              button.setButtonText(t('settingsDetails.advanced.binaryRemove'));
+              button.setDisabled(false);
+            }
+          });
+      });
+
     // Offline mode
     new Setting(containerEl)
       .setName(t('settingsDetails.advanced.offlineMode'))
