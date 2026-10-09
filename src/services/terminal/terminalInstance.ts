@@ -57,6 +57,11 @@ const XTERM_BACKGROUND_LAYER_SELECTOR = [
   'canvas',
 ].join(', ');
 const XTERM_SCROLL_BACKGROUND_LAYER_SELECTOR = '.xterm-viewport, .xterm-scrollable-element';
+const XTERM_SESSION_RECOVERY_RESET_SEQUENCE =
+  '\x1b[?1l\x1b[?25h' +
+  '\x1b[?47l\x1b[?1047l\x1b[?1048l\x1b[?1049l' +
+  '\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1007l\x1b[?1015l' +
+  '\x1b[?2004l\x1b[?2026l';
 
 // xterm.js module cache
 let xtermModules: {
@@ -895,6 +900,7 @@ export class TerminalInstance {
     }
 
     this.sessionRecoveryInProgress = true;
+    this.xterm.write(XTERM_SESSION_RECOVERY_RESET_SEQUENCE);
     this.xterm.write(`\x1b[32m[${t('terminalInstance.sessionRecoveryInProgress')}]\x1b[0m\r\n`);
 
     try {
