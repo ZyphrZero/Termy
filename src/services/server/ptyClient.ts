@@ -5,7 +5,7 @@
  * Each terminal instance maps to an independent session_id, and events are dispatched through the session-scoped API.
  */
 
-import { ModuleClient } from './moduleClient';
+import { ModuleClient } from './moduleClient.ts';
 import type {
   PtyConfig,
   ServerMessage,
@@ -13,8 +13,8 @@ import type {
   ShellEvent,
   ShellEventSource,
   ShellEventType,
-} from './types';
-import { debugLog, errorLog } from '@/utils/logger';
+} from './types.ts';
+import { debugLog, errorLog } from '../../utils/logger.ts';
 
 type SessionEventHandler<K extends keyof SessionEventListeners> =
   SessionEventListeners[K] extends Set<infer Handler> ? Handler : never;
@@ -31,6 +31,9 @@ export class PtyClient extends ModuleClient {
   
   /** Temporarily stores the init request ID for response correlation */
   private pendingInitId: string | null = null;
+
+  /** Promises waiting for attach_complete responses */
+  private attachResolvers: Map<string, { resolve: () => void; reject: (error: Error) => void }> = new Map();
 
   constructor() {
     super('pty');
@@ -87,6 +90,32 @@ export class PtyClient extends ModuleClient {
         cols: config.cols,
         rows: config.rows,
       });
+    });
+  }
+
+  /**
+   * Attach to an existing PTY session after the WebSocket reconnects.
+   */
+  async attach(sessionId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timeout = window.setTimeout(() => {
+        this.attachResolvers.delete(sessionId);
+        reject(new Error('PTY attach timeout'));
+      }, 5000);
+      this.attachResolvers.set(sessionId, {
+        resolve: () => {
+          window.clearTimeout(timeout);
+          this.attachResolvers.delete(sessionId);
+          resolve();
+        },
+        reject: (error: Error) => {
+          window.clearTimeout(timeout);
+          this.attachResolvers.delete(sessionId);
+          reject(error);
+        },
+      });
+
+      this.send('attach', { session_id: sessionId });
     });
   }
 
@@ -306,6 +335,18 @@ export class PtyClient extends ModuleClient {
     const sessionId = msg.session_id as string | undefined;
     
     switch (msg.type) {
+      case 'attach_complete':
+        if (sessionId) {
+          const resolver = this.attachResolvers.get(sessionId);
+          if (resolver) {
+            if (msg.success) {
+              resolver.resolve();
+            } else {
+              resolver.reject(new Error(msg.message as string || 'PTY attach failed'));
+            }
+          }
+        }
+        break;
       case 'init_complete':
         // Handle init response
         if (sessionId && this.pendingInitId) {
@@ -402,6 +443,7 @@ export class PtyClient extends ModuleClient {
   override destroy(): void {
     this.sessionListeners.clear();
     this.initResolvers.clear();
+    this.attachResolvers.clear();
     this.pendingInitId = null;
     super.destroy();
   }

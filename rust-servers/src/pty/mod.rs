@@ -12,6 +12,7 @@ use crate::router::{ModuleHandler, ModuleMessage, ModuleType, RouterError, Serve
 use crate::pty::osc_scanner::{OscEvent, OscScanner};
 use crate::server::WsSender;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as TokioMutex;
 use tokio::time::{self, Duration, Instant};
@@ -54,6 +55,7 @@ struct PtySessionContext {
     writer: Arc<Mutex<PtyWriter>>,
     /// Read task handle
     read_task: Option<tokio::task::JoinHandle<()>>,
+    ended: Arc<AtomicBool>,
 }
 
 impl PtySessionContext {
@@ -61,13 +63,49 @@ impl PtySessionContext {
     fn new(
         session: Arc<TokioMutex<PtySession>>,
         writer: Arc<Mutex<PtyWriter>>,
+        ended: Arc<AtomicBool>,
     ) -> Self {
         Self {
             session,
             writer,
             read_task: None,
+            ended,
         }
     }
+}
+
+/// Send a message through the currently attached WebSocket, if any.
+///
+/// PTY reader tasks outlive individual WebSocket connections, so they look up
+/// the current sender for every message instead of capturing a stale sink.
+async fn send_to_current_ws(
+    ws_sender: &Arc<TokioMutex<Option<WsSender>>>,
+    message: Message,
+) -> Result<(), String> {
+    let sender = {
+        let sender_guard = ws_sender.lock().await;
+        sender_guard.clone()
+    };
+    let Some(sender) = sender else {
+        return Ok(());
+    };
+
+    let result = sender
+        .lock()
+        .await
+        .send(message)
+        .await
+        .map_err(|error| error.to_string());
+    if result.is_err() {
+        let mut sender_guard = ws_sender.lock().await;
+        if sender_guard
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, &sender))
+        {
+            *sender_guard = None;
+        }
+    }
+    result
 }
 
 // ============================================================================
@@ -81,7 +119,7 @@ pub struct PtyHandler {
     /// Session registry: session_id -> PtySessionContext
     sessions: TokioMutex<HashMap<String, PtySessionContext>>,
     /// WebSocket sender (used to send PTY output)
-    ws_sender: TokioMutex<Option<WsSender>>,
+    ws_sender: Arc<TokioMutex<Option<WsSender>>>,
 }
 
 impl PtyHandler {
@@ -89,7 +127,7 @@ impl PtyHandler {
     pub fn new() -> Self {
         Self {
             sessions: TokioMutex::new(HashMap::new()),
-            ws_sender: TokioMutex::new(None),
+            ws_sender: Arc::new(TokioMutex::new(None)),
         }
     }
     
@@ -97,6 +135,17 @@ impl PtyHandler {
     pub async fn set_ws_sender(&self, sender: WsSender) {
         let mut ws_sender = self.ws_sender.lock().await;
         *ws_sender = Some(sender);
+    }
+
+    /// Clear the sender only when it still belongs to the closing connection.
+    pub async fn clear_ws_sender(&self, sender: &WsSender) {
+        let mut ws_sender = self.ws_sender.lock().await;
+        if ws_sender
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, sender))
+        {
+            *ws_sender = None;
+        }
     }
     
     /// Handle the init message and create a PTY session
@@ -137,14 +186,22 @@ impl PtyHandler {
         let pty_session = Arc::new(TokioMutex::new(pty_session));
         let pty_reader = Arc::new(Mutex::new(pty_reader));
         let pty_writer = Arc::new(Mutex::new(pty_writer));
+        let ended = Arc::new(AtomicBool::new(false));
 
         let mut context = PtySessionContext::new(
             Arc::clone(&pty_session),
             Arc::clone(&pty_writer),
+            Arc::clone(&ended),
         );
         
         // Start the PTY output reader task
-        let read_task = self.start_read_task(session_id.clone(), pty_reader, pty_writer, shell_type).await?;
+        let read_task = self.start_read_task(
+            session_id.clone(),
+            pty_reader,
+            pty_writer,
+            ended,
+            shell_type,
+        ).await?;
         context.read_task = Some(read_task);
         
         // Store the session context
@@ -165,6 +222,31 @@ impl PtyHandler {
             }),
         )))
     }
+
+    /// Reattach a client to an existing PTY session after a WebSocket drop.
+    async fn handle_attach(&self, session_id: String) -> Result<Option<ServerResponse>, RouterError> {
+        let success = {
+            let mut sessions = self.sessions.lock().await;
+            let is_live = sessions
+                .get(&session_id)
+                .is_some_and(|context| !context.ended.load(Ordering::Acquire));
+            if !is_live {
+                sessions.remove(&session_id);
+            }
+            is_live
+        };
+        Ok(Some(ServerResponse::new(
+            ModuleType::Pty,
+            "attach_complete",
+            serde_json::json!({
+                "session_id": session_id,
+                "success": success,
+                "message": if success { serde_json::Value::Null } else {
+                    serde_json::Value::String("SESSION_NOT_FOUND".to_string())
+                },
+            }),
+        )))
+    }
     
     /// Start the PTY output reader task
     ///
@@ -174,17 +256,13 @@ impl PtyHandler {
         session_id: String,
         reader: Arc<Mutex<PtyReader>>,
         _writer: Arc<Mutex<PtyWriter>>,
+        ended: Arc<AtomicBool>,
         _shell_type: Option<String>,
     ) -> Result<tokio::task::JoinHandle<()>, RouterError> {
         const OUTPUT_BATCH_INTERVAL_MS: u64 = 4;
         const READ_BUFFER_SIZE: usize = 8192;
 
-        let ws_sender = {
-            let ws_sender_guard = self.ws_sender.lock().await;
-            ws_sender_guard.clone()
-        };
-        
-        let ws_sender = ws_sender.ok_or_else(|| RouterError::ModuleError("WebSocket sender not set".to_string()))?;
+        let ws_sender = Arc::clone(&self.ws_sender);
         
         // Start the reader task
         let task = tokio::spawn(async move {
@@ -245,6 +323,10 @@ impl PtyHandler {
                     ReadEvent::Error(e) => pending_error = Some(e),
                 }
 
+                if pending_exit || pending_error.is_some() {
+                    ended.store(true, Ordering::Release);
+                }
+
                 if pending_error.is_none() && !pending_exit {
                     let deadline = Instant::now() + Duration::from_millis(OUTPUT_BATCH_INTERVAL_MS);
                     loop {
@@ -288,10 +370,8 @@ impl PtyHandler {
                     frame.extend_from_slice(session_id_bytes);
                     frame.extend_from_slice(&batch_buffer);
 
-                    let mut sender = ws_sender.lock().await;
-                    if let Err(e) = sender.send(Message::Binary(frame.into())).await {
+                    if let Err(e) = send_to_current_ws(&ws_sender, Message::Binary(frame.into())).await {
                         log_error!("发送 PTY 输出失败: session_id={}, {}", session_id, e);
-                        break;
                     }
                 }
 
@@ -308,10 +388,8 @@ impl PtyHandler {
                             "shell_event",
                             event_payload,
                         );
-                        let mut sender = ws_sender.lock().await;
-                        if let Err(e) = sender.send(Message::Text(response.to_json().into())).await {
+                        if let Err(e) = send_to_current_ws(&ws_sender, Message::Text(response.to_json().into())).await {
                             log_error!("发送 shell_event 失败: session_id={}, {}", session_id, e);
-                            break;
                         }
                     }
                 }
@@ -336,8 +414,7 @@ impl PtyHandler {
                             "code": 0
                         }),
                     );
-                    let mut sender = ws_sender.lock().await;
-                    if let Err(e) = sender.send(Message::Text(exit_response.to_json().into())).await {
+                    if let Err(e) = send_to_current_ws(&ws_sender, Message::Text(exit_response.to_json().into())).await {
                         log_error!("发送 exit 事件失败: session_id={}, {}", session_id, e);
                     }
                     break;
@@ -457,6 +534,14 @@ impl ModuleHandler for PtyHandler {
                 
                 self.handle_init(shell_type, shell_args, cwd, env, cols, rows).await
             }
+            "attach" => {
+                let session_id: Option<String> = msg.get_field("session_id");
+                let session_id = session_id.ok_or_else(|| {
+                    RouterError::ModuleError("SESSION_ID_REQUIRED".to_string())
+                })?;
+
+                self.handle_attach(session_id).await
+            }
             "resize" => {
                 // resize requires a session_id
                 let session_id: Option<String> = msg.get_field("session_id");
@@ -491,5 +576,48 @@ impl ModuleHandler for PtyHandler {
                 Err(RouterError::ModuleError(format!("未知的 PTY 消息类型: {}", msg.msg_type)))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn attach_rejects_a_marked_ended_session() {
+        let handler = PtyHandler::new();
+        let init_response = handler
+            .handle_init(None, None, None, None, Some(80), Some(24))
+            .await
+            .unwrap()
+            .expect("PTY initialization should return a response");
+        let session_id = init_response.payload["session_id"]
+            .as_str()
+            .expect("PTY initialization should return a session ID")
+            .to_string();
+
+        let attached = handler
+            .handle_attach(session_id.clone())
+            .await
+            .unwrap()
+            .expect("attach should return a response");
+        assert_eq!(attached.payload["success"], true);
+
+        handler
+            .sessions
+            .lock()
+            .await
+            .get(&session_id)
+            .expect("initialized session should remain registered")
+            .ended
+            .store(true, Ordering::Release);
+
+        let attached = handler
+            .handle_attach(session_id.clone())
+            .await
+            .unwrap()
+            .expect("attach should return a response");
+        assert_eq!(attached.payload["success"], false);
+        assert!(!handler.sessions.lock().await.contains_key(&session_id));
     }
 }
