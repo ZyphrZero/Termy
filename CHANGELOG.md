@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Discover AI launcher commands through the login-shell PATH, including installations managed by Node.js version managers.
 
 ### Fixed
+- Fixed native server binaries being downloaded to a duplicated relative path on Linux and macOS by preserving absolute plugin directory paths, including Windows drive letters and UNC shares.
 - Fixed Windows CLI version probes for installation paths containing spaces or shell metacharacters, and wait for output streams to close before parsing versions.
 - Restored the opt-in default for AI launcher update checks to match the documented network policy.
 - Fixed a startup race that could incorrectly report Codex CLI as not installed, and restricted resolved npm paths to custom Node.js installations.
