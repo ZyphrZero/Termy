@@ -1058,6 +1058,12 @@
   transform: translateY(-1px);
 }
 
+.preset-script-launcher-install {
+  padding: 4px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .preset-scripts-empty {
   padding: 8px 10px;
   font-size: 12px;
@@ -1385,19 +1391,17 @@
   color: var(--text-error);
 }
 
-/* "Update" affordance shown on launcher rows when an upgrade is
-   available. Uses the accent color so it reads as a primary action
-   distinct from edit/delete. Hidden until the snapshot resolves. */
-.preset-scripts-menu-action-update {
+/* Install/upgrade guidance uses the accent color and waits for detection. */
+.preset-scripts-menu-action-setup {
   color: var(--interactive-accent);
 }
 
-.preset-scripts-menu-action-update:hover {
+.preset-scripts-menu-action-setup:hover {
   background: color-mix(in srgb, var(--interactive-accent) 18%, transparent);
   color: var(--interactive-accent);
 }
 
-.preset-scripts-menu-action-update.is-hidden,
+.preset-scripts-menu-action-setup.is-hidden,
 .preset-scripts-menu-action-installations.is-hidden {
   display: none;
 }
@@ -1425,6 +1429,7 @@
   color: var(--interactive-accent);
 }
 
+.preset-script-launcher-install.is-hidden,
 .preset-script-launcher-update.is-hidden {
   display: none;
 }

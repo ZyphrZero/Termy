@@ -158,6 +158,42 @@ test('launcher row updates its own badge and button from the same snapshot', asy
   f.settings.dispose();
 });
 
+test('missing launcher rows show installation guidance and hide it once installed', async () => {
+  const f = await fixture();
+  const row = elements();
+  f.settings.attachLauncherSnapshotInfo(row, f.entry);
+  assert.equal(row.installButton.classes.has('is-hidden'), true);
+  f.emit(snapshot('not-installed'));
+  assert.equal(row.installButton.classes.has('is-hidden'), false);
+  assert.equal(row.updateButton.classes.has('is-hidden'), true);
+  f.emit(snapshot('unknown'));
+  assert.equal(row.installButton.classes.has('is-hidden'), true);
+  f.emit(snapshot('ready'));
+  assert.equal(row.installButton.classes.has('is-hidden'), true);
+  f.settings.dispose();
+});
+
+test('the install instructions button opens guidance for its own preset without executing a command', async () => {
+  const entry = getAiLauncherEntry('codex');
+  const preset = DEFAULT_PRESET_SCRIPTS.find((script) => script.id === 'codex');
+  assert.ok(entry);
+  assert.ok(preset);
+  const f = await fixture(entry);
+  f.plugin.settings.presetScripts = [preset];
+  f.plugin.getAiLauncherSnapshot = () => snapshot('not-installed');
+  const opened: string[] = [];
+  f.plugin.openAiLauncherInstallModalForPreset = (script) => { opened.push(script.id); return true; };
+  const list = new RowElement();
+  f.settings.renderPresetScriptsList(list);
+  const button = list.findByClass('preset-script-launcher-install');
+  assert.ok(button, 'Missing launchers must expose installation instructions');
+  assert.equal(button.textContent, 'Install instructions');
+  assert.equal(button.classes.has('is-hidden'), false);
+  button.listeners.get('click')?.({ stopPropagation: () => {} });
+  assert.deepEqual(opened, ['codex']);
+  f.settings.dispose();
+});
+
 test('workflow refresh forces detection, blocks repeat clicks, and updates upgraded launcher rows', async () => {
   const f = await fixture();
   const container = new RowElement();

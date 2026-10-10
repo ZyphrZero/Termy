@@ -17,9 +17,8 @@
  *      direct installs identically: once Node.js is reachable from the
  *      user's shell PATH, the launcher install will work.
  *
- * It deliberately does NOT execute the install command itself. The user has
- * to paste it into a shell themselves. This keeps Termy on the right side
- * of Obsidian's "no plugin-driven updates of native dependencies" policy.
+ * Explicit install/update clicks are forwarded to the plugin, which runs
+ * the reviewed command in a visible Termy terminal.
  */
 
 import type { App } from 'obsidian';
@@ -40,8 +39,8 @@ export interface LauncherInstallModalOptions {
   /**
    * One-liner install command for the current platform. When provided, the
    * modal shows it as a copy-paste friendly code block. Null when Termy
-   * has no command to recommend (e.g. Node.js is missing — in that case
-   * the modal points to the Node.js download page instead).
+   * has no command to recommend for the current platform. Missing Node.js
+   * prerequisites are shown separately alongside npm installation commands.
    */
   installCommand?: string | null;
   /** What the install command prepares; changes the card copy. */
@@ -133,10 +132,11 @@ export class LauncherInstallModal extends Modal {
     const cardCommand = this.options.updateAvailable && this.options.upgradeCommand
       ? this.options.upgradeCommand
       : this.options.installCommand;
+    if (this.options.installCommandKind === 'node-missing') {
+      this.renderNodeMissingCard(contentEl);
+    }
     if (cardCommand) {
       this.renderInstallCommand(contentEl, cardCommand);
-    } else if (this.options.installCommandKind === 'node-missing') {
-      this.renderNodeMissingCard(contentEl);
     }
 
     const buttonContainer = contentEl.createDiv({ cls: 'modal-button-container' });
@@ -293,9 +293,8 @@ export class LauncherInstallModal extends Modal {
   /**
    * Card shown when Termy could not find Node.js or npm. Points the
    * user at the Node.js download page without endorsing any specific
-   * version manager. Once Node.js is reachable from the user's shell
-   * PATH, the standard install command card will take over on the
-   * next visit.
+   * version manager. The launcher command remains visible so the user can
+   * review it while preparing the runtime.
    */
   private renderNodeMissingCard(contentEl: HTMLElement): void {
     const card = contentEl.createDiv({ cls: 'termy-launcher-install-card' });

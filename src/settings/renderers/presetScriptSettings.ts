@@ -26,6 +26,7 @@ type LauncherRowElements = {
   versionEl: HTMLElement;
   installationsButton: HTMLButtonElement;
   updateButton?: HTMLButtonElement;
+  installButton?: HTMLButtonElement;
 };
 
 /** Owns the workflow list, its launcher badges, and their subscriptions. */
@@ -290,6 +291,17 @@ export class PresetScriptSettings {
     // command for the current platform. Mirrors the same button in
     // the status bar menu so both surfaces feel consistent.
     if (launcherEntry?.detectCommand && launcherRow) {
+      const installBtn = actionsEl.createEl('button', {
+        cls: 'preset-script-launcher-install is-hidden',
+        text: t('settingsDetails.terminal.aiLauncherInstallInstructions'),
+      });
+      installBtn.setAttribute('type', 'button');
+      installBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        this.context.plugin.openAiLauncherInstallModalForPreset(script);
+      });
+      launcherRow.installButton = installBtn;
+
       const updateBtn = actionsEl.createEl('button', {
         cls: 'clickable-icon preset-script-launcher-update is-hidden',
       });
@@ -297,7 +309,7 @@ export class PresetScriptSettings {
       updateBtn.setAttribute('aria-label', t('settingsDetails.terminal.aiLauncherUpdateAriaLabel'));
       updateBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.context.plugin.openAiLauncherUpgradeModalForPreset(script);
+        this.context.plugin.openAiLauncherInstallModalForPreset(script);
       });
       launcherRow.updateButton = updateBtn;
       this.attachLauncherSnapshotInfo(launcherRow, launcherEntry);
@@ -482,7 +494,7 @@ export class PresetScriptSettings {
     entry: AiLauncherCatalogEntry,
     snapshot: AiLauncherStatusSnapshot,
   ): void {
-    const { badge, versionEl, installationsButton, updateButton } = elements;
+    const { badge, versionEl, installationsButton, updateButton, installButton } = elements;
     const status = readinessToBadge(snapshot.readiness);
     const hasConflict = snapshot.installationIssue === 'version-conflict';
     installationsButton.toggleClass('is-hidden', !hasConflict);
@@ -532,6 +544,7 @@ export class PresetScriptSettings {
       snapshot.readiness === 'update-available'
       && getUpgradeCommandForPlatform(entry) !== null;
     updateButton?.classList.toggle('is-hidden', !showUpdate);
+    installButton?.classList.toggle('is-hidden', snapshot.readiness !== 'not-installed');
   }
 
   private openPresetScriptModal(script: PresetScript, isNew: boolean, listEl: HTMLElement): void {

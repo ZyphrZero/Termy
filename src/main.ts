@@ -2022,14 +2022,14 @@ export default class TerminalPlugin extends Plugin {
 
   /**
    * Open the launcher install/upgrade modal for the given preset. Public
-   * entry point for the settings page so rows there can offer the same
-   * "Update now" affordance the status bar menu does.
+   * entry point for settings rows to review installation instructions or
+   * upgrade commands before running them in a terminal.
    *
    * Returns false when the preset is not a catalogued AI launcher (or
    * has no detect command) — callers should fall through to whatever
    * default action makes sense for a regular workflow row.
    */
-  openAiLauncherUpgradeModalForPreset(script: PresetScript): boolean {
+  openAiLauncherInstallModalForPreset(script: PresetScript): boolean {
     const entry = getAiLauncherEntry(script.id);
     if (!entry || !entry.detectCommand) return false;
     const snapshot = this._aiLauncherSnapshots.get(entry.presetId) ?? null;
@@ -2133,29 +2133,32 @@ export default class TerminalPlugin extends Plugin {
     // snapshot, even after the async refresh below settles.
     let snapshot = cachedSnapshot ?? null;
 
-    // Inline "Update" affordance shown only when an upgrade is available
-    // for this launcher AND the catalog defines an upgrade command for
-    // the current platform. Clicking it routes through the install
-    // modal so the user can review the exact command before running it.
-    const updateBtn = activeDocument.createElement('button');
-    updateBtn.className = 'preset-scripts-menu-action-btn preset-scripts-menu-action-update';
-    updateBtn.setAttribute('aria-label', t('settingsDetails.terminal.aiLauncherUpdateAriaLabel'));
-    setIcon(updateBtn, 'download');
-    updateBtn.addEventListener('click', (e) => {
+    // Missing launchers offer installation instructions; installed launchers
+    // offer the upgrade command when one is available for this platform.
+    const setupBtn = activeDocument.createElement('button');
+    setupBtn.className = 'preset-scripts-menu-action-btn preset-scripts-menu-action-setup';
+    setupBtn.setAttribute('type', 'button');
+    setupBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       this.closePresetScriptsMenu();
       const current = snapshot;
       this.openLauncherInstallModal(script, entry, current);
     });
 
-    const refreshUpdateBtnVisibility = (next: AiLauncherStatusSnapshot | null): void => {
+    const refreshSetupButton = (next: AiLauncherStatusSnapshot | null): void => {
+      const showInstall = next?.readiness === 'not-installed';
       const showUpdate =
         next?.readiness === 'update-available'
         && getUpgradeCommandForPlatform(entry) !== null;
-      updateBtn.classList.toggle('is-hidden', !showUpdate);
+      setupBtn.classList.toggle('is-hidden', !showInstall && !showUpdate);
+      const label = t(showInstall ? 'settingsDetails.terminal.aiLauncherInstallInstructions'
+        : 'settingsDetails.terminal.aiLauncherUpdateAriaLabel');
+      setupBtn.setAttribute('aria-label', label);
+      setTooltip(setupBtn, label);
+      setIcon(setupBtn, showInstall ? 'plus' : 'download');
     };
-    refreshUpdateBtnVisibility(cachedSnapshot ?? null);
-    item.appendChild(updateBtn);
+    refreshSetupButton(cachedSnapshot ?? null);
+    item.appendChild(setupBtn);
 
     const installationsBtn = activeDocument.createElement('button');
     installationsBtn.className = 'preset-scripts-menu-action-btn preset-scripts-menu-action-installations is-installation-warning';
@@ -2183,7 +2186,7 @@ export default class TerminalPlugin extends Plugin {
         snapshot = next;
         this.applyLauncherBadgeStatus(badge, readinessToBadge(next.readiness));
         item.dataset.availability = next.readiness;
-        refreshUpdateBtnVisibility(next);
+        refreshSetupButton(next);
         refreshInstallationsButton(next);
         setTooltip(item, this.buildLauncherTooltip(script, next), {
           placement: 'top',
@@ -2487,7 +2490,7 @@ export default class TerminalPlugin extends Plugin {
       // skip this hook in the update-available case so the modal's
       // primary CTA stays focused on the upgrade.
       onRunInstall:
-        !updateAvailable && installCommand
+        !updateAvailable && installPlan.kind !== 'node-missing' && installCommand
           ? () => {
               void this.runLauncherCommand(script, entry, installCommand, 'install');
             }
@@ -2510,7 +2513,7 @@ export default class TerminalPlugin extends Plugin {
     docsUrl?: string;
   } {
     const fallback = getInstallCommandForPlatform(entry);
-    if (!entry.npmPackage || snapshot?.readiness === 'update-available') {
+    if (!entry.npmPackage || !fallback?.startsWith('npm ') || snapshot?.readiness === 'update-available') {
       return {
         command: fallback,
         kind: 'launcher',
@@ -2538,7 +2541,7 @@ export default class TerminalPlugin extends Plugin {
       // automatically, regardless of whether the user chose fnm, nvm,
       // asdf, mise, volta, or a direct download.
       return {
-        command: null,
+        command: fallback,
         kind: 'node-missing',
         docsUrl: getNodeDownloadUrl(),
       };

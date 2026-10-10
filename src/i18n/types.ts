@@ -329,6 +329,7 @@ export interface TranslationKeys {
       aiLauncherStatusUpdateAvailable: string;
       aiLauncherStatusChecking: string;
       aiLauncherUpdateAriaLabel: string;
+      aiLauncherInstallInstructions: string;
       aiLauncherTooltipInstalled: string;
       aiLauncherTooltipLatest: string;
       aiLauncherTooltipResolvedFrom: string;
