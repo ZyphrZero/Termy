@@ -44,9 +44,10 @@ import { debugLog, errorLog } from '../../utils/logger';
 import { clamp, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
 import { t } from '../../i18n';
 import { RenameTerminalModal } from './renameTerminalModal';
+import { TERMINAL_VIEW_TYPE } from './terminalViewType';
 type XtermTerminal = import('@xterm/xterm').Terminal;
 
-export const TERMINAL_VIEW_TYPE = 'terminal-view';
+export { TERMINAL_VIEW_TYPE } from './terminalViewType';
 
 export type TerminalAttachOptions = {
   focus?: boolean;
@@ -71,6 +72,8 @@ export class TerminalView extends ItemView {
   private initPromise: Promise<TerminalInstance> | null = null;
   private initResolve: ((terminal: TerminalInstance) => void) | null = null;
   private initReject: ((error: Error) => void) | null = null;
+  private closed = false;
+  private initializationError: Error | null = null;
 
   private readonly fs: FsModule;
   private readonly path: PathModule;
@@ -84,6 +87,8 @@ export class TerminalView extends ItemView {
       this.initResolve = resolve;
       this.initReject = reject;
     });
+    // UI-only opens may have no waiter; keep the original promise available to API callers.
+    void this.initPromise.catch(() => {});
 
     // Block Obsidian global hotkeys while the terminal view is focused.
     // Obsidian's keymap listens on window in the capture phase and consumes
@@ -148,6 +153,7 @@ export class TerminalView extends ItemView {
   }
 
   onOpen(): Promise<void> {
+    if (this.closed) return Promise.reject(new Error('Termy terminal view is closed'));
     // Use contentEl instead of containerEl.children[1]
     const container = this.contentEl;
     container.empty();
@@ -266,6 +272,9 @@ export class TerminalView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.closed = true;
+    this.rejectTerminalInitialization(new Error('Termy terminal view is closed'));
+    this.terminalContainer = null;
     this.getTerminalPlugin()?.handleTerminalViewClosed(this);
 
     this.resizeObserver?.disconnect();
@@ -310,12 +319,9 @@ export class TerminalView extends ItemView {
   }
 
   adoptTerminalInstance(terminal: TerminalInstance, options: TerminalAttachOptions = {}): void {
+    if (this.closed) throw new Error('Termy terminal view is closed');
     this.detachTerminalBindings();
     this.terminalInstance = terminal;
-    this.initPromise = Promise.resolve(terminal);
-    this.initResolve?.(terminal);
-    this.initResolve = null;
-    this.initReject = null;
     this.bindTerminalInstance(terminal);
     this.registerTerminalHyperlinkHandler(terminal.getXterm());
     this.updateAppearanceStyles();
@@ -323,6 +329,18 @@ export class TerminalView extends ItemView {
     this.setupResizeObserver();
     this.updateLeafHeader(this.leaf);
     this.updateDropHintText();
+    this.initializationError = null;
+    this.initResolve?.(terminal);
+    this.initPromise = Promise.resolve(terminal);
+    this.initResolve = null;
+    this.initReject = null;
+  }
+
+  protected rejectTerminalInitialization(error: unknown): void {
+    this.initializationError = error instanceof Error ? error : new Error(String(error));
+    this.initReject?.(this.initializationError);
+    this.initResolve = null;
+    this.initReject = null;
   }
 
   setTerminalService(terminalService: TerminalService): void {
@@ -345,26 +363,24 @@ export class TerminalView extends ItemView {
         throw new Error('TerminalService not initialized');
       }
 
-      this.terminalInstance = await this.terminalService.createTerminal();
-      this.initResolve?.(this.terminalInstance);
-      this.initResolve = null;
-      this.initReject = null;
-
-      this.bindTerminalInstance(this.terminalInstance);
-      const xterm = this.terminalInstance.getXterm();
-      this.registerTerminalHyperlinkHandler(xterm);
-
+      const terminal = await this.terminalService.createTerminal();
+      if (this.closed) {
+        await this.terminalService.destroyTerminal(terminal.id);
+        return;
+      }
+      this.terminalInstance = terminal;
+      this.bindTerminalInstance(terminal);
+      this.registerTerminalHyperlinkHandler(terminal.getXterm());
       this.updateAppearanceStyles();
       this.attachTerminalToContainer();
       this.setupResizeObserver();
+      this.initResolve?.(terminal);
+      this.initResolve = null;
+      this.initReject = null;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorLog('[TerminalView] Init failed:', errorMessage);
-      if (this.initReject) {
-        this.initReject(error instanceof Error ? error : new Error(errorMessage));
-        this.initResolve = null;
-        this.initReject = null;
-      }
+      this.rejectTerminalInitialization(error);
       new Notice(t('notices.terminal.initFailed', { message: errorMessage }));
       this.leaf.detach();
     }
@@ -1112,7 +1128,7 @@ export class TerminalView extends ItemView {
     } catch (error) {
       errorLog('[TerminalView] Attach failed:', error);
       new Notice(t('notices.terminal.renderFailed', { message: String(error) }));
-      return;
+      throw error;
     }
 
     window.setTimeout(() => {
@@ -1237,16 +1253,22 @@ export class TerminalView extends ItemView {
   }
 
   async waitForTerminalInstance(timeoutMs = 8000): Promise<TerminalInstance> {
+    if (this.initializationError) throw this.initializationError;
     if (this.terminalInstance) return this.terminalInstance;
     if (!this.initPromise) {
       throw new Error(t('terminal.notInitialized'));
     }
 
+    let timeout: number | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      window.setTimeout(() => reject(new Error(t('terminal.notInitialized'))), timeoutMs);
+      timeout = window.setTimeout(() => reject(new Error(t('terminal.notInitialized'))), timeoutMs);
     });
 
-    return Promise.race([this.initPromise, timeoutPromise]);
+    try {
+      return await Promise.race([this.initPromise, timeoutPromise]);
+    } finally {
+      window.clearTimeout(timeout);
+    }
   }
 
   private updateLeafHeader(leaf: WorkspaceLeaf): void {

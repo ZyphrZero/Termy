@@ -188,6 +188,7 @@ export class TerminalInstance {
   private titleState: TerminalTitleState;
   private isInitialized = false;
   private isDestroyed = false;
+  private sessionExited = false;
   private isComposing = false;
   private titleChangeCallbacks: Set<(title: string) => void> = new Set();
   
@@ -261,6 +262,7 @@ export class TerminalInstance {
   private async initXterm(): Promise<void> {
     try {
       const { Terminal, FitAddon, SearchAddon, WebLinksAddon } = await loadXtermModules();
+      if (this.isDestroyed) return;
       
       this.xterm = new Terminal({
         cursorBlink: this.options.cursorBlink ?? true,
@@ -550,9 +552,11 @@ export class TerminalInstance {
     try {
       // Load xterm.js modules dynamically
       await this.initXterm();
+      if (this.isDestroyed) return;
       
       // Ensure the server is running
       await serverManager.ensureServer();
+      if (this.isDestroyed) return;
       
       await this.initializePtySession(serverManager, this.options.cwd);
       if (this.isDestroyed) return;
@@ -591,6 +595,7 @@ export class TerminalInstance {
     
     // Handle exit events (session-level)
     this.exitUnsubscribe = this.ptyClient.onSessionExit(this.sessionId, (code: number) => {
+      this.sessionExited = true;
       debugLog('[Terminal] PTY 会话退出, code:', code);
       this.xterm.write(`\r\n\x1b[33m[会话已结束, 退出码: ${code}]\x1b[0m\r\n`);
     });
@@ -639,6 +644,7 @@ export class TerminalInstance {
   }
 
   private resetSessionProtocolState(): void {
+    this.sessionExited = false;
     this.win32InputModeEnabled = false;
     this.claudeCodeSessionState.reset();
     this.pendingControlSequenceText = '';
@@ -1917,7 +1923,7 @@ export class TerminalInstance {
 
   detach(): void {
     this.disposeDomEventHandlers();
-    this.xterm.element?.remove();
+    this.xterm?.element?.remove();
     this.containerEl = null;
     this.hostWindow = null;
   }
@@ -1927,7 +1933,7 @@ export class TerminalInstance {
   }
 
   isAlive(): boolean {
-    return !this.isDestroyed && this.ptyClient !== null && this.ptyClient.isConnected();
+    return !this.isDestroyed && !this.sessionExited && this.ptyClient !== null && this.ptyClient.isConnected();
   }
 
   getTitle(): string { return this.titleState.getTitle(); }

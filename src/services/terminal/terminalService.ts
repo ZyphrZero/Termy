@@ -23,6 +23,7 @@ import { t } from '@/i18n';
 import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
 import { getSelectableShellTypes } from './shellProfiles';
+import type { TerminalLaunchSpec } from './terminalTypes';
 
 // Preload the TerminalInstance module to avoid dynamic import latency when creating the first terminal
 let terminalInstanceModule: typeof import('./terminalInstance') | null = null;
@@ -61,6 +62,8 @@ export class TerminalService {
   
   // Shutdown state flag
   private isShuttingDown = false;
+  private terminalCreationQueue: Promise<void> = Promise.resolve();
+  private pendingTerminalCreations = 0;
 
   constructor(
     app: App,
@@ -183,8 +186,21 @@ export class TerminalService {
    * @returns The created terminal instance
    * @throws Error if terminal creation fails
    */
-  async createTerminal(): Promise<TerminalInstance> {
+  createTerminal(options: TerminalLaunchSpec = {}): Promise<TerminalInstance> {
+    this.pendingTerminalCreations += 1;
+    // PtyClient correlates one init response at a time, including launches from the UI.
+    const creation = this.terminalCreationQueue.then(() => this.createTerminalInstance(options));
+    this.terminalCreationQueue = creation.then(
+      () => { this.pendingTerminalCreations -= 1; },
+      () => { this.pendingTerminalCreations -= 1; },
+    );
+    return creation;
+  }
+
+  private async createTerminalInstance(options: TerminalLaunchSpec): Promise<TerminalInstance> {
+    let terminal: TerminalInstance | undefined;
     try {
+      if (this.isShuttingDown) throw new Error('Termy is unloading');
       // Ensure the server is running
       await this.serverManager.ensureServer();
       
@@ -192,6 +208,7 @@ export class TerminalService {
 
       // Use the preloaded module
       const { TerminalInstance } = await preloadTerminalInstance();
+      if (this.isShuttingDown) throw new Error('Termy is unloading');
       
       // Get the working directory if auto-entering the vault directory is enabled
       let cwd: string | undefined;
@@ -213,14 +230,16 @@ export class TerminalService {
       }
       
       // Get shell startup arguments
-      const shellArgs = this.settings.shellArgs.length > 0 ? this.settings.shellArgs : undefined;
+      const launchOptions = {
+        shellType: options.shellType ?? shellType,
+        shellArgs: options.shellArgs ?? (this.settings.shellArgs.length > 0 ? [...this.settings.shellArgs] : undefined),
+        cwd: options.cwd ?? cwd,
+      };
       const terminalEnv = this.getTerminalEnvironment();
       
       // Create the terminal instance with the current settings
-      const terminal = new TerminalInstance({
-        shellType: shellType,
-        shellArgs: shellArgs,
-        cwd: cwd,
+      terminal = new TerminalInstance({
+        ...launchOptions,
         env: Object.keys(terminalEnv).length > 0 ? terminalEnv : undefined,
         fontSize: this.settings.fontSize,
         fontFamily: this.settings.fontFamily,
@@ -239,14 +258,24 @@ export class TerminalService {
         blurAmount: this.settings.blurAmount,
         textOpacity: this.settings.textOpacity,
       });
+      if (options.title !== undefined) terminal.setTitle(options.title);
+      // Register before initialization so unload can also destroy an in-flight launch.
+      this.terminals.set(terminal.id, terminal);
       
       // Initialize the terminal through ServerManager
       await terminal.initializeWithServerManager(this.serverManager);
-      
-      this.terminals.set(terminal.id, terminal);
+      if (this.isShuttingDown) throw new Error('Termy is unloading');
       
       return terminal;
     } catch (error) {
+      if (terminal) {
+        this.terminals.delete(terminal.id);
+        try {
+          terminal.destroy();
+        } catch (cleanupError) {
+          errorLog('[TerminalService] Failed to clean up terminal creation:', cleanupError);
+        }
+      }
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorLog('[TerminalService] 创建终端实例失败:', errorMessage);
       
@@ -307,7 +336,7 @@ export class TerminalService {
         this.terminals.delete(id);
         
         // Stop the server if this was the last terminal
-        if (this.terminals.size === 0 && !this.isShuttingDown) {
+        if (this.terminals.size === 0 && !this.isShuttingDown && this.pendingTerminalCreations === 0) {
           debugLog('[TerminalService] 最后一个终端已关闭，停止服务器');
           await this.serverManager.shutdown();
         }
@@ -385,6 +414,7 @@ export class TerminalService {
     
     // Destroy all terminals
     this.destroyAllTerminals();
+    await this.terminalCreationQueue;
     
     // Ensure the server is stopped
     if (this.serverManager.isServerRunning()) {

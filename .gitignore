@@ -46,7 +46,8 @@ coverage/
 # oh-my-codex
 .omx/
 .kiro/
-docs/
+docs/*
+!docs/public-api.md
 
 # Personal scratch notes (not part of the plugin)
 t.md

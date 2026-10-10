@@ -198,6 +198,10 @@ Termy 已上架官方 Obsidian Community Plugins 列表。
 
 ## 开发
 
+### 插件集成 API
+
+其他 Obsidian 插件可以通过带版本号的 `api.createTerminal()` 接口创建 Termy 终端，独立指定启动程序、参数、工作目录和标题。返回的终端句柄支持写入输入、聚焦、修改标题和关闭终端。详见[公开 API 文档](docs/public-api.md)及 [TypeScript 类型定义](src/api.ts)。
+
 ```bash
 pnpm install
 pnpm build

@@ -198,6 +198,10 @@ Use BRAT if you want to track the latest tagged build before it ships to the com
 
 ## Development
 
+### Plugin integration API
+
+Other Obsidian plugins can create Termy terminals through the versioned `api.createTerminal()` interface, with an executable, literal arguments, working directory, and title. The returned handle supports input, focus, renaming, and closing. See the [public API guide](docs/public-api.md) and [TypeScript contract](src/api.ts).
+
 ```bash
 pnpm install
 pnpm build

@@ -16,6 +16,7 @@ import type { IdeBridge } from './services/ideBridge/ideBridge';
 import type { DshTuiBridge } from './services/dshTuiBridge/dshTuiBridge';
 import type { AgentContextBridge } from './services/context/agentContextBridge';
 import { TERMINAL_VIEW_TYPE, TerminalView } from './ui/terminal/terminalView';
+import { TerminalWorkspaceController } from './ui/terminal/terminalWorkspaceController';
 import { ChangelogModal } from './ui/changelog/changelogModal';
 import { i18n, t } from './i18n';
 import { debugLog, errorLog } from './utils/logger';
@@ -72,6 +73,7 @@ import {
 } from './ui/terminal/launcherInstallationsModal';
 import { resolveChangelogSection } from './utils/changelog';
 import embeddedChangelogContent from '../CHANGELOG.md';
+import type { CreateTerminalOptions, TermyApi } from './api';
 
 // Import terminal styles
 
@@ -110,6 +112,12 @@ type ElectronRemoteRuntime = {
  * Main class for the Obsidian Terminal plugin
  */
 export default class TerminalPlugin extends Plugin {
+  readonly api: TermyApi = Object.freeze({
+    version: 1,
+    createTerminal: (options: CreateTerminalOptions = {}) =>
+      this.getTerminalWorkspaceController().createPublicTerminal(options),
+  });
+  private apiAvailable = false;
   settings!: TerminalSettings;
   featureVisibilityManager!: FeatureVisibilityManager;
   private editorSelectionHighlightManager: EditorSelectionHighlightManager | null = null;
@@ -117,6 +125,7 @@ export default class TerminalPlugin extends Plugin {
   // Lazily initialized services
   private _serverManager: ServerManager | null = null;
   private _terminalService: TerminalService | null = null;
+  private _terminalWorkspaceController: TerminalWorkspaceController | null = null;
   private _ideBridge: IdeBridge | null = null;
   private _dshTuiBridge: DshTuiBridge | null = null;
   private _agentContextBridge: AgentContextBridge | null = null;
@@ -152,7 +161,6 @@ export default class TerminalPlugin extends Plugin {
    */
   private _aiLauncherSnapshotListeners: Set<(presetId: string, snapshot: AiLauncherStatusSnapshot) => void> = new Set();
   private _alwaysOnTopTerminalLeaf: WorkspaceLeaf | null = null;
-  private pendingRestoredTerminals: WeakMap<WorkspaceLeaf, TerminalInstance> = new WeakMap();
 
   // Registered preset script commands
   private registeredPresetScriptCommandIds: Set<string> = new Set();
@@ -165,6 +173,7 @@ export default class TerminalPlugin extends Plugin {
       debugLog('[TerminalPlugin] Initializing ServerManager...');
       
       const { ServerManager } = await import('./services/server/serverManager');
+      if (this._serverManager) return this._serverManager;
       
       const pluginDir = this.getPluginDir();
       const version = this.manifest.version;
@@ -200,6 +209,7 @@ export default class TerminalPlugin extends Plugin {
       const { TerminalService } = await import('./services/terminal/terminalService');
       
       const serverManager = await this.getServerManager();
+      if (this._terminalService) return this._terminalService;
         this._terminalService = new TerminalService(
           this.app,
           this.settings,
@@ -216,6 +226,19 @@ export default class TerminalPlugin extends Plugin {
       debugLog('[TerminalPlugin] TerminalService initialized');
     }
     return this._terminalService;
+  }
+
+  getTerminalWorkspaceController(): TerminalWorkspaceController {
+    if (!this._terminalWorkspaceController) {
+      this._terminalWorkspaceController = new TerminalWorkspaceController({
+        workspace: this.app.workspace,
+        getTerminalService: () => this.getTerminalService(),
+        isAvailable: () => this.apiAvailable,
+        focusNewInstance: () => this.settings.focusNewInstance,
+        lockNewInstance: () => this.settings.lockNewInstance,
+      });
+    }
+    return this._terminalWorkspaceController;
   }
 
   /**
@@ -304,12 +327,14 @@ export default class TerminalPlugin extends Plugin {
     this.addSettingTab(new TerminalSettingTab(this.app, this));
 
     debugLog(t('plugin.loadedMessage'));
+    this.apiAvailable = true;
   }
 
   /**
    * Called when the plugin unloads
    */
   onunload(): void {
+    this.apiAvailable = false;
     void this.handleUnload();
   }
 
@@ -392,7 +417,7 @@ export default class TerminalPlugin extends Plugin {
   private async initializeIdeBridge(): Promise<void> {
     if (!this._ideBridge) {
       const { IdeBridge } = await import('./services/ideBridge/ideBridge');
-      this._ideBridge = new IdeBridge(this.app, this.manifest.version);
+      this._ideBridge ??= new IdeBridge(this.app, this.manifest.version);
     }
 
     await this._ideBridge.start();
@@ -401,7 +426,7 @@ export default class TerminalPlugin extends Plugin {
   private async initializeDshTuiBridge(): Promise<void> {
     if (!this._dshTuiBridge) {
       const { DshTuiBridge } = await import('./services/dshTuiBridge/dshTuiBridge');
-      this._dshTuiBridge = new DshTuiBridge(this.app);
+      this._dshTuiBridge ??= new DshTuiBridge(this.app);
     }
 
     try {
@@ -417,7 +442,7 @@ export default class TerminalPlugin extends Plugin {
   private async initializeAgentContextBridge(): Promise<void> {
     if (!this._agentContextBridge) {
       const { AgentContextBridge } = await import('./services/context/agentContextBridge');
-      this._agentContextBridge = new AgentContextBridge(this.app, this.getPluginDir());
+      this._agentContextBridge ??= new AgentContextBridge(this.app, this.getPluginDir());
     }
 
     this._agentContextBridge.start();
@@ -796,7 +821,7 @@ export default class TerminalPlugin extends Plugin {
 
     const { workspace } = this.app;
     const mainLeaf = this.getLeafForRestoredTerminal();
-    this.pendingRestoredTerminals.set(mainLeaf, terminal);
+    this.getTerminalWorkspaceController().setPendingMount(mainLeaf, terminal, true);
     await mainLeaf.setViewState({
       type: TERMINAL_VIEW_TYPE,
       active: true,
@@ -805,29 +830,18 @@ export default class TerminalPlugin extends Plugin {
     const restoredView = await this.waitForTerminalViewInLeaf(mainLeaf);
     if (!restoredView) {
       errorLog('[TerminalPlugin] Failed to restore always-on-top terminal: target view did not load');
-      this.pendingRestoredTerminals.delete(mainLeaf);
+      this.getTerminalWorkspaceController().clearPendingMount(mainLeaf);
       await this.recoverReleasedTerminalInSourceView(terminalView, terminal, sourceWindow);
       new Notice(t('notices.terminal.alwaysOnTopRestoreFailed'), 5000);
       return;
     }
 
-    this.pendingRestoredTerminals.delete(mainLeaf);
     if (restoredView.getTerminalInstance() !== terminal) {
       restoredView.adoptTerminalInstance(terminal);
     }
     workspace.setActiveLeaf(mainLeaf, { focus: true });
     terminal.focus();
     sourceLeaf.detach();
-  }
-
-  consumePendingRestoredTerminal(leaf: WorkspaceLeaf): TerminalInstance | null {
-    const terminal = this.pendingRestoredTerminals.get(leaf);
-    if (!terminal) {
-      return null;
-    }
-
-    this.pendingRestoredTerminals.delete(leaf);
-    return terminal;
   }
 
   private getLeafForRestoredTerminal(): WorkspaceLeaf {
@@ -3121,7 +3135,7 @@ class TerminalViewPlaceholder extends TerminalView {
   async onOpen() {
     if (this.initialized || this.initializing) return;
     this.initializing = true;
-    const pendingTerminal = this.plugin.consumePendingRestoredTerminal(this.leaf);
+    const pendingMount = this.plugin.getTerminalWorkspaceController().consumePendingMount(this.leaf);
 
     // Show the loading message
     this.contentEl.empty();
@@ -3139,12 +3153,13 @@ class TerminalViewPlaceholder extends TerminalView {
       // Clear the placeholder content and initialize the terminal view
       this.contentEl.empty();
       await super.onOpen();
-      if (pendingTerminal) {
-        this.adoptTerminalInstance(pendingTerminal);
+      if (pendingMount) {
+        this.adoptTerminalInstance(pendingMount.terminal, { focus: pendingMount.focus });
       }
       this.initialized = true;
     } catch (error) {
       errorLog('[TerminalViewPlaceholder] Failed to initialize:', error);
+      this.rejectTerminalInitialization(error);
       this.contentEl.empty();
       this.contentEl.createEl('div', { 
         text: t('terminal.initFailed', { message: error instanceof Error ? error.message : String(error) }),
