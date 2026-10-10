@@ -21,10 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added OSC 0/2 process title updates for terminals while preserving custom titles.
 
 ### Changed
+- Combined native binary download and removal into one settings item with explicit local installation and version badges, contextual actions, live progress, offline guidance, and refresh detection.
 - Simplified terminal view mounting and settings rendering by removing forwarding layers and isolating workflow settings with explicit subscription cleanup.
 - Discover AI launcher commands through the login-shell PATH, including installations managed by Node.js version managers.
 
 ### Fixed
+- Re-read native binary version metadata after external file changes, require successful SHA-256 verification before installing a matching-version download, and allow binary cleanup after a failed in-flight update.
 - Fixed automatic launcher version refresh after installs and upgrades: re-check on shell command completion, keep polling for slow updates, require an observed version before reporting success, and update open launcher menus from shared snapshots.
 - Fixed dsh-TUI updates continuing to appear unfinished after a profile upgrade by detecting the runtime profile version instead of the independently installed global launcher version.
 - Release launcher badge and renderer subscriptions when settings lists refresh or the settings tab closes, and treat dismissed confirmation dialogs as cancellations.

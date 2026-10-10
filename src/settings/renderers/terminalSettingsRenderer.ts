@@ -16,7 +16,7 @@ import {
   setCurrentPlatformCustomShellPath 
 } from '../settings';
 import { t } from '../../i18n';
-import { confirmAction } from '../../ui/confirmModal';
+import { BinarySettingsRenderer } from './binarySettingsRenderer';
 import { PresetScriptSettings } from './presetScriptSettings';
 import { getSelectableShellTypes } from '../../services/terminal/shellProfiles';
 import {
@@ -111,11 +111,14 @@ export class TerminalSettingsRenderer implements ISettingsRenderer {
   private displayActiveTab: 'theme' | 'appearance' = 'theme';
   private rendererChangeUnsubscribers: Array<() => void> = [];
   private presetScriptSettings: PresetScriptSettings | null = null;
+  private binarySettings: BinarySettingsRenderer | null = null;
 
   dispose(): void {
     this.disposeRendererChangeSubscriptions();
     this.presetScriptSettings?.dispose();
     this.presetScriptSettings = null;
+    this.binarySettings?.dispose();
+    this.binarySettings = null;
   }
 
   private toggleConditionalSection(
@@ -1423,68 +1426,11 @@ export class TerminalSettingsRenderer implements ISettingsRenderer {
                 // ServerManager may not be initialized yet
               });
           });
-      })
-      .addButton((button) => {
-        button
-          .setButtonText(t('settingsDetails.advanced.binaryDownloadNow'))
-          .onClick(async () => {
-            button.setDisabled(true);
-            button.setButtonText(t('settingsDetails.advanced.binaryDownloadNowRunning'));
-
-            try {
-              const serverManager = await this.context.plugin.getServerManager();
-              serverManager.updateBinaryDownloadConfig({
-                source: settings.serverConnection.binaryDownloadSource,
-              });
-
-              const result = await serverManager.ensureBinaryUpdated();
-              if (result === 'already-ready') {
-                new Notice(t('notices.settings.binaryAlreadyUpToDate'));
-              } else if (result === 'skipped-offline') {
-                new Notice(t('notices.settings.binaryDownloadSkippedOffline'));
-              }
-            } catch (error) {
-              const message = error instanceof Error ? error.message : String(error);
-              new Notice(t('notices.settings.binaryDownloadFailed', { message }), 5000);
-            } finally {
-              button.setButtonText(t('settingsDetails.advanced.binaryDownloadNow'));
-              button.setDisabled(false);
-            }
-          });
       });
 
-    new Setting(containerEl)
-      .setName(t('settingsDetails.advanced.binaryRemove'))
-      .setDesc(t('settingsDetails.advanced.binaryRemoveDesc'))
-      .addButton((button) => {
-        button
-          .setWarning()
-          .setButtonText(t('settingsDetails.advanced.binaryRemove'))
-          .onClick(async () => {
-            button.setDisabled(true);
-            button.setButtonText(t('settingsDetails.advanced.binaryRemoveRunning'));
-
-            try {
-              const confirmed = await confirmAction(
-                this.context.app,
-                t('settingsDetails.advanced.binaryRemoveConfirm')
-              );
-              if (!confirmed) {
-                return;
-              }
-
-              const serverManager = await this.context.plugin.getServerManager();
-              await serverManager.removeBinary();
-              new Notice(t('notices.settings.binaryRemoved'));
-            } catch (error) {
-              const message = error instanceof Error ? error.message : String(error);
-              new Notice(t('notices.settings.binaryRemoveFailed', { message }), 5000);
-            } finally {
-              button.setButtonText(t('settingsDetails.advanced.binaryRemove'));
-              button.setDisabled(false);
-            }
-          });
-      });
+    this.binarySettings?.dispose();
+    this.binarySettings = new BinarySettingsRenderer(this.context);
+    this.binarySettings.render(containerEl);
 
     // Offline mode
     new Setting(containerEl)

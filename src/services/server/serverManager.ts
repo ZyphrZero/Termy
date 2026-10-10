@@ -28,9 +28,14 @@ import {
 } from './types';
 import { PtyClient } from './ptyClient';
 import { BinaryDownloader } from './binaryDownloader';
+import type { BinaryInstallationStatus, DownloadProgress } from './binaryDownloader';
 import type { BinaryDownloadConfig } from './binaryDownloadUrls';
 
 type BinaryUpdateResult = 'skipped-offline' | 'already-ready' | 'downloaded' | 'updated';
+export interface BinaryManagementStatus extends BinaryInstallationStatus {
+  operation: 'idle' | 'downloading' | 'removing';
+  progress: DownloadProgress | null;
+}
 const DEV_RELOAD_REQUEST_FILE = '.termy-reload.json';
 const DEV_RELOAD_PHASE_INSTALLING = 'installing';
 
@@ -124,6 +129,8 @@ export class ServerManager {
   /** Binary update Promise */
   private binaryUpdatePromise: Promise<BinaryUpdateResult> | null = null;
 
+  private binaryProgress: DownloadProgress | null = null;
+
   /** Whether a binary removal is waiting for an in-flight update */
   private binaryRemovalRequested = false;
 
@@ -171,6 +178,7 @@ export class ServerManager {
 
    */
   async ensureServer(): Promise<void> {
+    this.assertBinaryNotRemoving();
     // If the server is already running, return immediately
     if (this.port !== null && this.ws?.readyState === WebSocket.OPEN) {
       return;
@@ -190,6 +198,7 @@ export class ServerManager {
    * Ensure the binary has been updated (without starting the server)
    */
   async ensureBinaryUpdated(): Promise<BinaryUpdateResult> {
+    this.assertBinaryNotRemoving();
     if (this.offlineMode) {
       debugLog('[ServerManager] 离线模式已开启，跳过二进制版本检查与下载');
       return 'skipped-offline';
@@ -197,14 +206,32 @@ export class ServerManager {
     return this.ensureBinaryReady();
   }
 
+  getBinaryStatus(): BinaryManagementStatus {
+    return {
+      ...this.binaryDownloader.getInstallationStatus(),
+      operation: this.binaryRemovalRequested ? 'removing' : this.binaryProgress ? 'downloading' : 'idle',
+      progress: this.binaryProgress,
+    };
+  }
+
   /**
    * Stop the server and remove the current platform's native binary.
    */
   async removeBinary(): Promise<void> {
+    this.assertBinaryNotRemoving();
     this.binaryRemovalRequested = true;
+    this.emit('binary-status-changed');
     try {
       if (this.binaryUpdatePromise) {
-        await this.binaryUpdatePromise;
+        // Failed downloads must not prevent the user from cleaning up local files.
+        await this.binaryUpdatePromise.catch(error => {
+          debugWarn('[ServerManager] 更新失败，继续移除本地二进制:', error);
+        });
+      }
+      if (this.serverStartPromise) {
+        await this.serverStartPromise.catch(error => {
+          debugWarn('[ServerManager] 启动未完成，继续移除本地二进制:', error);
+        });
       }
 
       if (this.process || this.port !== null || this.ws) {
@@ -216,6 +243,13 @@ export class ServerManager {
       // Keep the manager reusable so the user can download the binary again.
       this.resetShutdownState();
       this.binaryRemovalRequested = false;
+      this.emit('binary-status-changed');
+    }
+  }
+
+  private assertBinaryNotRemoving(): void {
+    if (this.binaryRemovalRequested) {
+      throw new ServerManagerError(ServerErrorCode.BINARY_NOT_FOUND, t('settingsDetails.advanced.binaryRemoveRunning'));
     }
   }
 
@@ -373,6 +407,7 @@ export class ServerManager {
 
       // Ensure executable permission (Unix)
       await this.ensureExecutable(binaryPath);
+      this.assertBinaryNotRemoving();
 
       // Start the process
       this.process = this.spawn(binaryPath, ['--port', '0'], {
@@ -434,6 +469,7 @@ export class ServerManager {
   }
 
   private async ensureBinaryReady(): Promise<BinaryUpdateResult> {
+    this.assertBinaryNotRemoving();
     if (this.offlineMode) {
       const binaryPath = this.getBinaryPath();
       if (!this.fs.existsSync(binaryPath)) {
@@ -449,19 +485,23 @@ export class ServerManager {
       return this.binaryUpdatePromise;
     }
 
+    this.binaryProgress = { stage: 'checking', percent: 0 };
+    this.emit('binary-status-changed');
     this.binaryUpdatePromise = this.performBinaryUpdate();
 
     try {
       return await this.binaryUpdatePromise;
     } finally {
       this.binaryUpdatePromise = null;
+      this.binaryProgress = null;
+      this.emit('binary-status-changed');
     }
   }
 
   private async performBinaryUpdate(): Promise<BinaryUpdateResult> {
-    const skipVersionCheck = this.offlineMode;
-    const needsDownload = !this.binaryDownloader.binaryExists(skipVersionCheck);
-    const needsUpdate = this.binaryDownloader.needsUpdate(skipVersionCheck);
+    const status = this.binaryDownloader.getInstallationStatus();
+    const needsDownload = status.state === 'missing';
+    const needsUpdate = status.state === 'update-required' || status.state === 'unknown-version';
     const binaryPath = this.getBinaryPath();
     const downloadConfig = this.binaryDownloader.getDownloadConfig();
 
@@ -499,6 +539,8 @@ export class ServerManager {
 
     try {
       await this.binaryDownloader.download((progress) => {
+        this.binaryProgress = progress;
+        this.emit('binary-status-changed');
         if (progress.stage === 'downloading') {
           notice.setMessage(
             `${t(messageKey) || defaultMessage} ${Math.round(progress.percent)}%`
@@ -526,6 +568,7 @@ export class ServerManager {
         this.resetShutdownState();
         if (updateSucceeded && !this.binaryRemovalRequested) {
           window.setTimeout(() => {
+            if (this.binaryRemovalRequested) return;
             this.ensureServer().catch((error) => {
               errorLog('[ServerManager] 更新后重启服务器失败:', error);
             });
@@ -1084,6 +1127,7 @@ export class ServerManager {
       return;
     }
     this.offlineMode = offlineMode;
+    this.emit('binary-status-changed');
     debugLog('[ServerManager] 更新离线模式:', this.offlineMode);
   }
 

@@ -99,6 +99,8 @@ export class ServerManagerError extends Error {
  * Server event map
  */
 export interface ServerEvents {
+  /** Local binary installation or operation changed */
+  'binary-status-changed': () => void;
   /** Server started */
   'server-started': (port: number) => void;
   /** Server stopped */

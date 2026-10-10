@@ -848,6 +848,67 @@
   color: var(--text-muted);
 }
 
+/* Local native binary management */
+.termy-binary-setting .setting-item-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.termy-binary-setting .setting-item-control {
+  flex-wrap: wrap;
+}
+
+.termy-binary-status {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 9px;
+  font-size: var(--font-smallest);
+  font-weight: 600;
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+}
+
+.termy-binary-status.is-ready {
+  background: color-mix(in srgb, var(--color-green) 18%, transparent);
+  color: var(--color-green);
+}
+
+.termy-binary-status.is-missing,
+.termy-binary-status.is-update-required,
+.termy-binary-status.is-unknown-version {
+  background: color-mix(in srgb, var(--color-orange) 18%, transparent);
+  color: var(--color-orange);
+}
+
+.termy-binary-status.is-unavailable,
+.termy-binary-error {
+  color: var(--text-error);
+}
+
+.termy-binary-detail,
+.termy-binary-error {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.termy-binary-setting [hidden] {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .termy-binary-setting {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .termy-binary-setting .setting-item-control {
+    justify-content: flex-start;
+  }
+}
+
 /* ==================== Node Runtime Settings ==================== */
 .node-runtime-settings-card {
   display: flex;
