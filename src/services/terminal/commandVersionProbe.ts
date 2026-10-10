@@ -1,8 +1,9 @@
 /**
  * Local version probe for AI launcher CLIs.
  *
- * Runs `<tool> --version` and extracts the first MAJOR.MINOR.PATCH(-suffix)?
- * token from its output.
+ * Runs `<tool> --version` and extracts its MAJOR.MINOR.PATCH(-suffix)?
+ * version. dsh-TUI reports both launcher and profile versions; the profile
+ * is the runtime selected by the launcher and updated by `dsh plugin add`.
  *
  * Each discovered installation is invoked by its absolute executable path.
  * PATH order identifies the default; common install locations expose copies
@@ -159,9 +160,17 @@ export function compareVersions(a: string, b: string): number {
 }
 
 /**
- * Extract the first MAJOR.MINOR.PATCH(-suffix)? token from a string.
+ * Extract the runtime version from CLI output. Most commands report one
+ * version; dsh-TUI's profile line takes precedence over its launcher version.
  */
-export function extractVersionString(raw: string): string | null {
+export function extractVersionString(raw: string, command?: string): string | null {
+  if (command === 'dsh-tui') {
+    const profile = /^[ \t]*profile:[ \t]*(.*)$/m.exec(raw);
+    if (profile) {
+      // A missing or unreadable profile must not borrow a version from the launcher or path.
+      return /^(\d+\.\d+\.\d+(?:-[\w.]+)?)(?=\s|$)/.exec(profile[1])?.[1] ?? null;
+    }
+  }
   const match = VERSION_REGEX.exec(raw);
   return match ? match[0] : null;
 }
@@ -184,7 +193,7 @@ async function runProbe(command: string, options: CommandDiscoveryOptions): Prom
         useWindowsShell: process.platform === 'win32' && /\.(cmd|bat)$/i.test(candidate.path),
       });
       const output = result ? `${result.stdout}\n${result.stderr}`.trim() : '';
-      const version = result?.code === 0 ? extractVersionString(output) : null;
+      const version = result?.code === 0 ? extractVersionString(output, command) : null;
       installations[index] = {
         ...candidate,
         version,

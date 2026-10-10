@@ -25,6 +25,40 @@ test('extractVersionString handles multi-line --version output', () => {
   assert.equal(extractVersionString(raw), '1.7.2');
 });
 
+test('dsh-tui version detection uses the upgraded profile rather than the global launcher', () => {
+  const raw = '@deepseek-harness-tui/dsh-tui 0.10.2 (launcher)\r\nprofile: 0.14.0  C:\\example\\profiles\\dsh-tui';
+  assert.equal(extractVersionString(raw, 'dsh-tui'), '0.14.0');
+});
+
+test('dsh-tui version detection reports an older profile even when the launcher is newer', () => {
+  const raw = '@deepseek-harness-tui/dsh-tui 0.14.0 (launcher)\nprofile: 0.10.2  /example/profiles/dsh-tui';
+  assert.equal(extractVersionString(raw, 'dsh-tui'), '0.10.2');
+});
+
+test('dsh-tui profile versions preserve pre-release suffixes', () => {
+  const raw = '@deepseek-harness-tui/dsh-tui 0.10.2 (launcher)\nprofile: 0.14.0-rc.1  /example/profiles/dsh-tui';
+  assert.equal(extractVersionString(raw, 'dsh-tui'), '0.14.0-rc.1');
+});
+
+test('a missing dsh-tui profile cannot use the launcher version or a version in its path', () => {
+  const raw = '@deepseek-harness-tui/dsh-tui 0.10.2 (launcher)\nprofile: not installed  /example/9.9.9/dsh-tui';
+  assert.equal(extractVersionString(raw, 'dsh-tui'), null);
+});
+
+test('dsh-tui profile parsing does not accept a partial version token', () => {
+  const raw = '@deepseek-harness-tui/dsh-tui 0.10.2 (launcher)\nprofile: 0.14.0-invalid!  /example/profiles/dsh-tui';
+  assert.equal(extractVersionString(raw, 'dsh-tui'), null);
+});
+
+test('dsh-tui output without a profile line keeps the legacy single-version format', () => {
+  assert.equal(extractVersionString('@deepseek-harness-tui/dsh-tui 0.9.0', 'dsh-tui'), '0.9.0');
+});
+
+test('other commands keep their first-version parsing even when a profile line is present', () => {
+  const raw = 'example-cli 1.0.0\nprofile: 2.0.0';
+  assert.equal(extractVersionString(raw, 'example-cli'), '1.0.0');
+});
+
 test('compareVersions returns 0 for equal releases', () => {
   assert.equal(compareVersions('1.2.3', '1.2.3'), 0);
 });

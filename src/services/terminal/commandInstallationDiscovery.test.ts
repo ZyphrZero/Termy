@@ -9,6 +9,7 @@ import { discoverCommandInstallations, normalizeInstallationPath } from './comma
 import { clearCommandVersionCache, probeCommandVersion } from './commandVersionProbe.ts';
 import { getPathEnvKey } from './envHelpers.ts';
 import { runProbeCommand } from './childProcessUtils.ts';
+import { buildAiLauncherStatusSnapshot } from './aiLauncherStatus.ts';
 
 // Use real filesystem and child processes through the same boundary Obsidian provides.
 globalThis.window = {
@@ -90,6 +91,22 @@ test('changing PATH order invalidates the cached default version', async (contex
   const secondResult = await probeCommandVersion(command, { env: envWithPath([second, first]), commonDirectories: [] });
   assert.equal(firstResult.version, '1.0.0');
   assert.equal(secondResult.version, '2.0.0');
+});
+
+test('dsh-tui probes compare the executed profile version with the registry version', async (context) => {
+  const { first } = await fixture(context);
+  const executable = path.join(first, process.platform === 'win32' ? 'dsh-tui.cmd' : 'dsh-tui');
+  const contents = process.platform === 'win32'
+    ? '@echo off\r\necho @deepseek-harness-tui/dsh-tui 0.10.2 (launcher)\r\necho profile: 0.14.0  /example/profiles/dsh-tui\r\n'
+    : '#!/bin/sh\nprintf "@deepseek-harness-tui/dsh-tui 0.10.2 (launcher)\\nprofile: 0.14.0  /example/profiles/dsh-tui\\n"\n';
+  await writeFile(executable, contents, { mode: 0o755 });
+  context.after(() => clearCommandVersionCache('dsh-tui'));
+  const local = await probeCommandVersion('dsh-tui', { env: envWithPath([first]), commonDirectories: [] });
+  assert.equal(local.resolvedFrom, executable);
+  assert.equal(local.version, '0.14.0');
+  assert.equal(local.installations[0].version, '0.14.0');
+  const snapshot = buildAiLauncherStatusSnapshot({ pathAvailable: 'ready', local, latest: { version: '0.14.0' } });
+  assert.equal(snapshot.readiness, 'ready');
 });
 
 test('relative PATH entries are resolved against the discovery working directory', async (context) => {
