@@ -276,12 +276,31 @@
 }
 
 /* ==================== Changelog Modal Styles ==================== */
-.termy-changelog-modal .modal {
+/* The class is added to the modal element itself, so it must not be written as
+   a descendant of it: `.termy-changelog-modal .modal` never matched anything. */
+.modal.termy-changelog-modal {
   width: min(900px, calc(100vw - 48px));
   max-width: 900px;
   max-height: min(80vh, 900px);
   padding: 0;
   overflow: hidden;
+}
+
+/* Obsidian 1.14+ inserts an empty `.modal-header` above the content and gives it
+   `margin-bottom: 0.75em`, which would leave a blank strip above the shell. */
+.modal.termy-changelog-modal .modal-header {
+  height: 0;
+  margin-bottom: 0;
+}
+
+/* Seat the platform close button on the header actions row (30px box, 24px from
+   the right edge) so it lines up with the version badge and icon buttons. */
+.modal.termy-changelog-modal .modal-header-button,
+.modal.termy-changelog-modal .modal-close-button {
+  top: 22px;
+  inset-inline-end: 24px;
+  width: 30px;
+  height: 30px;
 }
 
 .termy-changelog-shell {
@@ -303,7 +322,8 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 22px 24px 16px;
+  /* Right padding reserves room for the close button: 24px + 30px + 8px gap */
+  padding: 22px 62px 16px 24px;
   border-bottom: 1px solid var(--background-modifier-border);
   background:
     linear-gradient(
