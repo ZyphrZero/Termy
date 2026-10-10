@@ -44,7 +44,7 @@ import {
   clearCommandAvailabilityCache,
   type CommandAvailability,
 } from './services/terminal/commandAvailability';
-import { clearCommandVersionCache, probeCommandVersion, type CommandVersionResult } from './services/terminal/commandVersionProbe';
+import { clearCommandVersionCache, compareVersions, probeCommandVersion, type CommandVersionResult } from './services/terminal/commandVersionProbe';
 import { getPathEnvKey, withEnrichedPath } from './services/terminal/envHelpers';
 import { clearLatestVersionCache, fetchLatestVersion } from './services/terminal/latestVersionRegistry';
 import {
@@ -136,6 +136,7 @@ export default class TerminalPlugin extends Plugin {
   private _statusBarItem: HTMLElement | null = null;
   private _presetScriptsMenuEl: HTMLElement | null = null;
   private _presetScriptsMenuCleanup: (() => void) | null = null;
+  private _aiLauncherMenuRowUpdates = new WeakMap<HTMLElement, (snapshot: AiLauncherStatusSnapshot) => void>();
 
   /**
    * Combined snapshot per launcher (presetId → snapshot). The snapshot
@@ -145,6 +146,7 @@ export default class TerminalPlugin extends Plugin {
    * of truth that both the menu and the install modal consume.
    */
   private _aiLauncherSnapshots: Map<string, AiLauncherStatusSnapshot> = new Map();
+  private _aiLauncherSnapshotRequests = new Map<string, symbol>();
   private _nodeRuntimeSnapshot: NodeRuntimeSnapshot | null = null;
   /**
    * Listeners notified when a launcher snapshot is updated. The settings
@@ -335,7 +337,7 @@ export default class TerminalPlugin extends Plugin {
 
     // Stop any in-flight launcher upgrade watchdogs so their poll
     // timers do not outlive the plugin lifecycle.
-    for (const presetId of this._upgradeWatchdogTimers.keys()) {
+    for (const presetId of this._upgradeWatchdogs.keys()) {
       this.stopUpgradeWatchdog(presetId);
     }
 
@@ -1861,7 +1863,13 @@ export default class TerminalPlugin extends Plugin {
     };
     activeDocument.addEventListener('mousedown', onOutsideClick, true);
     activeDocument.addEventListener('keydown', onKeydown, true);
+    const unsubscribe = this.onAiLauncherSnapshotsChanged((presetId, snapshot) => {
+      menu.querySelectorAll<HTMLElement>('[data-script-id]').forEach((item) => {
+        if (item.dataset.scriptId === presetId) this._aiLauncherMenuRowUpdates.get(item)?.(snapshot);
+      });
+    });
     this._presetScriptsMenuCleanup = () => {
+      unsubscribe();
       activeDocument.removeEventListener('mousedown', onOutsideClick, true);
       activeDocument.removeEventListener('keydown', onKeydown, true);
     };
@@ -2177,21 +2185,27 @@ export default class TerminalPlugin extends Plugin {
     });
     item.appendChild(installationsBtn);
 
+    const applySnapshot = (next: AiLauncherStatusSnapshot): void => {
+      snapshot = next;
+      this.applyLauncherBadgeStatus(badge, readinessToBadge(next.readiness));
+      item.dataset.availability = next.readiness;
+      refreshSetupButton(next);
+      refreshInstallationsButton(next);
+      setTooltip(item, this.buildLauncherTooltip(script, next), {
+        placement: 'top',
+        classes: ['preset-script-tooltip'],
+      });
+    };
+    this._aiLauncherMenuRowUpdates.set(item, applySnapshot);
+
     // Refresh in the background so the badge & click route stay accurate
     // when the user re-opens the menu after an install or upgrade. We do
     // not block menu render on this — the cached snapshot is good enough.
     if (entry.detectCommand) {
       void this.refreshAiLauncherSnapshot(entry).then((next) => {
-        if (!next) return;
-        snapshot = next;
-        this.applyLauncherBadgeStatus(badge, readinessToBadge(next.readiness));
-        item.dataset.availability = next.readiness;
-        refreshSetupButton(next);
-        refreshInstallationsButton(next);
-        setTooltip(item, this.buildLauncherTooltip(script, next), {
-          placement: 'top',
-          classes: ['preset-script-tooltip'],
-        });
+        // The shared snapshot may already contain a newer concurrent probe.
+        const current = this.getAiLauncherSnapshot(entry.presetId) ?? next;
+        if (current) applySnapshot(current);
       });
     }
 
@@ -2235,6 +2249,8 @@ export default class TerminalPlugin extends Plugin {
     entry: AiLauncherCatalogEntry,
   ): Promise<AiLauncherStatusSnapshot | null> {
     if (!entry.detectCommand) return null;
+    const request = Symbol();
+    this._aiLauncherSnapshotRequests.set(entry.presetId, request);
     const command = entry.detectCommand;
     const checkUpdates =
       this.settings.checkAiLauncherUpdates === true
@@ -2259,7 +2275,9 @@ export default class TerminalPlugin extends Plugin {
       latest,
       nodeRuntime,
     });
-    this.setAiLauncherSnapshot(entry.presetId, snapshot);
+    if (this._aiLauncherSnapshotRequests.get(entry.presetId) === request) {
+      this.setAiLauncherSnapshot(entry.presetId, snapshot);
+    }
     return snapshot;
   }
 
@@ -2590,131 +2608,121 @@ export default class TerminalPlugin extends Plugin {
       terminal.setTitle(title);
       this.updateLeafHeader(terminalView.leaf);
 
-      // Capture the version we'd consider "stale" — anything different
-      // from this signals the upgrade landed. Always null for install.
-      const before =
-        intent === 'upgrade'
-          ? this._aiLauncherSnapshots.get(entry.presetId)?.local ?? null
-          : null;
+      const before = this._aiLauncherSnapshots.get(entry.presetId) ?? null;
 
       const normalized = this.normalizePresetScriptCommand(command);
+      // Subscribe before dispatch so a fast command cannot finish before we start watching.
+      this.startUpgradeWatchdog(entry, before, intent, terminal);
       terminal.write(normalized);
       this.focusTerminalView(terminalView, terminal);
-
-      // Watchdog: poll the local probe (cheap — just spawns
-      // `<cmd> --version`) until the readiness flips or we hit the cap.
-      this.startUpgradeWatchdog(entry, before, intent);
     } catch (error) {
+      this.stopUpgradeWatchdog(entry.presetId);
       const message = error instanceof Error ? error.message : String(error);
       new Notice(t('notices.presetScript.runFailed', { message }));
     }
   }
 
   /**
-   * Poll the local version probe after an upgrade command has been
-   * dispatched into a Termy terminal. Stops on:
-   *
-   *   - the snapshot leaves `update-available` (success — local caught
-   *     up with latest, or the user was already on latest before
-   *     clicking Update);
-   *   - {@link UPGRADE_WATCHDOG_TIMEOUT_MS} elapses (give-up — upgrade
-   *     never finished, network dropped, user cancelled the install);
-   *   - the user dispatches another upgrade for the same launcher (the
-   *     new watchdog supersedes this one).
-   *
-   * Cadence: a single 5-second tick. Frequent enough that a successful
-   * upgrade flips the UI within a few seconds of finishing, but cheap
-   * enough that a stuck/cancelled upgrade only spawns ~24 probes
-   * before the timeout cuts it off.
+   * Check the selected launcher immediately after shell command completion
+   * and every five seconds for shells without integration. Only an observed
+   * installed version can complete the monitor; registry failures or policy
+   * changes must not make an unchanged version appear successfully upgraded.
    */
-  private _upgradeWatchdogTimers: Map<string, number> = new Map();
+  private _upgradeWatchdogs = new Map<string, { timer: number; unsubscribe: () => void }>();
 
   private startUpgradeWatchdog(
     entry: AiLauncherCatalogEntry,
-    versionBeforeUpgrade: string | null,
-    intent: 'install' | 'upgrade' = 'upgrade',
+    before: AiLauncherStatusSnapshot | null,
+    intent: 'install' | 'upgrade',
+    terminal: TerminalInstance,
   ): void {
     if (!entry.detectCommand) return;
     const command = entry.detectCommand;
 
-    // If a previous watchdog is already running for this launcher,
-    // cancel it. The most recent click wins.
     this.stopUpgradeWatchdog(entry.presetId);
 
     const POLL_INTERVAL_MS = 5_000;
-    const TIMEOUT_MS = 2 * 60 * 1000;
+    const TIMEOUT_MS = 10 * 60 * 1000;
     const startedAt = Date.now();
+    const targetVersion = before?.latest ?? null;
+    const versionBeforeUpgrade = before?.local ?? null;
+    const state: { timer: number; unsubscribe: () => void } = { timer: 0, unsubscribe: () => undefined };
+    this._upgradeWatchdogs.set(entry.presetId, state);
+    const isCurrent = (): boolean => this._upgradeWatchdogs.get(entry.presetId) === state;
+    let checking = false;
+    let checkAgain = false;
+    let commandExitCode: number | null = null;
 
-    const scheduleNextTick = (): void => {
-      // Stopped? Some other code path tore us down — bail.
-      if (!this._upgradeWatchdogTimers.has(entry.presetId)) return;
-
-      if (Date.now() - startedAt >= TIMEOUT_MS) {
+    const tick = async (): Promise<void> => {
+      if (!isCurrent()) return;
+      window.clearTimeout(state.timer);
+      state.timer = 0;
+      if (checking) {
+        checkAgain = true;
+        return;
+      }
+      if (!terminal.isAlive()) {
         this.stopUpgradeWatchdog(entry.presetId);
         return;
       }
-      const timer = window.setTimeout(tick, POLL_INTERVAL_MS);
-      this._upgradeWatchdogTimers.set(entry.presetId, timer);
-    };
+      if (Date.now() - startedAt >= TIMEOUT_MS) {
+        this.stopUpgradeWatchdog(entry.presetId);
+        new Notice(t('notices.presetScript.launcherUpdateCheckTimedOut', { name: entry.presetId }));
+        return;
+      }
 
-    const tick = (): void => {
-      // Always drop the local probe + registry caches so the resolver
-      // re-queries instead of returning the pre-upgrade values.
-      clearCommandVersionCache(command);
-      clearLatestVersionCache();
-
-      void this.refreshAiLauncherSnapshot(entry).then((snapshot) => {
-        if (!snapshot) {
-          // Probe failed — treat as a transient and retry on schedule.
-          scheduleNextTick();
-          return;
-        }
-        // Success criteria: the launcher is no longer flagged as
-        // update-available. This covers both "upgrade landed" and "the
-        // user was already on the latest version when they clicked
-        // Update" (e.g. they wanted to test the flow). For the latter
-        // we still log a friendly notice so the click feels acknowledged.
-        if (snapshot.readiness !== 'update-available') {
+      checking = true;
+      try {
+        // Reuse the opt-in registry cache; local upgrades only require a fresh executable probe.
+        clearCommandVersionCache(command);
+        const snapshot = await this.refreshAiLauncherSnapshot(entry);
+        if (!isCurrent()) return;
+        if (checkAgain) return;
+        if (commandExitCode !== null && commandExitCode !== 0) {
           this.stopUpgradeWatchdog(entry.presetId);
-          if (intent === 'install') {
-            if (snapshot.local) {
-              new Notice(t('notices.presetScript.launcherInstalled', {
-                name: entry.presetId,
-                version: snapshot.local,
-              }));
-            }
-          } else if (snapshot.local && snapshot.local !== versionBeforeUpgrade) {
-            new Notice(t('notices.presetScript.launcherUpdated', {
-              name: entry.presetId,
-              version: snapshot.local,
-            }));
-          } else if (snapshot.local) {
-            new Notice(t('notices.presetScript.launcherOnLatest', {
-              name: entry.presetId,
-              version: snapshot.local,
-            }));
-          }
+          new Notice(t('notices.presetScript.runFailed', { message: `exit code ${commandExitCode}` }));
           return;
         }
-        scheduleNextTick();
-      }).catch(() => {
-        scheduleNextTick();
-      });
+        if (!snapshot?.local || snapshot.readiness === 'unknown' || snapshot.readiness === 'not-installed') return;
+        const version = snapshot.local;
+        const completed = intent === 'install' || (targetVersion
+          ? compareVersions(version, targetVersion) >= 0
+          : versionBeforeUpgrade !== null && compareVersions(version, versionBeforeUpgrade) > 0);
+        if (!completed) return;
+
+        this.stopUpgradeWatchdog(entry.presetId);
+        const key = intent === 'install' ? 'notices.presetScript.launcherInstalled'
+          : version !== before?.local ? 'notices.presetScript.launcherUpdated' : 'notices.presetScript.launcherOnLatest';
+        new Notice(t(key, { name: entry.presetId, version }));
+      } catch (error) {
+        if (isCurrent()) errorLog('[TerminalPlugin] Launcher update detection failed:', error);
+      } finally {
+        checking = false;
+        if (isCurrent()) {
+          if (checkAgain) {
+            checkAgain = false;
+            void tick();
+          } else {
+            state.timer = window.setTimeout(() => { void tick(); }, POLL_INTERVAL_MS);
+          }
+        }
+      }
     };
 
-    // Seed the map so concurrent calls see we're running, then run an
-    // immediate tick — the badge flips to "Checking…" right away.
-    this._upgradeWatchdogTimers.set(entry.presetId, 0);
-    tick();
+    state.unsubscribe = terminal.onShellEvent((event) => {
+      if (event.type !== 'command_end') return;
+      commandExitCode = event.exitCode;
+      void tick();
+    });
+    void tick();
   }
 
   private stopUpgradeWatchdog(presetId: string): void {
-    const timer = this._upgradeWatchdogTimers.get(presetId);
-    if (timer === undefined) return;
-    if (timer !== 0) {
-      window.clearTimeout(timer);
-    }
-    this._upgradeWatchdogTimers.delete(presetId);
+    const state = this._upgradeWatchdogs.get(presetId);
+    if (!state) return;
+    this._upgradeWatchdogs.delete(presetId);
+    window.clearTimeout(state.timer);
+    state.unsubscribe();
   }
 
   /**

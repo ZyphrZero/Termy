@@ -163,6 +163,7 @@ export const ko: TranslationKeys = {
       launcherUpdateAvailable: '{{name}} {{local}}이(가) 설치되어 있습니다. {{latest}}을(를) 사용할 수 있습니다.',
       launcherInstalled: '{{name}}이(가) 설치되었습니다 ({{version}}).',
       launcherUpdated: '{{name}}이(가) {{version}}(으)로 업데이트되었습니다.',
+      launcherUpdateCheckTimedOut: '10분 이내에 {{name}} 업데이트를 확인하지 못했습니다. 업데이트 터미널 출력을 확인한 후 감지를 새로 고치세요.',
       launcherOnLatest: '{{name}}은(는) 최신 버전입니다 ({{version}}).',
       launcherCopied: '설치 명령을 클립보드에 복사했습니다',
     },

@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Discover AI launcher commands through the login-shell PATH, including installations managed by Node.js version managers.
 
 ### Fixed
+- Fixed automatic launcher version refresh after installs and upgrades: re-check on shell command completion, keep polling for slow updates, require an observed version before reporting success, and update open launcher menus from shared snapshots.
 - Fixed dsh-TUI updates continuing to appear unfinished after a profile upgrade by detecting the runtime profile version instead of the independently installed global launcher version.
 - Release launcher badge and renderer subscriptions when settings lists refresh or the settings tab closes, and treat dismissed confirmation dialogs as cancellations.
 - Fixed native terminal server crashes when stderr logging fails, including disconnected log pipes and full or nonblocking output streams; restored logging reports missed diagnostics, and startup port output failures return an error instead of aborting.

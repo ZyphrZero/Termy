@@ -163,6 +163,7 @@ export const ja: TranslationKeys = {
       launcherUpdateAvailable: '{{name}} {{local}} がインストールされています。{{latest}} が利用可能です。',
       launcherInstalled: '{{name}} をインストールしました ({{version}})。',
       launcherUpdated: '{{name}} を {{version}} に更新しました。',
+      launcherUpdateCheckTimedOut: '10 分以内に {{name}} の更新を確認できませんでした。更新ターミナルの出力を確認し、検出を更新してください。',
       launcherOnLatest: '{{name}} は最新バージョンです ({{version}})。',
       launcherCopied: 'インストールコマンドをクリップボードにコピーしました',
     },

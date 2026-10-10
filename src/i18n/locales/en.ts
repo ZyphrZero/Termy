@@ -163,6 +163,7 @@ export const en: TranslationKeys = {
       launcherUpdateAvailable: '{{name}} {{local}} is installed; {{latest}} is available.',
       launcherInstalled: '{{name}} installed ({{version}}).',
       launcherUpdated: '{{name}} updated to {{version}}.',
+      launcherUpdateCheckTimedOut: 'Could not confirm the {{name}} update within 10 minutes. Check the update terminal output, then use refresh detection.',
       launcherOnLatest: '{{name}} is on the latest version ({{version}}).',
       launcherCopied: 'Copied install command to clipboard',
     },

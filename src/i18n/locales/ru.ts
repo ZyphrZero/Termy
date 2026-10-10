@@ -163,6 +163,7 @@ export const ru: TranslationKeys = {
       launcherUpdateAvailable: 'Установлен {{name}} {{local}}; доступна версия {{latest}}.',
       launcherInstalled: '{{name}} установлен ({{version}}).',
       launcherUpdated: '{{name}} обновлён до {{version}}.',
+      launcherUpdateCheckTimedOut: 'Не удалось подтвердить обновление {{name}} за 10 минут. Проверьте вывод терминала обновления и повторите обнаружение.',
       launcherOnLatest: '{{name}} уже последней версии ({{version}}).',
       launcherCopied: 'Команда установки скопирована в буфер обмена',
     },

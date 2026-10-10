@@ -225,7 +225,7 @@ export class TerminalInstance {
   private currentCwd: string | null = null;
 
   // Shell integration events
-  private shellEventCallback: ((event: ShellEvent) => void) | null = null;
+  private shellEventCallbacks = new Set<(event: ShellEvent) => void>();
   private commandHistory: Array<{
     startTime: number;
     endTime: number;
@@ -981,6 +981,7 @@ export class TerminalInstance {
     this.clearPendingInput();
     this.promptMarkers = [];
     this.commandMarkers = [];
+    this.shellEventCallbacks.clear();
 
     // Unsubscribe from events
     this.disposePtyClientHandlers();
@@ -1773,14 +1774,21 @@ export class TerminalInstance {
       this.activeCommandStart = null;
     }
 
-    this.shellEventCallback?.(event);
+    for (const callback of this.shellEventCallbacks) {
+      try {
+        callback(event);
+      } catch (error) {
+        errorLog('[Terminal] Shell event listener failed:', error);
+      }
+    }
   }
 
   /**
    * Listen for shell integration events
    */
-  onShellEvent(callback: (event: ShellEvent) => void): void {
-    this.shellEventCallback = callback;
+  onShellEvent(callback: (event: ShellEvent) => void): () => void {
+    this.shellEventCallbacks.add(callback);
+    return () => { this.shellEventCallbacks.delete(callback); };
   }
 
   /**

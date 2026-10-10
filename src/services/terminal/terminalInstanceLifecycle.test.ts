@@ -91,6 +91,26 @@ test('destroy during renderer loading prevents a late server restart', async () 
   assert.equal(ensured, 0);
 });
 
+test('shell completion supports independent subscribers and releases them on unsubscribe or destroy', async () => {
+  const Constructor = await terminalConstructor;
+  const terminal = new Constructor();
+  terminal.xterm = { write: () => {}, registerMarker: () => undefined };
+  let existing = 0;
+  let monitor = 0;
+  terminal.onShellEvent(() => { existing += 1; });
+  const unsubscribe = terminal.onShellEvent(() => { monitor += 1; });
+  const event: ShellEvent = { type: 'command_end', source: 'osc133', exitCode: 0 };
+  terminal.handleShellEvent(event);
+  assert.equal(existing, 1);
+  assert.equal(monitor, 1);
+  unsubscribe();
+  terminal.handleShellEvent(event);
+  assert.equal(existing, 2);
+  assert.equal(monitor, 1);
+  terminal.destroy();
+  assert.equal(terminal.shellEventCallbacks.size, 0);
+});
+
 test('destroy while waiting for the server prevents a late PTY initialization', async () => {
   const Constructor = await terminalConstructor;
   const terminal = new Constructor();

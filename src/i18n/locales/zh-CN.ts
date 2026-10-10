@@ -163,6 +163,7 @@ export const zhCN: TranslationKeys = {
       launcherUpdateAvailable: '已安装 {{name}} {{local}}，可升级到 {{latest}}。',
       launcherInstalled: '{{name}} 已安装（{{version}}）。',
       launcherUpdated: '{{name}} 已更新到 {{version}}。',
+      launcherUpdateCheckTimedOut: '10 分钟内未能确认 {{name}} 更新完成。请检查更新终端的输出，然后点击“刷新检测”。',
       launcherOnLatest: '{{name}} 已是最新版本（{{version}}）。',
       launcherCopied: '已复制安装命令到剪贴板',
     },

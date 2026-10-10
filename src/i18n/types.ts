@@ -178,6 +178,7 @@ export interface TranslationKeys {
       launcherUpdateAvailable: string;
       launcherInstalled: string;
       launcherUpdated: string;
+      launcherUpdateCheckTimedOut: string;
       launcherOnLatest: string;
       launcherCopied: string;
     };
