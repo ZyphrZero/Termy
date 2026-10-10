@@ -9,60 +9,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.4.2] - 2026-10-10
 
-主题：**AI 启动器安装与版本诊断、Hermes / Pi / dsh-TUI 接入、公开终端 API，以及会话重连、输入与原生服务稳定性修复**。本版汇总 `1.4.1` 之后的改动，最低支持 Obsidian `1.8.7`。
+Focus: **AI launcher installation and version diagnostics, Hermes / Pi / dsh-TUI integration, a public terminal API, and fixes for session recovery, keyboard input, and native server reliability**. This release includes changes since `1.4.1` and requires Obsidian `1.8.7` or later.
 
-### ✨ AI 启动器与安装诊断
+### ✨ AI launchers and installation diagnostics
 
-- **新增 Hermes、Pi 与 dsh-TUI**：内置 `hermes`、`pi`、`dsh-tui` 工作流，可从工作流设置、状态栏菜单和命令面板启动；附带对应图标、平台安装说明与升级指引。
-- **缺少 CLI 时直接查看安装方法**：工作流设置与状态栏菜单提供可复制的安装命令；需要 Node.js 的启动器同时显示运行环境要求，支持选择自定义 Node.js 可执行文件。
-- **多安装与版本冲突诊断**：扫描 PATH、常见安装目录和 Node.js 版本管理器目录，展示可执行文件路径、版本及 PATH 优先级；只有发现不同版本时才标记冲突，检测不会自动修改本地安装。
-- **手动刷新检测**：安装或升级 CLI 后，可在工作流设置重新检测启动器、Node.js 和 shell PATH，无需关闭并重新打开设置。命令发现改为读取 login-shell PATH，改善版本管理器安装的识别。
-- **安装与升级完成验证**：shell 命令完成后重新探测版本，较慢的升级继续轮询；只有实际读到版本才报告成功，已打开的菜单同步更新状态。dsh-TUI 改为检测运行时 profile 版本，解决 profile 已升级但仍显示未完成的问题。
-- **修复误报与路径问题**：修复启动时将 Codex CLI 误判为未安装的竞态；Windows 版本探测兼容空格和 shell 特殊字符路径，并等待输出流关闭后再解析版本。解析得到的 npm 路径仅用于自定义 Node.js 安装。
-- **可选更新检查**：「检查 AI 启动器更新」默认关闭；开启后查询 npm 上的 Claude Code、Codex CLI、Pi、dsh-TUI，以及 GitHub 上的 OpenCode、Hermes 最新版本。离线模式下始终跳过这些请求。
+- **Hermes, Pi, and dsh-TUI launchers**: added built-in `hermes`, `pi`, and `dsh-tui` workflows to workflow settings, the status bar menu, and the command palette, with bundled icons, platform-specific installation instructions, and upgrade guidance.
+- **Installation help for missing CLIs**: workflow settings and the status bar menu now offer copyable installation commands. Node.js-based launchers also show runtime requirements and support selecting a custom Node.js executable.
+- **Multiple-installation and version-conflict diagnostics**: scan PATH, common installation directories, and Node.js version-manager directories to show executable paths, versions, and PATH precedence. A conflict marker appears only when different versions are found; detection does not modify local installations.
+- **Refresh detection without reopening settings**: re-check launchers, Node.js, and the shell PATH after local installs or upgrades. Command discovery now reads the login-shell PATH to find installations managed by Node.js version managers.
+- **Verified installation and upgrade completion**: re-check versions when shell commands finish, keep polling for slow upgrades, and report success only after observing a version. Open menus update from shared status snapshots. dsh-TUI now reports its runtime profile version, fixing upgrades that kept appearing unfinished after the profile had been updated.
+- **More reliable command probes**: fixed a startup race that could report Codex CLI as not installed. Windows probes handle paths containing spaces or shell metacharacters and wait for output streams to close before parsing versions. Resolved npm paths are used only with custom Node.js installations.
+- **Opt-in update checks**: **Check for AI launcher updates** remains off by default. When enabled, Termy queries npm for Claude Code, Codex CLI, Pi, and dsh-TUI, and GitHub for OpenCode and Hermes. Offline mode always suppresses these requests.
 
-### ✨ dsh-TUI 上下文桥接与公开终端 API
+### ✨ dsh-TUI context bridge and public terminal API
 
-- **独立的 dsh-TUI protocol v2 IDE bridge**：通过 `~/.dsh-tui/ide/*.lock` 发布发现信息，并向 Termy 终端注入 `DSH_TUI_IDE_PORT` / `DSH_TUI_IDE_TOKEN`；通过仅限本机的 WebSocket 转发 Obsidian 编辑器选区，包括未保存的选区文本。
-- **公开 terminal API v1**：其他 Obsidian 插件可通过 `api.createTerminal()` 创建终端，独立指定可执行程序、字面量参数、工作目录、标题和聚焦行为；返回的句柄支持写入输入、聚焦、改名与关闭。类型定义见 [`src/api.ts`](https://github.com/ZyphrZero/Termy/blob/master/src/api.ts)，接入说明见 [`docs/public-api.md`](https://github.com/ZyphrZero/Termy/blob/master/docs/public-api.md)。
-- **修复上下文绝对路径**：Linux / macOS 的 vault 根目录不再被转换为相对路径，避免 Codex Skill 写入错误位置，以及上下文快照、IDE 锁文件中的工作区和笔记路径出错。参见 [PR #29](https://github.com/ZyphrZero/Termy/pull/29)。
-- **IDE bridge 限制为本机连接**：Claude Code / OpenCode 的 WebSocket 桥接显式绑定 loopback 地址。参见 [PR #27](https://github.com/ZyphrZero/Termy/pull/27)。
+- **Independent dsh-TUI protocol-v2 IDE bridge**: advertise discovery information through `~/.dsh-tui/ide/*.lock` and inject `DSH_TUI_IDE_PORT` / `DSH_TUI_IDE_TOKEN` into Termy terminals. The local-only WebSocket bridge forwards Obsidian editor selections, including unsaved selection text.
+- **Public terminal API v1**: other Obsidian plugins can call `api.createTerminal()` with a per-terminal executable, literal arguments, working directory, title, and focus behavior. The returned handle supports input, focus, renaming, and closing. See the [TypeScript contract](https://github.com/ZyphrZero/Termy/blob/master/src/api.ts) and [integration guide](https://github.com/ZyphrZero/Termy/blob/master/docs/public-api.md).
+- **Absolute context paths**: preserve absolute vault roots on Linux and macOS to prevent misplaced Codex Skill files and incorrect workspace or note paths in context snapshots and IDE lockfiles. See [PR #29](https://github.com/ZyphrZero/Termy/pull/29).
+- **Loopback-only IDE connections**: explicitly bind the Claude Code / OpenCode WebSocket bridge to a loopback address. See [PR #27](https://github.com/ZyphrZero/Termy/pull/27).
 
-### 🔧 原生终端服务与二进制管理
+### 🔧 Native terminal server and binary management
 
-- **统一下载与移除入口**：服务设置集中显示本地安装状态、版本、可用操作和下载进度，支持刷新检测与离线提示；移除操作会先停止本地服务，再清理当前平台二进制和版本缓存，可用于故障恢复或磁盘清理。
-- **下载校验与状态刷新**：外部文件变更后重新读取版本元数据；即使下载版本与目标一致，也必须通过 SHA-256 校验后才能安装。进行中的更新失败后，仍可执行本地文件清理。
-- **修复重复下载路径**：保留 Linux / macOS 插件目录的绝对路径，同时兼容 Windows 盘符与 UNC 共享，避免二进制被写入重复拼接的相对目录。参见 [PR #26](https://github.com/ZyphrZero/Termy/pull/26)。
-- **修复诊断输出导致服务崩溃**：stderr 管道断开、输出流写满或非阻塞写入失败时，不再触发进程 abort；日志恢复后报告遗漏的诊断，启动端口输出失败则返回明确错误。参见 [PR #30](https://github.com/ZyphrZero/Termy/pull/30)。
+- **Unified download and removal controls**: server settings show local installation status, versions, available actions, and live download progress, with refresh detection and offline guidance. Removal stops the local server before deleting the current platform's binary and version cache for recovery or disk cleanup.
+- **Checksum verification and fresh metadata**: re-read version metadata after external file changes and require successful SHA-256 verification before installing a download, even when its version matches the target. A failed in-flight update no longer blocks local binary cleanup.
+- **Correct binary download paths**: preserve absolute plugin directories on Linux and macOS, with Windows drive-letter and UNC support, to avoid duplicated relative download paths. See [PR #26](https://github.com/ZyphrZero/Termy/pull/26).
+- **No aborts on diagnostic output failures**: disconnected stderr pipes, full streams, and nonblocking write failures no longer crash the native server. Restored logging reports missed diagnostics, and startup port output failures return an explicit error. See [PR #30](https://github.com/ZyphrZero/Termy/pull/30).
 
-### 🛠 会话重连与终端输入修复
+### 🛠 Session recovery and terminal input fixes
 
-> 社区贡献：[PR #12](https://github.com/ZyphrZero/Termy/pull/12)，提交人 [@Burgerjoa](https://github.com/Burgerjoa)；[PR #17](https://github.com/ZyphrZero/Termy/pull/17)，提交人 [@ProjectAILeap](https://github.com/ProjectAILeap)。感谢贡献。
+> Community contributions: [PR #12](https://github.com/ZyphrZero/Termy/pull/12) by [@Burgerjoa](https://github.com/Burgerjoa) and [PR #17](https://github.com/ZyphrZero/Termy/pull/17) by [@ProjectAILeap](https://github.com/ProjectAILeap). Thank you for the contributions.
 
-- **重连优先恢复原 PTY 会话**：WebSocket 重连时重新附着仍存活的 shell / TUI，保留会话与输入模式；原会话已结束或服务已重启时才创建新会话，并重置旧的终端模式，避免鼠标、替代屏幕或输入状态污染新 shell。参见 [PR #25](https://github.com/ZyphrZero/Termy/pull/25) 与 [PR #24](https://github.com/ZyphrZero/Termy/pull/24)。
-- **重连提示本地化**：连接丢失、恢复中和恢复成功信息随插件语言显示。参见 [PR #23](https://github.com/ZyphrZero/Termy/pull/23)。
-- **终端快捷键优先交给 TUI**：终端获得焦点时，避免 Obsidian 全局快捷键抢走 `Ctrl+B` 等按键，使 tmux 等程序能正常接收前缀键。来自 PR #17。
-- **改善 Windows CJK 输入法兼容性**：组合输入期间交给 xterm.js 的 textarea / composition 流程处理，避免原始音节按键干扰；调整 ConPTY 输入路径与输入法样式，修复韩文等输入场景中的空格和布局异常。来自 PR #12。
+- **Recover existing PTY sessions first**: reconnect to a surviving shell or TUI after a WebSocket interruption, preserving its session and input modes. Create a replacement only when the previous session is unavailable, and reset stale terminal modes before starting the new shell. See [PR #25](https://github.com/ZyphrZero/Termy/pull/25) and [PR #24](https://github.com/ZyphrZero/Termy/pull/24).
+- **Localized recovery messages**: connection-loss, recovery-in-progress, and recovery-success messages follow the plugin language. See [PR #23](https://github.com/ZyphrZero/Termy/pull/23).
+- **Keep focused terminal shortcuts available to TUIs**: prevent Obsidian's global shortcuts from consuming keys such as `Ctrl+B`, so tmux and similar programs receive their prefix keys. Contributed in PR #17.
+- **Improved Windows CJK IME compatibility**: let xterm.js handle composition through its textarea pipeline without sending raw phonetic keystrokes. Adjusted ConPTY input handling and IME styles to fix spacing and layout issues in Korean and other composition-input scenarios. Contributed in PR #12.
 
-### 🎨 工作流与显示体验
+### 🎨 Workflow and display improvements
 
-- **工作流菜单管理**：支持拖拽排序、直接编辑与删除自定义工作流，内置工作流受删除保护；多行提示展示工作流名称和已启用动作。
-- **显示设置分区**：集中组织主题与外观设置，并补充背景图片的渲染器提示；改善 Canvas 渲染器下终端选区的对比度。
-- **保留编辑器选区高亮**：从 CodeMirror 6 编辑器切换焦点到 Termy 时，已选文字仍保持可见高亮，方便将笔记片段交给终端中的 AI 工具。
-- **进程标题同步**：支持 OSC 0/2 标题更新；用户自定义标题保持优先，不会被进程标题覆盖。
-- **设置生命周期清理**：列表刷新或设置关闭时释放启动器徽章与渲染器订阅，关闭确认弹窗按取消处理；简化终端视图挂载和工作流设置渲染。
+- **Manage workflows from the menu**: drag to reorder, edit workflows directly, and delete custom workflows while protecting built-ins from deletion. Multiline tooltips show workflow names and enabled actions.
+- **Organized display settings**: group theme and appearance controls and clarify renderer requirements for background images. Improved terminal selection contrast with the Canvas renderer.
+- **Keep editor selections visible**: preserve selection highlights when focus moves from a CodeMirror 6 editor to a Termy pane, making it easier to hand selected note text to terminal-based AI tools.
+- **Process title updates**: support OSC 0/2 terminal titles while keeping user-defined titles from being overwritten.
+- **Settings lifecycle cleanup**: release launcher badge and renderer subscriptions when lists refresh or settings close, treat dismissed confirmation dialogs as cancellations, and simplify terminal mounting and workflow settings rendering.
 
-### 📦 构建与发布
+### 📦 Build and release
 
-- **构建来源证明**：发布流程为 `main.js` 和 `styles.css` 生成 GitHub build provenance attestation，便于核验产物来源。
-- **Windows 开发安装**：通过 PowerShell 停止 Termy 服务进程，并明确报告停止失败；仅修改 TypeScript 时可使用 `pnpm install:dev <vault-path> --no-rust` 跳过原生后端重编译。
-- **版本与兼容映射**：插件版本更新为 `1.4.2`，`versions.json` 保持最低 Obsidian 版本为 `1.8.7`，同步中英文 README 版本徽章。
+- **Build provenance**: release automation generates GitHub build provenance attestations for `main.js` and `styles.css` so their build origins can be verified.
+- **Windows development installs**: stop Termy server processes through PowerShell and surface process-stop failures. Use `pnpm install:dev <vault-path> --no-rust` to skip rebuilding the native backend when only TypeScript changed.
+- **Version and compatibility metadata**: update the plugin to `1.4.2`, map it to minimum Obsidian version `1.8.7` in `versions.json`, and refresh both README version badges.
 
-### 📦 升级指南
+### 📦 Upgrade guide
 
-1. **社区插件用户**：通过 Obsidian 的社区插件更新入口升级 Termy；使用 BRAT 的用户通过 BRAT 获取新标签版本。
-2. **手动安装用户**：下载 `termy-1.4.2.zip` 完整包，或更新 `main.js`、`manifest.json`、`styles.css` 并配套当前平台的 `termy-server` 二进制。
-3. **离线使用**：提前准备与 `1.4.2` 匹配的原生二进制；离线模式不会自动下载文件或检查 AI 启动器更新。遇到本地二进制状态异常时，可在服务设置中刷新检测，或移除后重新下载。
+1. **Community plugin users**: update Termy through Obsidian's community plugin updater. BRAT users can obtain the new tagged release through BRAT.
+2. **Manual installs**: download the complete `termy-1.4.2.zip` package, or update `main.js`, `manifest.json`, and `styles.css` together with the `termy-server` binary for your platform.
+3. **Offline use**: prepare a native binary matching `1.4.2` in advance. Offline mode disables automatic downloads and AI launcher update checks. For incorrect local binary status, refresh detection in server settings or remove the binary and download it again when online.
 
 ## [1.4.1] - 2026-05-16
 
