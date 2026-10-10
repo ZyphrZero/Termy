@@ -7,15 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+## [1.5.1] - 2026-10-10
+
+Focus: **AI launcher installation and version diagnostics, Hermes / Pi / dsh-TUI integration, a public terminal API, and fixes for session recovery, keyboard input, and native server reliability**. This release includes changes since `1.4.1` and requires Obsidian `1.8.7` or later.
+
+### 🛠 Obsidian review and settings fixes
 
 - Use Obsidian's DOM helpers for terminal UI elements, preserving the owning document in pop-out windows.
 - Make terminal settings sections searchable on Obsidian 1.13 and later while retaining the existing controls and support for older versions.
 - Keep the settings-group background transparent and remove its automatic row dividers in Termy's settings tab.
-
-## [1.5.0] - 2026-10-10
-
-Focus: **AI launcher installation and version diagnostics, Hermes / Pi / dsh-TUI integration, a public terminal API, and fixes for session recovery, keyboard input, and native server reliability**. This release includes changes since `1.4.1` and requires Obsidian `1.8.7` or later.
 
 ### ✨ AI launchers and installation diagnostics
 
@@ -63,13 +63,13 @@ Focus: **AI launcher installation and version diagnostics, Hermes / Pi / dsh-TUI
 
 - **Build provenance**: release automation generates GitHub build provenance attestations for `main.js` and `styles.css` so their build origins can be verified.
 - **Windows development installs**: stop Termy server processes through PowerShell and surface process-stop failures. Use `pnpm install:dev <vault-path> --no-rust` to skip rebuilding the native backend when only TypeScript changed.
-- **Version and compatibility metadata**: update the plugin to `1.5.0`, map it to minimum Obsidian version `1.8.7` in `versions.json`, and refresh both README version badges.
+- **Version and compatibility metadata**: update the plugin to `1.5.1`, map it to minimum Obsidian version `1.8.7` in `versions.json`, and refresh both README version badges.
 
 ### 📦 Upgrade guide
 
 1. **Community plugin users**: update Termy through Obsidian's community plugin updater. BRAT users can obtain the new tagged release through BRAT.
-2. **Manual installs**: download the complete `termy-1.5.0.zip` package, or update `main.js`, `manifest.json`, and `styles.css` together with the `termy-server` binary for your platform.
-3. **Offline use**: prepare a native binary matching `1.5.0` in advance. Offline mode disables automatic downloads and AI launcher update checks. For incorrect local binary status, refresh detection in server settings or remove the binary and download it again when online.
+2. **Manual installs**: download the complete `termy-1.5.1.zip` package, or update `main.js`, `manifest.json`, and `styles.css` together with the `termy-server` binary for your platform.
+3. **Offline use**: prepare a native binary matching `1.5.1` in advance. Offline mode disables automatic downloads and AI launcher update checks. For incorrect local binary status, refresh detection in server settings or remove the binary and download it again when online.
 
 ## [1.4.1] - 2026-05-16
 
