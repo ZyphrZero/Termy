@@ -19,9 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added OSC 0/2 process title updates for terminals while preserving custom titles.
 
 ### Changed
+- Simplified terminal view mounting and settings rendering by removing forwarding layers and isolating workflow settings with explicit subscription cleanup.
 - Discover AI launcher commands through the login-shell PATH, including installations managed by Node.js version managers.
 
 ### Fixed
+- Release launcher badge and renderer subscriptions when settings lists refresh or the settings tab closes, and treat dismissed confirmation dialogs as cancellations.
 - Fixed native terminal server crashes when stderr logging fails, including disconnected log pipes and full or nonblocking output streams; restored logging reports missed diagnostics, and startup port output failures return an error instead of aborting.
 - Fixed absolute vault roots being converted into relative paths in agent-context and IDE bridges on Linux and macOS, preventing misplaced Codex skill files and incorrect workspace and note paths in context snapshots and IDE lockfiles.
 - Fixed native server binaries being downloaded to a duplicated relative path on Linux and macOS by preserving absolute plugin directory paths, including Windows drive letters and UNC shares.

@@ -405,10 +405,6 @@ export class TerminalInstance {
     this.rendererType = null;
   }
 
-  private async loadRenderer(renderer: 'canvas' | 'webgl'): Promise<void> {
-    await this.loadRendererInternal(renderer);
-  }
-
   private refreshRenderer(): void {
     if (!this.containerEl) {
       return;
@@ -470,7 +466,7 @@ export class TerminalInstance {
       });
   }
 
-  private async loadRendererInternal(renderer: 'canvas' | 'webgl'): Promise<void> {
+  private async loadRenderer(renderer: 'canvas' | 'webgl'): Promise<void> {
 
     const { CanvasAddon, WebglAddon } = await loadXtermModules();
 
@@ -533,7 +529,7 @@ export class TerminalInstance {
 
   private async fallbackToCanvasRenderer(): Promise<void> {
     try {
-      await this.loadRendererInternal('canvas');
+      await this.loadRenderer('canvas');
       this.fit();
     } catch (error) {
       errorLog('[Terminal] Canvas renderer fallback failed:', error);

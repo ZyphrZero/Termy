@@ -320,7 +320,6 @@ export class TerminalView extends ItemView {
 
   adoptTerminalInstance(terminal: TerminalInstance, options: TerminalAttachOptions = {}): void {
     if (this.closed) throw new Error('Termy terminal view is closed');
-    this.detachTerminalBindings();
     this.terminalInstance = terminal;
     this.bindTerminalInstance(terminal);
     this.registerTerminalHyperlinkHandler(terminal.getXterm());
@@ -368,15 +367,7 @@ export class TerminalView extends ItemView {
         await this.terminalService.destroyTerminal(terminal.id);
         return;
       }
-      this.terminalInstance = terminal;
-      this.bindTerminalInstance(terminal);
-      this.registerTerminalHyperlinkHandler(terminal.getXterm());
-      this.updateAppearanceStyles();
-      this.attachTerminalToContainer();
-      this.setupResizeObserver();
-      this.initResolve?.(terminal);
-      this.initResolve = null;
-      this.initReject = null;
+      this.adoptTerminalInstance(terminal);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorLog('[TerminalView] Init failed:', errorMessage);

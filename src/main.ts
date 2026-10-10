@@ -16,7 +16,7 @@ import type { IdeBridge } from './services/ideBridge/ideBridge';
 import type { DshTuiBridge } from './services/dshTuiBridge/dshTuiBridge';
 import type { AgentContextBridge } from './services/context/agentContextBridge';
 import { TERMINAL_VIEW_TYPE, TerminalView } from './ui/terminal/terminalView';
-import { TerminalWorkspaceController } from './ui/terminal/terminalWorkspaceController';
+import { TerminalWorkspaceController, waitForTerminalView } from './ui/terminal/terminalWorkspaceController';
 import { ChangelogModal } from './ui/changelog/changelogModal';
 import { i18n, t } from './i18n';
 import { debugLog, errorLog } from './utils/logger';
@@ -136,14 +136,6 @@ export default class TerminalPlugin extends Plugin {
   private _statusBarItem: HTMLElement | null = null;
   private _presetScriptsMenuEl: HTMLElement | null = null;
   private _presetScriptsMenuCleanup: (() => void) | null = null;
-
-  /**
-   * Snapshot of the most recent availability probe result, keyed by the
-   * detect command (e.g. `claude`, `codex`). The status bar menu reads it
-   * synchronously so the "hide unavailable launchers" setting can act on a
-   * known state. The map is refreshed by {@link refreshAiLauncherAvailability}.
-   */
-  private _aiLauncherAvailability: Map<string, CommandAvailability> = new Map();
 
   /**
    * Combined snapshot per launcher (presetId → snapshot). The snapshot
@@ -827,7 +819,7 @@ export default class TerminalPlugin extends Plugin {
       active: true,
     });
 
-    const restoredView = await this.waitForTerminalViewInLeaf(mainLeaf);
+    const restoredView = await waitForTerminalView(mainLeaf);
     if (!restoredView) {
       errorLog('[TerminalPlugin] Failed to restore always-on-top terminal: target view did not load');
       this.getTerminalWorkspaceController().clearPendingMount(mainLeaf);
@@ -856,22 +848,6 @@ export default class TerminalPlugin extends Plugin {
       workspace.setActiveLeaf(previousActiveLeaf, { focus: false });
     }
     return leaf;
-  }
-
-  private async waitForTerminalViewInLeaf(
-    leaf: WorkspaceLeaf,
-    timeoutMs = 2000,
-  ): Promise<TerminalView | null> {
-    const deadline = Date.now() + timeoutMs;
-    do {
-      if (this.isTerminalView(leaf.view)) {
-        await leaf.loadIfDeferred?.();
-        return leaf.view;
-      }
-      await this.delay(50);
-    } while (Date.now() < deadline);
-
-    return this.isTerminalView(leaf.view) ? leaf.view : null;
   }
 
   private async recoverReleasedTerminalInSourceView(
@@ -2063,18 +2039,6 @@ export default class TerminalPlugin extends Plugin {
   }
 
   /**
-   * Re-run the probe pipeline for a single launcher and return the fresh
-   * snapshot. Public wrapper around {@link refreshSingleLauncherSnapshot}
-   * so the settings page can refresh one row in place after the cached
-   * snapshot is shown.
-   */
-  async refreshAiLauncherSnapshot(
-    entry: AiLauncherCatalogEntry,
-  ): Promise<AiLauncherStatusSnapshot | null> {
-    return this.refreshSingleLauncherSnapshot(entry);
-  }
-
-  /**
    * Open the launcher install/upgrade modal for the given preset. Public
    * entry point for the settings page so rows there can offer the same
    * "Update now" affordance the status bar menu does.
@@ -2105,40 +2069,7 @@ export default class TerminalPlugin extends Plugin {
    *      extra outbound traffic" promise holds out of the box.
    */
   private async refreshAiLauncherAvailability(): Promise<void> {
-    const checkUpdates =
-      this.settings.checkAiLauncherUpdates === true
-      && this.settings.serverConnection?.offlineMode !== true;
-
-    const tasks = AI_LAUNCHER_CATALOG.map(async (entry) => {
-      if (!entry.detectCommand) {
-        return;
-      }
-      const command = entry.detectCommand;
-      const probe = await this.probeLauncher(command);
-      const nodeRuntime = await this.detectNodeRuntimeForLauncher(entry, probe.pathAvailable, probe.localVersion.version);
-
-      this._aiLauncherAvailability.set(command, probe.pathAvailable);
-
-      let latest: { version: string | null; error?: string } | null = null;
-      if (checkUpdates && entry.versionRegistry) {
-        try {
-          latest = await fetchLatestVersion(entry.versionRegistry);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          latest = { version: null, error: message };
-        }
-      }
-
-      const snapshot = buildAiLauncherStatusSnapshot({
-        pathAvailable: probe.pathAvailable,
-        local: probe.localVersion,
-        latest,
-        nodeRuntime,
-      });
-      this.setAiLauncherSnapshot(entry.presetId, snapshot);
-    });
-
-    await Promise.all(tasks);
+    await Promise.all(AI_LAUNCHER_CATALOG.map((entry) => this.refreshAiLauncherSnapshot(entry)));
   }
 
   /**
@@ -2265,7 +2196,7 @@ export default class TerminalPlugin extends Plugin {
     // when the user re-opens the menu after an install or upgrade. We do
     // not block menu render on this — the cached snapshot is good enough.
     if (entry.detectCommand) {
-      void this.refreshSingleLauncherSnapshot(entry).then((next) => {
+      void this.refreshAiLauncherSnapshot(entry).then((next) => {
         if (!next) return;
         snapshot = next;
         this.applyLauncherBadgeStatus(badge, readinessToBadge(next.readiness));
@@ -2315,7 +2246,7 @@ export default class TerminalPlugin extends Plugin {
    * and update the cached snapshot in place. Returns the new snapshot so
    * callers can re-render without re-querying the Map.
    */
-  private async refreshSingleLauncherSnapshot(
+  async refreshAiLauncherSnapshot(
     entry: AiLauncherCatalogEntry,
   ): Promise<AiLauncherStatusSnapshot | null> {
     if (!entry.detectCommand) return null;
@@ -2326,7 +2257,6 @@ export default class TerminalPlugin extends Plugin {
 
     const probe = await this.probeLauncher(command);
     const nodeRuntime = await this.detectNodeRuntimeForLauncher(entry, probe.pathAvailable, probe.localVersion.version);
-    this._aiLauncherAvailability.set(command, probe.pathAvailable);
 
     let latest: { version: string | null; error?: string } | null = null;
     if (checkUpdates && entry.versionRegistry) {
@@ -2748,7 +2678,7 @@ export default class TerminalPlugin extends Plugin {
       clearCommandVersionCache(command);
       clearLatestVersionCache();
 
-      void this.refreshSingleLauncherSnapshot(entry).then((snapshot) => {
+      void this.refreshAiLauncherSnapshot(entry).then((snapshot) => {
         if (!snapshot) {
           // Probe failed — treat as a transient and retry on schedule.
           scheduleNextTick();

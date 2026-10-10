@@ -6,7 +6,7 @@ import type { TerminalInstance } from '../../services/terminal/terminalInstance.
 import type { TerminalLaunchSpec } from '../../services/terminal/terminalTypes.ts';
 import type { TerminalService } from '../../services/terminal/terminalService.ts';
 import { TERMINAL_VIEW_TYPE } from './terminalViewType.ts';
-import { TerminalWorkspaceController } from './terminalWorkspaceController.ts';
+import { TerminalWorkspaceController, waitForTerminalView } from './terminalWorkspaceController.ts';
 
 class TestTerminal {
   readonly id = 'terminal-example';
@@ -190,4 +190,36 @@ test('invalid API options reject before requesting a terminal service', async ()
   f.setAvailable(false);
   await assert.rejects(f.controller.createPublicTerminal({}), /not loaded/);
   assert.equal(f.launchSpecs.length, 0);
+});
+
+test('waiting loads a deferred leaf and returns its current terminal view', async () => {
+  const f = await fixture();
+  const leaf = f.workspace.getLeaf('tab');
+  const realView = leaf.view;
+  let loads = 0;
+  Object.assign(leaf, {
+    view: { getViewType: () => TERMINAL_VIEW_TYPE },
+    loadIfDeferred: () => {
+      loads += 1;
+      leaf.view = realView;
+      return Promise.resolve();
+    },
+  });
+  assert.equal(await waitForTerminalView(leaf), realView);
+  assert.equal(loads, 1);
+});
+
+test('waiting returns null for an unavailable view at the deadline', async () => {
+  const f = await fixture();
+  const leaf = f.workspace.getLeaf('tab');
+  Object.assign(leaf, { view: { getViewType: () => 'empty' } });
+  assert.equal(await waitForTerminalView(leaf, 0), null);
+});
+
+test('waiting propagates a deferred leaf load failure', async () => {
+  const f = await fixture();
+  const leaf = f.workspace.getLeaf('tab');
+  const error = new Error('Deferred view failed');
+  Object.assign(leaf, { loadIfDeferred: () => Promise.reject(error) });
+  await assert.rejects(waitForTerminalView(leaf), (actual) => actual === error);
 });

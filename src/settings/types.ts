@@ -20,13 +20,6 @@ export interface RendererContext {
   expandedSections: Set<string>;
 }
 
-/**
- * Settings renderer interface
- */
 export interface ISettingsRenderer {
-  /**
-   * Render settings content
-   * @param context Renderer context
-   */
   render(context: RendererContext): void;
 }

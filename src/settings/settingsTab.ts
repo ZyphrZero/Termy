@@ -50,6 +50,11 @@ export class TerminalSettingTab extends PluginSettingTab {
     this.terminalRenderer.render(context);
   }
 
+  hide(): void {
+    this.terminalRenderer.dispose();
+    super.hide();
+  }
+
   /**
    * Render the header section
    */

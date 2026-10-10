@@ -28,6 +28,26 @@ export type TerminalMountRequest = {
   focus: boolean;
 };
 
+export async function waitForTerminalView(
+  leaf: WorkspaceLeaf,
+  timeoutMs = 2000,
+): Promise<TerminalView | null> {
+  await leaf.loadIfDeferred?.();
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const view = leaf.view;
+    if (view && typeof (view as TerminalView).getTerminalInstance === 'function'
+      && view.getViewType() === TERMINAL_VIEW_TYPE) {
+      return view as TerminalView;
+    }
+    if (Date.now() >= deadline) return null;
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 50));
+  } while (Date.now() < deadline);
+  const view = leaf.view;
+  return view && typeof (view as TerminalView).getTerminalInstance === 'function'
+    && view.getViewType() === TERMINAL_VIEW_TYPE ? view as TerminalView : null;
+}
+
 /** Coordinates the small boundary between TerminalService and Obsidian workspace views. */
 export class TerminalWorkspaceController {
   private readonly pendingMounts: WeakMap<WorkspaceLeaf, TerminalMountRequest> = new WeakMap();
@@ -52,7 +72,7 @@ export class TerminalWorkspaceController {
       this.setPendingMount(leaf, terminal, focus);
       if (this.dependencies.lockNewInstance()) leaf.setPinned(true);
       await leaf.setViewState({ type: TERMINAL_VIEW_TYPE, active: focus });
-      const view = await this.waitForTerminalView(leaf);
+      const view = await waitForTerminalView(leaf);
       if (!view) throw new Error('Termy terminal view did not load');
       const attached = await view.waitForTerminalInstance();
       if (attached !== terminal) throw new Error('Termy terminal view did not attach the requested terminal');
@@ -86,26 +106,6 @@ export class TerminalWorkspaceController {
 
   clearPendingMount(leaf: WorkspaceLeaf): void {
     this.pendingMounts.delete(leaf);
-  }
-
-  private async waitForTerminalView(
-    leaf: WorkspaceLeaf,
-    timeoutMs = 2000,
-  ): Promise<TerminalView | null> {
-    await leaf.loadIfDeferred?.();
-    const deadline = Date.now() + timeoutMs;
-    do {
-      const view = leaf.view;
-      if (view && typeof (view as TerminalView).getTerminalInstance === 'function'
-        && view.getViewType() === TERMINAL_VIEW_TYPE) {
-        return view as TerminalView;
-      }
-      if (Date.now() >= deadline) return null;
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 50));
-    } while (Date.now() < deadline);
-    const view = leaf.view;
-    return view && typeof (view as TerminalView).getTerminalInstance === 'function'
-      && view.getViewType() === TERMINAL_VIEW_TYPE ? view as TerminalView : null;
   }
 
   private createHandle(terminal: TerminalInstance, service: TerminalService): TerminalHandle {
