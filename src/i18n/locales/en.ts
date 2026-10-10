@@ -334,9 +334,9 @@ export const en: TranslationKeys = {
       aiLauncherTitleInstall: 'Install {{name}}',
       aiLauncherTitleUpdate: 'Update {{name}}',
       hideUnavailableAiLaunchers: 'Hide unavailable AI launchers',
-      hideUnavailableAiLaunchersDesc: 'Hide built-in AI launchers (Claude code, codex, opencode, hermes, pi, dsh-TUI) whose CLI is not installed on your machine. Affects the status bar menu only.',
+      hideUnavailableAiLaunchersDesc: 'Hide built-in AI launchers whose CLI is not installed on your machine. Affects the status bar menu only.',
       checkAiLauncherUpdates: 'Check for AI launcher updates',
-      checkAiLauncherUpdatesDesc: 'Compare the installed Claude code, codex, opencode, hermes, pi, and dsh-TUI versions against the upstream registry (npm and GitHub releases). Disabled by default; offline mode also disables this regardless of the toggle.',
+      checkAiLauncherUpdatesDesc: 'Compare installed AI launcher versions against the upstream registry (npm and GitHub releases). Disabled by default; offline mode also disables this regardless of the toggle.',
       aiLauncherOfflineHint: 'Offline mode is on, so update checks are suppressed. Turn off "offline mode" under server connection to receive update notifications.',
     },
     advanced: {
