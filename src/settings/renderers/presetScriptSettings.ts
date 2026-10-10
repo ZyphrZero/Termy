@@ -68,6 +68,15 @@ export class PresetScriptSettings {
     });
 
     const headerActions = headerEl.createDiv({ cls: 'preset-scripts-header-actions' });
+    const refreshBtn = headerActions.createEl('button', {
+      cls: 'preset-scripts-refresh-btn',
+      text: t('settingsDetails.terminal.aiLauncherInstallationRefresh'),
+    });
+    refreshBtn.setAttribute('type', 'button');
+    refreshBtn.addEventListener('click', () => {
+      void this.refreshLauncherStatuses(refreshBtn);
+    });
+
     const addBtn = headerActions.createEl('button', { cls: 'preset-scripts-add-btn' });
     addBtn.textContent = t('settingsDetails.terminal.presetScriptsAdd');
     addBtn.addEventListener('click', () => {
@@ -149,6 +158,19 @@ export class PresetScriptSettings {
     };
     refreshOfflineHintVisibility();
     this.refreshOfflineHint = refreshOfflineHintVisibility;
+  }
+
+  private async refreshLauncherStatuses(button: HTMLButtonElement): Promise<void> {
+    if (this.disposed || button.disabled) return;
+    button.disabled = true;
+    button.textContent = t('settingsDetails.terminal.aiLauncherInstallationRefreshing');
+    try {
+      // Snapshot subscriptions repaint existing rows as each fresh probe finishes.
+      await this.context.plugin.refreshAiLauncherStatusFromSettings({ force: true });
+    } finally {
+      button.disabled = false;
+      button.textContent = t('settingsDetails.terminal.aiLauncherInstallationRefresh');
+    }
   }
 
   private renderPresetScriptsList(listEl: HTMLElement): void {

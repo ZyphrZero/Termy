@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added a refresh detection button to preset workflow settings to re-check Coding Agent versions, installation diagnostics, shell PATH, and Node.js after local installs or upgrades without reopening settings.
 - Added public terminal API v1 for other Obsidian plugins: create terminals with a per-instance executable, literal arguments, working directory, title, and focus behavior, and receive a handle for input, focus, renaming, and closing.
 - Added a server settings control to stop the local terminal server and remove the current platform's native binary and version cache for recovery or disk cleanup.
 - Added local AI launcher installation diagnostics with paths, versions, PATH precedence, and version-conflict warnings. The conflict marker appears only when different versions are found; checks cover PATH and common installer / Node.js version-manager directories without modifying installations.

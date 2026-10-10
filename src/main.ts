@@ -1959,34 +1959,16 @@ export default class TerminalPlugin extends Plugin {
   }
 
   /**
-   * Public hook used by the settings renderer when the user flips the
-   * "Check for AI launcher updates" toggle. Re-runs the snapshot pipeline
-   * so badges in the status bar menu reflect the new policy on the very
-   * next open without waiting for the user to click again.
-   *
-   * Pass `force: true` to drop the in-memory caches first. The toggle
-   * itself does not need this, but turning offline mode OFF does — any
-   * registry lookup we did while offline returned an error and got
-   * cached for 12 hours, so without a force-clear the badges would
-   * still show "no latest version known" until the TTL elapses.
+   * Refresh launcher snapshots after a manual refresh or update-policy change.
+   * Pass `force: true` to discard cached local and registry results and
+   * re-detect the shell PATH and Node.js runtime before probing launchers.
    */
   async refreshAiLauncherStatusFromSettings(options: { force?: boolean } = {}): Promise<void> {
     try {
       if (options.force) {
         clearLatestVersionCache();
-        clearNodeRuntimeCache();
-        clearEnrichedShellEnvCache();
-        for (const entry of AI_LAUNCHER_CATALOG) {
-          if (entry.detectCommand) {
-            clearCommandVersionCache(entry.detectCommand);
-          }
-        }
       }
-      // Re-warm the enriched login-shell PATH first; the launcher
-      // probe in `refreshAiLauncherAvailability` reads it through the
-      // shared cache.
-      await getEnrichedShellEnv().catch(() => null);
-      await this.refreshAiLauncherAvailability();
+      await this.warmRuntimeAndLaunchers(options);
     } catch (error) {
       errorLog('[TerminalPlugin] Failed to refresh AI launcher status:', error);
     }

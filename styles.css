@@ -1037,16 +1037,20 @@
   color: var(--text-muted);
 }
 
+.preset-scripts-refresh-btn,
 .preset-scripts-add-btn {
   padding: 6px 12px;
   font-size: 12px;
   border-radius: 6px;
   border: none;
   cursor: pointer;
-  background-color: var(--interactive-accent);
-  color: var(--text-on-accent);
   transition: background-color 0.15s ease, transform 0.1s ease;
   white-space: nowrap;
+}
+
+.preset-scripts-add-btn {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
 }
 
 .preset-scripts-add-btn:hover {

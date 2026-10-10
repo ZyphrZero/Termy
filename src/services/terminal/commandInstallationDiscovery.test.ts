@@ -93,6 +93,24 @@ test('changing PATH order invalidates the cached default version', async (contex
   assert.equal(secondResult.version, '2.0.0');
 });
 
+test('explicit refresh detects an in-place upgrade before the version cache expires', async (context) => {
+  const { first } = await fixture(context);
+  const executable = await writeAgent(first, '1.0.0');
+  const options = { env: envWithPath([first]), commonDirectories: [] };
+  const beforeUpgrade = await probeCommandVersion(command, options);
+  assert.equal(beforeUpgrade.version, '1.0.0');
+
+  await writeAgent(first, '2.0.0');
+  const cached = await probeCommandVersion(command, options);
+  assert.equal(cached.version, '1.0.0');
+
+  clearCommandVersionCache(command);
+  const refreshed = await probeCommandVersion(command, options);
+  assert.equal(refreshed.resolvedFrom, executable);
+  assert.equal(refreshed.version, '2.0.0');
+  assert.equal(refreshed.installations[0].version, '2.0.0');
+});
+
 test('dsh-tui probes compare the executed profile version with the registry version', async (context) => {
   const { first } = await fixture(context);
   const executable = path.join(first, process.platform === 'win32' ? 'dsh-tui.cmd' : 'dsh-tui');

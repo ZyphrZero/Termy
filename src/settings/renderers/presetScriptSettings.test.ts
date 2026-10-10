@@ -158,6 +158,58 @@ test('launcher row updates its own badge and button from the same snapshot', asy
   f.settings.dispose();
 });
 
+test('workflow refresh forces detection, blocks repeat clicks, and updates upgraded launcher rows', async () => {
+  const f = await fixture();
+  const container = new RowElement();
+  f.settings.render(container);
+  const button = container.findByClass('preset-scripts-refresh-btn');
+  assert.ok(button, 'The workflow header must expose refresh detection');
+  assert.equal(button.textContent, 'Refresh detection');
+  assert.equal(button.attributes.get('type'), 'button');
+  const row = elements();
+  f.settings.attachLauncherSnapshotInfo(row, f.entry);
+  f.emit(snapshot('update-available'));
+
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => { finish = resolve; });
+  let calls = 0;
+  f.plugin.refreshAiLauncherStatusFromSettings = (options) => {
+    calls += 1;
+    assert.equal(options.force, true);
+    return pending;
+  };
+  button.listeners.get('click')?.();
+  assert.equal(button.disabled, true);
+  assert.equal(button.textContent, 'Detecting…');
+  button.listeners.get('click')?.();
+  assert.equal(calls, 1);
+  f.emit({ ...snapshot('ready'), local: '2.0.0' });
+  finish();
+  await pending;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, 'Refresh detection');
+  assert.equal(row.versionEl.textContent, 'v2.0.0');
+  assert.equal(row.updateButton.classes.has('is-hidden'), true);
+  f.settings.dispose();
+});
+
+test('workflow refresh restores the button after failure and ignores closed settings', async () => {
+  const f = await fixture();
+  const button = new RowElement();
+  let calls = 0;
+  f.plugin.refreshAiLauncherStatusFromSettings = () => {
+    calls += 1;
+    return Promise.reject(new Error('Detection failed'));
+  };
+  await assert.rejects(f.settings.refreshLauncherStatuses(button), /Detection failed/);
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, 'Refresh detection');
+  f.settings.dispose();
+  await f.settings.refreshLauncherStatuses(button);
+  assert.equal(calls, 1);
+});
+
 test('list refresh releases old row subscriptions and tab disposal releases the current rows', async () => {
   const f = await fixture();
   const previous = elements();
