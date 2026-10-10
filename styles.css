@@ -2,6 +2,8 @@
 
 /* ==================== Settings Header ==================== */
 .terminal-settings-container {
+  --setting-items-background: transparent;
+  --setting-items-divider-width: 0;
   display: flex;
   flex-direction: column;
 }
@@ -110,6 +112,13 @@
 
 .terminal-settings-content {
   flex: 1;
+}
+
+/* Declarative rows host the same cards as the legacy settings tab. */
+.terminal-settings-container .setting-item.terminal-settings-section {
+  display: block;
+  padding: 0;
+  border-top: 0;
 }
 
 .terminal-settings-validation {

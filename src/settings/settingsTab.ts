@@ -3,7 +3,7 @@
  * Provides the terminal configuration interface
  */
 
-import type { App } from 'obsidian';
+import type { App, SettingDefinitionItem } from 'obsidian';
 import { PluginSettingTab, setIcon } from 'obsidian';
 import type TerminalPlugin from '../main';
 import { TerminalSettingsRenderer } from './renderers/terminalSettingsRenderer';
@@ -23,6 +23,29 @@ export class TerminalSettingTab extends PluginSettingTab {
     super(app, plugin);
     this.plugin = plugin;
     this.terminalRenderer = new TerminalSettingsRenderer();
+  }
+
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    const context: RendererContext = {
+      app: this.app,
+      plugin: this.plugin,
+      containerEl: this.containerEl,
+      expandedSections: this.expandedSections,
+    };
+
+    return [
+      {
+        name: t('settings.header.title'),
+        searchable: false,
+        render: setting => {
+          this.containerEl.addClass('terminal-settings-container');
+          setting.settingEl.empty();
+          setting.settingEl.addClass('terminal-settings-section');
+          this.renderHeader(setting.settingEl);
+        },
+      },
+      ...this.terminalRenderer.getSettingDefinitions(context),
+    ];
   }
 
   display(): void {

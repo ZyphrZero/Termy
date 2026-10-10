@@ -517,7 +517,7 @@ export class TerminalInstance {
 
   private checkRendererSupport(renderer: 'canvas' | 'webgl'): boolean {
     try {
-      const canvas = activeDocument.createElement('canvas');
+      const canvas = activeWindow.createEl('canvas');
       if (renderer === 'canvas') {
         return !!canvas.getContext('2d');
       }
@@ -1210,7 +1210,7 @@ export class TerminalInstance {
       existingMenu.remove();
     }
 
-    const menu = menuDocument.createElement('div');
+    const menu = menuDocument.win.createDiv();
     menu.className = 'terminal-context-menu';
     menu.setCssStyles({ left: `${x}px`, top: `${y}px` });
 
@@ -1475,12 +1475,12 @@ export class TerminalInstance {
     onClick: () => void,
     shortcut?: string
   ): HTMLElement {
-    const item = menuDocument.createElement('div');
+    const item = menuDocument.win.createDiv();
     item.className = 'terminal-context-menu-item';
     if (!enabled) item.addClass('is-disabled');
 
     // Icon
-    const iconEl = menuDocument.createElement('span');
+    const iconEl = menuDocument.win.createSpan();
     iconEl.className = 'terminal-context-menu-icon';
     if (!enabled) iconEl.addClass('is-disabled');
     const iconSvg = this.createIconElement(menuDocument, icon);
@@ -1488,14 +1488,14 @@ export class TerminalInstance {
     item.appendChild(iconEl);
 
     // Text
-    const textEl = menuDocument.createElement('span');
+    const textEl = menuDocument.win.createSpan();
     textEl.textContent = label;
     textEl.className = 'terminal-context-menu-text';
     item.appendChild(textEl);
 
     // Shortcut
     if (shortcut) {
-      const shortcutEl = menuDocument.createElement('span');
+      const shortcutEl = menuDocument.win.createSpan();
       shortcutEl.textContent = shortcut;
       shortcutEl.className = 'terminal-context-menu-shortcut';
       item.appendChild(shortcutEl);
@@ -1522,27 +1522,27 @@ export class TerminalInstance {
     icon: string,
     items: Array<{ label: string; icon: string; onClick: () => void; shortcut?: string }>
   ): HTMLElement {
-    const container = menuDocument.createElement('div');
+    const container = menuDocument.win.createDiv();
     container.className = 'terminal-context-submenu-container';
 
-    const item = menuDocument.createElement('div');
+    const item = menuDocument.win.createDiv();
     item.className = 'terminal-context-menu-item';
 
     // Icon
-    const iconEl = menuDocument.createElement('span');
+    const iconEl = menuDocument.win.createSpan();
     iconEl.className = 'terminal-context-menu-icon';
     const iconSvg = this.createIconElement(menuDocument, icon);
     if (iconSvg) iconEl.appendChild(iconSvg);
     item.appendChild(iconEl);
 
     // Text
-    const textEl = menuDocument.createElement('span');
+    const textEl = menuDocument.win.createSpan();
     textEl.textContent = label;
     textEl.className = 'terminal-context-menu-text';
     item.appendChild(textEl);
 
     // Arrow
-    const arrowEl = menuDocument.createElement('span');
+    const arrowEl = menuDocument.win.createSpan();
     arrowEl.className = 'terminal-context-submenu-arrow';
     const arrowSvg = this.createIconElement(menuDocument, 'chevron-right');
     if (arrowSvg) arrowEl.appendChild(arrowSvg);
@@ -1551,7 +1551,7 @@ export class TerminalInstance {
     container.appendChild(item);
 
     // Submenu
-    const submenu = menuDocument.createElement('div');
+    const submenu = menuDocument.win.createDiv();
     submenu.className = 'terminal-context-submenu';
 
     items.forEach(subItem => {
@@ -1591,7 +1591,7 @@ export class TerminalInstance {
    * Create a separator
    */
   private createSeparator(menuDocument: Document): HTMLElement {
-    const separator = menuDocument.createElement('div');
+    const separator = menuDocument.win.createDiv();
     separator.className = 'terminal-context-separator';
     return separator;
   }

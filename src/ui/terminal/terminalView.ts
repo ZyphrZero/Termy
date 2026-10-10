@@ -185,7 +185,7 @@ export class TerminalView extends ItemView {
     if (!this.searchContainer) return;
 
     // Search input
-    this.searchInput = activeDocument.createElement('input');
+    this.searchInput = activeWindow.createEl('input');
     this.searchInput.type = 'text';
     this.searchInput.placeholder = t('terminal.search.placeholder');
     this.searchInput.className = 'terminal-search-input';
@@ -233,7 +233,7 @@ export class TerminalView extends ItemView {
    * Create a search button
    */
   private createSearchButton(icon: string, title: string, onClick: () => void): HTMLElement {
-    const btn = activeDocument.createElement('button');
+    const btn = activeWindow.createEl('button');
     btn.className = 'terminal-search-btn clickable-icon';
     btn.title = title;
     setIcon(btn, icon);
@@ -531,9 +531,9 @@ export class TerminalView extends ItemView {
     if (this.dropHintEl && this.dropHintEl.isConnected) return;
 
     const doc = this.terminalContainer.ownerDocument;
-    const hint = doc.createElement('div');
+    const hint = doc.win.createDiv();
     hint.className = 'terminal-drop-hint';
-    const textEl = doc.createElement('div');
+    const textEl = doc.win.createDiv();
     textEl.className = 'terminal-drop-hint__text';
     hint.appendChild(textEl);
     this.dropHintEl = hint;
@@ -1192,7 +1192,7 @@ export class TerminalView extends ItemView {
     const existingLayer = this.terminalContainer.querySelector('.terminal-background-image');
     if (existingLayer) return;
 
-    const bgLayer = activeDocument.createElement('div');
+    const bgLayer = activeWindow.createDiv();
     bgLayer.className = 'terminal-background-image';
     this.terminalContainer.prepend(bgLayer);
   }

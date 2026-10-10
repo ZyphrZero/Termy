@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Use Obsidian's DOM helpers for terminal UI elements, preserving the owning document in pop-out windows.
+- Make terminal settings sections searchable on Obsidian 1.13 and later while retaining the existing controls and support for older versions.
+- Keep the settings-group background transparent and remove its automatic row dividers in Termy's settings tab.
+
 ## [1.5.0] - 2026-10-10
 
 Focus: **AI launcher installation and version diagnostics, Hermes / Pi / dsh-TUI integration, a public terminal API, and fixes for session recovery, keyboard input, and native server reliability**. This release includes changes since `1.4.1` and requires Obsidian `1.8.7` or later.

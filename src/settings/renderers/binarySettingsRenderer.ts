@@ -60,7 +60,8 @@ export class BinarySettingsRenderer {
     setting.addButton(button => {
       this.removeButton = button
         .setButtonText(t('settingsDetails.advanced.binaryRemove'))
-        .setWarning()
+        // Keep the warning style compatible with Obsidian versions before 1.13.
+        .setClass('mod-warning')
         .setDisabled(true)
         .onClick(() => this.run('remove'));
       button.buttonEl.hidden = true;

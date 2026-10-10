@@ -21,6 +21,11 @@
 declare global {
   interface Window {
     require: NodeJS.Require;
+    // Obsidian exposes its global DOM factories on each window at runtime.
+    createEl: typeof createEl;
+    createDiv: typeof createDiv;
+    createSpan: typeof createSpan;
+    createSvg: typeof createSvg;
   }
 }
 

@@ -19,6 +19,8 @@ Match the existing codebase: 2-space indentation in TypeScript and 4 spaces in R
 
 ## Mandatory Lint Check
 
+Whenever installing or updating dependencies, install the latest published `obsidian` and `eslint-plugin-obsidianmd` packages. Resolve compatibility and lint findings instead of downgrading either package to avoid them.
+
 Run `pnpm lint:obsidian` (which uses `eslint.obsidian.config.js`) on every turn that modifies `src/**/*.ts`. This is required, not optional — fix any violations and re-run until it passes before finishing the turn. The Obsidian config enforces rules the general `pnpm lint` does not, including `@microsoft/sdl/no-inner-html`, `@typescript-eslint/no-base-to-string`, `@typescript-eslint/no-redundant-type-constituents`, `@typescript-eslint/no-unnecessary-type-assertion`, `@typescript-eslint/require-await`, and `obsidianmd/ui/sentence-case-locale-module`. The config ignores `src/**/*.test.ts`, `scripts/`, `rust-servers/`, `binaries/`, `plugin-package/`, `main.js`, and `styles.css`; if a change is entirely inside those paths the lint step can be skipped, otherwise run it. `pnpm lint` (general config) is optional and complementary, but `lint:obsidian` is the required gate.
 
 ## Obsidian Developer Policy — Not Allowed

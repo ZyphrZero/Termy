@@ -261,7 +261,7 @@ function renderLobeIcon(el: HTMLElement, iconKey: string): boolean {
     // bar menu). Styling the host element directly leaks the chip
     // onto whatever 36×36 button frame it lands in, which made the
     // icon look inconsistent across surfaces.
-    const chip = activeDocument.createElement('span');
+    const chip = activeWindow.createSpan();
     chip.className = 'preset-script-solid-bg-chip';
     chip.appendChild(svg);
     el.appendChild(chip);
@@ -309,11 +309,11 @@ export function renderPresetScriptIcon(el: HTMLElement, iconName: string): void 
       el.style.setProperty('--preset-script-icon-color', color);
     }
 
-    const svg = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const svg = activeWindow.createSvg('svg');
     svg.setAttribute('viewBox', '0 0 24 24');
     svg.setAttribute('aria-hidden', 'true');
 
-    const path = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const path = activeWindow.createSvg('path');
     path.setAttribute('fill', 'currentColor');
     path.setAttribute('d', icon.path);
     svg.appendChild(path);

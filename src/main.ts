@@ -118,7 +118,7 @@ export default class TerminalPlugin extends Plugin {
       this.getTerminalWorkspaceController().createPublicTerminal(options),
   });
   private apiAvailable = false;
-  settings!: TerminalSettings;
+  declare settings: TerminalSettings;
   featureVisibilityManager!: FeatureVisibilityManager;
   private editorSelectionHighlightManager: EditorSelectionHighlightManager | null = null;
   
@@ -643,7 +643,7 @@ export default class TerminalPlugin extends Plugin {
     // Create the SVG icon and label
     const iconEl = createTermyLogoSvg(18);
     iconEl.addClass('terminal-status-bar-icon');
-    const labelEl = activeDocument.createElement('span');
+    const labelEl = activeWindow.createSpan();
     labelEl.addClass('terminal-status-bar-label');
     labelEl.textContent = 'Termy';
     this._statusBarItem.append(iconEl, labelEl);
@@ -883,7 +883,7 @@ export default class TerminalPlugin extends Plugin {
       return;
     }
 
-    const badge = tabHeader.ownerDocument.createElement('span');
+    const badge = tabHeader.ownerDocument.win.createSpan();
     badge.addClass(ALWAYS_ON_TOP_TAB_BADGE_CLASS);
     badge.setAttribute('aria-label', t('terminal.contextMenu.alreadyPinnedToTop'));
     badge.setAttribute('title', t('terminal.contextMenu.alreadyPinnedToTop'));
@@ -1601,18 +1601,18 @@ export default class TerminalPlugin extends Plugin {
 
       // Match Obsidian's built-in empty-state actions so the entry keeps the
       // same icon, spacing, hover state, and keyboard behavior.
-      const terminalAction = activeDocument.createElement('div');
+      const terminalAction = activeWindow.createDiv();
       terminalAction.className = 'text-icon-button tappable mod-pill empty-state-action terminal-plugin-terminal-action';
       terminalAction.setAttribute('tabindex', '0');
       terminalAction.setAttribute('role', 'button');
 
-      const iconEl = activeDocument.createElement('span');
+      const iconEl = activeWindow.createSpan();
       iconEl.className = 'text-button-icon';
       setIcon(iconEl, 'terminal');
       terminalAction.appendChild(iconEl);
 
       const label = t('commands.openTerminal');
-      const labelEl = activeDocument.createElement('span');
+      const labelEl = activeWindow.createSpan();
       labelEl.className = 'text-button-label';
       labelEl.textContent = label;
       terminalAction.appendChild(labelEl);
@@ -1892,11 +1892,11 @@ export default class TerminalPlugin extends Plugin {
     const scripts = (this.settings.presetScripts ?? []);
     const visibleScripts = scripts.filter(script => script.showInStatusBar);
     const hideUnavailable = this.settings.hideUnavailableAiLaunchers === true;
-    const menu = activeDocument.createElement('div');
+    const menu = activeWindow.createDiv();
     menu.className = 'preset-scripts-menu';
     menu.setAttribute('role', 'menu');
 
-    const listEl = activeDocument.createElement('div');
+    const listEl = activeWindow.createDiv();
     listEl.className = 'preset-scripts-menu-list';
     listEl.setAttribute('role', 'none');
 
@@ -1926,7 +1926,7 @@ export default class TerminalPlugin extends Plugin {
       || regularScripts.length > 0;
 
     if (!hasAnyContent) {
-      const empty = activeDocument.createElement('div');
+      const empty = activeWindow.createDiv();
       empty.className = 'preset-scripts-menu-item is-disabled';
       empty.textContent = t('settingsDetails.terminal.presetScriptsEmpty');
       listEl.appendChild(empty);
@@ -1949,10 +1949,10 @@ export default class TerminalPlugin extends Plugin {
 
     menu.appendChild(listEl);
 
-    const footerEl = activeDocument.createElement('div');
+    const footerEl = activeWindow.createDiv();
     footerEl.className = 'preset-scripts-menu-footer';
 
-    const addItem = activeDocument.createElement('div');
+    const addItem = activeWindow.createDiv();
     addItem.className = 'preset-scripts-menu-item preset-scripts-menu-add';
     addItem.setAttribute('role', 'menuitem');
     addItem.textContent = `+ ${t('settingsDetails.terminal.presetScriptsAddMenu')}`;
@@ -2073,17 +2073,17 @@ export default class TerminalPlugin extends Plugin {
     const title = t('settingsDetails.terminal.aiLauncherCategoryCodingAgent');
     const desc = t('settingsDetails.terminal.aiLauncherCategoryCodingAgentDesc');
 
-    const header = activeDocument.createElement('div');
+    const header = activeWindow.createDiv();
     header.className = 'preset-scripts-menu-section-header';
     header.dataset.category = category;
     header.setAttribute('role', 'presentation');
 
-    const titleEl = activeDocument.createElement('div');
+    const titleEl = activeWindow.createDiv();
     titleEl.className = 'preset-scripts-menu-section-title';
     titleEl.textContent = title;
     header.appendChild(titleEl);
 
-    const descEl = activeDocument.createElement('div');
+    const descEl = activeWindow.createDiv();
     descEl.className = 'preset-scripts-menu-section-desc';
     descEl.textContent = desc;
     header.appendChild(descEl);
@@ -2100,18 +2100,18 @@ export default class TerminalPlugin extends Plugin {
     script: PresetScript,
     entry: AiLauncherCatalogEntry,
   ): HTMLElement {
-    const item = activeDocument.createElement('div');
+    const item = activeWindow.createDiv();
     item.className = 'preset-scripts-menu-item preset-scripts-menu-launcher';
     item.setAttribute('role', 'menuitem');
     item.dataset.scriptId = script.id;
     item.dataset.launcherCategory = entry.category;
 
-    const iconEl = activeDocument.createElement('div');
+    const iconEl = activeWindow.createDiv();
     iconEl.className = 'preset-scripts-menu-icon';
     renderPresetScriptIcon(iconEl, script.icon || 'terminal');
     item.appendChild(iconEl);
 
-    const labelEl = activeDocument.createElement('div');
+    const labelEl = activeWindow.createDiv();
     labelEl.className = 'preset-scripts-menu-label';
     labelEl.textContent = script.name || t('settingsDetails.terminal.presetScriptsUnnamed');
     item.appendChild(labelEl);
@@ -2143,7 +2143,7 @@ export default class TerminalPlugin extends Plugin {
 
     // Missing launchers offer installation instructions; installed launchers
     // offer the upgrade command when one is available for this platform.
-    const setupBtn = activeDocument.createElement('button');
+    const setupBtn = activeWindow.createEl('button');
     setupBtn.className = 'preset-scripts-menu-action-btn preset-scripts-menu-action-setup';
     setupBtn.setAttribute('type', 'button');
     setupBtn.addEventListener('click', (e) => {
@@ -2168,7 +2168,7 @@ export default class TerminalPlugin extends Plugin {
     refreshSetupButton(cachedSnapshot ?? null);
     item.appendChild(setupBtn);
 
-    const installationsBtn = activeDocument.createElement('button');
+    const installationsBtn = activeWindow.createEl('button');
     installationsBtn.className = 'preset-scripts-menu-action-btn preset-scripts-menu-action-installations is-installation-warning';
     setIcon(installationsBtn, 'alert-triangle');
     installationsBtn.setAttribute('aria-label', t('settingsDetails.terminal.aiLauncherVersionConflict'));
@@ -2433,7 +2433,7 @@ export default class TerminalPlugin extends Plugin {
    * from the cached resolver state and refreshes asynchronously.
    */
   private createLauncherStatusBadge(status: AiLauncherStatus): HTMLElement {
-    const badge = activeDocument.createElement('span');
+    const badge = activeWindow.createSpan();
     badge.className = 'preset-scripts-menu-status-badge';
     this.applyLauncherBadgeStatus(badge, status);
     return badge;
@@ -2738,23 +2738,23 @@ export default class TerminalPlugin extends Plugin {
     let draggedScriptId: string | null = null;
 
     scripts.forEach((script) => {
-      const item = activeDocument.createElement('div');
+      const item = activeWindow.createDiv();
       item.className = 'preset-scripts-menu-item';
       item.setAttribute('role', 'menuitem');
       item.setAttribute('draggable', 'true');
       item.dataset.scriptId = script.id;
 
-      const dragHandle = activeDocument.createElement('div');
+      const dragHandle = activeWindow.createDiv();
       dragHandle.className = 'preset-scripts-menu-drag-handle';
       setIcon(dragHandle, 'grip-vertical');
       item.appendChild(dragHandle);
 
-      const iconEl = activeDocument.createElement('div');
+      const iconEl = activeWindow.createDiv();
       iconEl.className = 'preset-scripts-menu-icon';
       renderPresetScriptIcon(iconEl, script.icon || 'terminal');
       item.appendChild(iconEl);
 
-      const labelEl = activeDocument.createElement('div');
+      const labelEl = activeWindow.createDiv();
       labelEl.className = 'preset-scripts-menu-label';
       labelEl.textContent = script.name || t('settingsDetails.terminal.presetScriptsUnnamed');
       item.appendChild(labelEl);
@@ -2764,10 +2764,10 @@ export default class TerminalPlugin extends Plugin {
         classes: ['preset-script-tooltip'],
       });
 
-      const actionsEl = activeDocument.createElement('div');
+      const actionsEl = activeWindow.createDiv();
       actionsEl.className = 'preset-scripts-menu-actions';
 
-      const editBtn = activeDocument.createElement('button');
+      const editBtn = activeWindow.createEl('button');
       editBtn.className = 'preset-scripts-menu-action-btn';
       editBtn.setAttribute('aria-label', t('modals.presetScript.titleEdit'));
       setIcon(editBtn, 'pencil');
@@ -2780,7 +2780,7 @@ export default class TerminalPlugin extends Plugin {
 
       const isBuiltIn = DEFAULT_PRESET_SCRIPTS.some(d => d.id === script.id);
       if (!isBuiltIn) {
-        const deleteBtn = activeDocument.createElement('button');
+        const deleteBtn = activeWindow.createEl('button');
         deleteBtn.className = 'preset-scripts-menu-action-btn preset-scripts-menu-action-delete';
         deleteBtn.setAttribute('aria-label', t('common.delete'));
         setIcon(deleteBtn, 'trash');
@@ -3062,7 +3062,7 @@ class TerminalViewPlaceholder extends TerminalView {
 
     // Show the loading message
     this.contentEl.empty();
-    this.contentEl.createEl('div', {
+    this.contentEl.createDiv({
       text: t('terminal.loading'),
       cls: 'terminal-loading'
     });
@@ -3084,7 +3084,7 @@ class TerminalViewPlaceholder extends TerminalView {
       errorLog('[TerminalViewPlaceholder] Failed to initialize:', error);
       this.rejectTerminalInitialization(error);
       this.contentEl.empty();
-      this.contentEl.createEl('div', { 
+      this.contentEl.createDiv({
         text: t('terminal.initFailed', { message: error instanceof Error ? error.message : String(error) }),
         cls: 'terminal-error'
       });

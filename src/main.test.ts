@@ -95,10 +95,15 @@ async function fixture() {
   };
   let now = 0;
   let timerId = 0;
-  const document = { body: new Element(), createElement: () => new Element(), addEventListener: () => {}, removeEventListener: () => {} };
+  const document = {
+    body: new Element(),
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  };
   const output = { exports: {} as { default: new () => Plugin } };
   runInNewContext(await source, {
     module: output, exports: output.exports, process, console, activeDocument: document,
+    activeWindow: { createDiv: () => new Element(), createSpan: () => new Element(), createEl: () => new Element() },
     Date: class extends Date { static now(): number { return now; } },
     window: { setTimeout: (callback: () => void) => { timers.set(++timerId, callback); return timerId; }, clearTimeout: (id: number) => timers.delete(id) },
     require: (id: string) => {

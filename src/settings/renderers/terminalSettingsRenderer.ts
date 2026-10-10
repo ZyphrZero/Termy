@@ -3,7 +3,7 @@
  * Responsible for rendering all terminal-related settings
  */
 
-import type { ColorComponent, TextComponent } from 'obsidian';
+import type { ColorComponent, SettingDefinition, SliderComponent, TextComponent } from 'obsidian';
 import { Setting, Notice, Platform } from 'obsidian';
 import type { ISettingsRenderer, RendererContext } from '../types';
 import type { BinaryDownloadSource, ShellType } from '../settings';
@@ -41,6 +41,23 @@ const NEW_INSTANCE_BEHAVIORS = [
 const CURSOR_STYLES = ['block', 'underline', 'bar'] as const;
 const BACKGROUND_IMAGE_SIZES = ['cover', 'contain', 'auto'] as const;
 const PREFERRED_RENDERERS = ['canvas', 'webgl'] as const;
+
+interface TerminalSettingsSection {
+  name: string;
+  aliases: string[];
+  render: (containerEl: HTMLElement) => void;
+  dispose?: () => void;
+}
+
+function withSliderValueTooltip(slider: SliderComponent): SliderComponent {
+  // Native value tooltips also work on Obsidian versions without inline slider values.
+  const updateTooltip = (): void => {
+    slider.sliderEl.title = slider.sliderEl.value;
+  };
+  updateTooltip();
+  slider.sliderEl.addEventListener('input', updateTooltip);
+  return slider;
+}
 
 type NewInstanceBehavior = (typeof NEW_INSTANCE_BEHAVIORS)[number];
 type CursorStyle = (typeof CURSOR_STYLES)[number];
@@ -154,30 +171,99 @@ export class TerminalSettingsRenderer implements ISettingsRenderer {
   render(context: RendererContext): void {
     this.dispose();
     this.context = context;
-    const containerEl = context.containerEl;
+    for (const section of this.getSections(context)) {
+      section.render(context.containerEl);
+    }
+  }
 
-    // Shell program settings card
-    this.renderShellSettings(containerEl);
+  getSettingDefinitions(context: RendererContext): SettingDefinition[] {
+    // Registration indexes these definitions without rendering or probing CLIs.
+    // Custom renderers retain validation, live previews, and saveSettings effects.
+    return this.getSections(context).map(section => ({
+      name: section.name,
+      aliases: section.aliases,
+      render: (setting: Setting) => {
+        section.dispose?.();
+        this.context = context;
+        setting.settingEl.empty();
+        setting.settingEl.addClass('terminal-settings-section', 'terminal-settings-content');
+        section.render(setting.settingEl);
+        return section.dispose;
+      },
+    }));
+  }
 
-    // Instance behavior settings card
-    this.renderInstanceBehaviorSettings(containerEl);
+  private getSections(context: RendererContext): TerminalSettingsSection[] {
+    const terminalNames = (...keys: string[]): string[] =>
+      keys.map(key => t(`settingsDetails.terminal.${key}`));
+    const advancedNames = (...keys: string[]): string[] =>
+      keys.map(key => t(`settingsDetails.advanced.${key}`));
 
-    // Preset scripts settings card
-    this.renderNodeRuntimeSettings(containerEl);
-    this.presetScriptSettings = new PresetScriptSettings(context);
-    this.presetScriptSettings.render(containerEl);
-
-    // Display settings card (unified theme + appearance)
-    this.renderDisplaySettings(containerEl);
-
-    // Behavior settings card
-    this.renderBehaviorSettings(containerEl);
-
-    // Server connection settings card
-    this.renderServerConnectionSettings(containerEl);
-
-    // Feature visibility settings card
-    this.renderVisibilitySettings(containerEl);
+    return [
+      {
+        name: t('settingsDetails.terminal.shellSettings'),
+        aliases: terminalNames('defaultShell', 'customShellPath', 'defaultArgs', 'autoEnterVault'),
+        render: el => this.renderShellSettings(el),
+      },
+      {
+        name: t('settingsDetails.terminal.instanceBehavior'),
+        aliases: terminalNames('newInstanceLayout', 'createNearExisting', 'focusNewInstance', 'lockNewInstance'),
+        render: el => this.renderInstanceBehaviorSettings(el),
+      },
+      {
+        name: t('settingsDetails.terminal.nodeRuntimeSettings'),
+        aliases: [...terminalNames('customNodePath'), 'Node.js', 'npm'],
+        render: el => this.renderNodeRuntimeSettings(el),
+      },
+      {
+        name: t('settingsDetails.terminal.presetScripts'),
+        aliases: [
+          ...terminalNames('hideUnavailableAiLaunchers', 'checkAiLauncherUpdates', 'aiLauncherInstallationRefresh'),
+          ...context.plugin.settings.presetScripts.map(script => script.name).filter(Boolean),
+        ],
+        render: el => {
+          this.presetScriptSettings = new PresetScriptSettings(this.context);
+          this.presetScriptSettings.render(el);
+        },
+        dispose: () => {
+          this.presetScriptSettings?.dispose();
+          this.presetScriptSettings = null;
+        },
+      },
+      {
+        name: t('settingsDetails.terminal.displaySettings'),
+        aliases: terminalNames(
+          'useObsidianTheme', 'fontSize', 'fontFamily', 'cursorStyle', 'cursorBlink', 'rendererType',
+          'backgroundColor', 'foregroundColor', 'backgroundImage', 'backgroundImageOpacity',
+          'backgroundImageSize', 'backgroundImagePosition', 'blurEffect', 'blurAmount', 'textOpacity',
+        ),
+        render: el => this.renderDisplaySettings(el),
+        dispose: () => this.disposeRendererChangeSubscriptions(),
+      },
+      {
+        name: t('settingsDetails.terminal.behaviorSettings'),
+        aliases: terminalNames('scrollback'),
+        render: el => this.renderBehaviorSettings(el),
+      },
+      {
+        name: t('settingsDetails.advanced.serverConnection'),
+        aliases: advancedNames('binaryDownloadSource', 'binaryManagement', 'offlineMode', 'resetToDefaults'),
+        render: el => this.renderServerConnectionSettings(el),
+        dispose: () => {
+          this.binarySettings?.dispose();
+          this.binarySettings = null;
+        },
+      },
+      {
+        name: t('visibility.visibilitySettings'),
+        aliases: [
+          ...['showInCommandPalette', 'showInRibbon', 'showInNewTab', 'showInStatusBar']
+            .map(key => t(`visibility.${key}`)),
+          ...advancedNames('performanceAndDebug', 'debugMode'),
+        ],
+        render: el => this.renderVisibilitySettings(el),
+      },
+    ];
   }
 
   /**
@@ -602,15 +688,13 @@ export class TerminalSettingsRenderer implements ISettingsRenderer {
     new Setting(container)
       .setName(t('settingsDetails.terminal.fontSize'))
       .setDesc(t('settingsDetails.terminal.fontSizeDesc'))
-      .addSlider(slider => slider
-        .setLimits(8, 24, 1)
-        .setValue(this.context.plugin.settings.fontSize)
-        .setDynamicTooltip()
-        .onChange((value) => {
-          void this.updateAppearanceSetting(() => {
-            this.context.plugin.settings.fontSize = value;
-          });
-        }));
+      .addSlider(slider => withSliderValueTooltip(
+        slider.setLimits(8, 24, 1).setValue(this.context.plugin.settings.fontSize),
+      ).onChange((value) => {
+        void this.updateAppearanceSetting(() => {
+          this.context.plugin.settings.fontSize = value;
+        });
+      }));
 
     // Font family
     new Setting(container)
@@ -835,15 +919,13 @@ export class TerminalSettingsRenderer implements ISettingsRenderer {
     new Setting(container)
       .setName(t('settingsDetails.terminal.backgroundImageOpacity'))
       .setDesc(t('settingsDetails.terminal.backgroundImageOpacityDesc'))
-      .addSlider(slider => slider
-        .setLimits(0, 1, 0.05)
-        .setValue(this.context.plugin.settings.backgroundImageOpacity ?? 0.5)
-        .setDynamicTooltip()
-        .onChange((value) => {
-          void this.updateThemeSetting(() => {
-            this.context.plugin.settings.backgroundImageOpacity = value;
-          });
-        }));
+      .addSlider(slider => withSliderValueTooltip(
+        slider.setLimits(0, 1, 0.05).setValue(this.context.plugin.settings.backgroundImageOpacity ?? 0.5),
+      ).onChange((value) => {
+        void this.updateThemeSetting(() => {
+          this.context.plugin.settings.backgroundImageOpacity = value;
+        });
+      }));
 
     // Background image size
     new Setting(container)
@@ -918,15 +1000,13 @@ export class TerminalSettingsRenderer implements ISettingsRenderer {
     new Setting(container)
       .setName(t('settingsDetails.terminal.textOpacity'))
       .setDesc(t('settingsDetails.terminal.textOpacityDesc'))
-      .addSlider(slider => slider
-        .setLimits(0, 1, 0.05)
-        .setValue(this.context.plugin.settings.textOpacity ?? 1.0)
-        .setDynamicTooltip()
-        .onChange((value) => {
-          void this.updateThemeSetting(() => {
-            this.context.plugin.settings.textOpacity = value;
-          });
-        }));
+      .addSlider(slider => withSliderValueTooltip(
+        slider.setLimits(0, 1, 0.05).setValue(this.context.plugin.settings.textOpacity ?? 1.0),
+      ).onChange((value) => {
+        void this.updateThemeSetting(() => {
+          this.context.plugin.settings.textOpacity = value;
+        });
+      }));
   }
 
   /**
@@ -937,15 +1017,13 @@ export class TerminalSettingsRenderer implements ISettingsRenderer {
     new Setting(container)
       .setName(t('settingsDetails.terminal.blurAmount'))
       .setDesc(t('settingsDetails.terminal.blurAmountDesc'))
-      .addSlider(slider => slider
-        .setLimits(0, 20, 1)
-        .setValue(this.context.plugin.settings.blurAmount ?? 10)
-        .setDynamicTooltip()
-        .onChange((value) => {
-          void this.updateThemeSetting(() => {
-            this.context.plugin.settings.blurAmount = value;
-          });
-        }));
+      .addSlider(slider => withSliderValueTooltip(
+        slider.setLimits(0, 20, 1).setValue(this.context.plugin.settings.blurAmount ?? 10),
+      ).onChange((value) => {
+        void this.updateThemeSetting(() => {
+          this.context.plugin.settings.blurAmount = value;
+        });
+      }));
   }
 
   /**

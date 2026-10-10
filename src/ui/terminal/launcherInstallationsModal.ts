@@ -54,11 +54,11 @@ export class LauncherInstallationsModal extends Modal {
     for (const installation of this.snapshot?.installations ?? []) {
       const row = list.createDiv({ cls: 'termy-launcher-installation-row' });
       const heading = row.createDiv({ cls: 'termy-launcher-installation-heading' });
-      heading.createEl('span', {
+      heading.createSpan({
         text: installation.version ? `v${installation.version}` : t('settingsDetails.terminal.aiLauncherInstallationVersionUnknown'),
       });
       if (installation.isDefault || !installation.onPath) {
-        heading.createEl('span', {
+        heading.createSpan({
           cls: 'termy-launcher-installation-marker',
           text: t(installation.isDefault
             ? 'settingsDetails.terminal.aiLauncherDefaultInstallation'
