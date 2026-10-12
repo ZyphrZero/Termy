@@ -3,9 +3,9 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:
 import { createRequire, registerHooks } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
-import test, { after } from 'node:test';
+import test, { after, type TestContext } from 'node:test';
 import { pathToFileURL } from 'node:url';
-import type { App } from 'obsidian';
+import type { App, Editor, EditorPosition } from 'obsidian';
 import { resolvePluginDir } from '../../utils/pluginPath.ts';
 import { TERMY_CODEX_SKILL_RELATIVE_PATH, TERMY_CONTEXT_PATH_ENV } from './agentContext.ts';
 
@@ -170,4 +170,135 @@ test('both bridges return no vault root when a filesystem adapter is unavailable
   assert.equal(agentBridge.getVaultRoot(), null);
   assert.equal(ideBridge.getVaultPath(), null);
   assert.equal(ideBridge.captureSelection(), null);
+});
+
+function createSelectionBridge(t: TestContext, paths = ['notes/demo.md']) {
+  const vaultRoot = mkdtempSync(join(tmpdir(), 'termy-context-selection-'));
+  const app = createApp(vaultRoot);
+  const callbacks = new Map<string, () => void>();
+  const notes = paths.map(path => {
+    const state = { text: 'selected text', from: 0, to: 13, focused: false };
+    const editor = {
+      getSelection: () => state.text,
+      getCursor: (side: string) => ({ line: 0, ch: side === 'from' ? state.from : state.to }),
+      posToOffset: (position: EditorPosition) => position.ch,
+      hasFocus: () => state.focused,
+    } as unknown as Editor;
+    return { state, view: { file: { path }, editor } };
+  });
+  let activeNote = notes[0];
+  let openNotes = [...notes];
+  const workspace = {
+    activeEditor: activeNote.view as typeof app.workspace.activeEditor,
+    on: (event: string, callback: () => void) => {
+      callbacks.set(event, callback);
+      return {};
+    },
+    offref: () => {},
+    getActiveFile: () => activeNote.view.file,
+    getLeavesOfType: () => openNotes.map(note => ({ view: note.view })),
+  };
+  app.workspace = workspace as unknown as App['workspace'];
+  const bridge = new AgentContextBridge(app, join(vaultRoot, '.obsidian', 'plugins', 'termy'));
+  t.after(() => {
+    bridge.stop();
+    rmSync(vaultRoot, { recursive: true, force: true });
+  });
+
+  activeNote.state.focused = true;
+  bridge.start();
+
+  return {
+    notes,
+    focusNote(index: number) {
+      activeNote.state.focused = false;
+      activeNote = notes[index];
+      activeNote.state.focused = true;
+      workspace.activeEditor = activeNote.view as typeof app.workspace.activeEditor;
+      callbacks.get('active-leaf-change')?.();
+    },
+    focusTerminal() {
+      activeNote.state.focused = false;
+      workspace.activeEditor = null;
+      callbacks.get('active-leaf-change')?.();
+    },
+    closeNote(index: number) {
+      openNotes = openNotes.filter(note => note !== notes[index]);
+      callbacks.get('layout-change')?.();
+    },
+    refresh() {
+      // Run the same refresh used by the polling timer, without waiting a second.
+      (bridge as unknown as { refreshSnapshot(): void }).refreshSnapshot();
+      return JSON.parse(readFileSync(bridge.getContextFilePath(), 'utf8')) as {
+        activeFile: { vaultPath: string; hasFocus: boolean } | null;
+        selection: {
+          text: string;
+          isEmpty: boolean;
+          from: { line: number; ch: number; offset: number };
+          to: { line: number; ch: number; offset: number };
+        } | null;
+      };
+    },
+  };
+}
+
+test('agent context keeps the live note selection after focus returns to a terminal', t => {
+  const fixture = createSelectionBridge(t);
+  const before = fixture.refresh();
+  assert.equal(before.selection?.text, 'selected text');
+  assert.equal(before.activeFile?.hasFocus, true);
+
+  fixture.focusTerminal();
+  const afterFocus = fixture.refresh();
+  assert.deepEqual(afterFocus.selection, before.selection);
+  assert.equal(afterFocus.activeFile?.vaultPath, 'notes/demo.md');
+  assert.equal(afterFocus.activeFile?.hasFocus, false);
+
+  fixture.notes[0].state.text = 'updated text';
+  fixture.notes[0].state.to = 12;
+  assert.equal(fixture.refresh().selection?.text, 'updated text');
+  assert.deepEqual(fixture.refresh().selection?.to, { line: 0, ch: 12, offset: 12 });
+});
+
+test('agent context respects an explicitly cleared selection after terminal focus', t => {
+  const fixture = createSelectionBridge(t);
+  fixture.notes[0].state.text = '';
+  fixture.notes[0].state.from = 4;
+  fixture.notes[0].state.to = 4;
+  fixture.focusTerminal();
+
+  const snapshot = fixture.refresh();
+  assert.equal(snapshot.selection?.text, '');
+  assert.equal(snapshot.selection?.isEmpty, true);
+  assert.deepEqual(snapshot.selection?.from, snapshot.selection?.to);
+});
+
+test('agent context follows the new note when focus returns to a terminal before the next poll', t => {
+  const fixture = createSelectionBridge(t, ['notes/demo.md', 'notes/other.md']);
+  fixture.notes[1].state.text = 'other selection';
+  fixture.notes[1].state.to = 15;
+  fixture.focusNote(1);
+  fixture.focusTerminal();
+
+  const snapshot = fixture.refresh();
+  assert.equal(snapshot.activeFile?.vaultPath, 'notes/other.md');
+  assert.equal(snapshot.selection?.text, 'other selection');
+});
+
+test('agent context uses the last focused editor when the same note is open in two panes', t => {
+  const fixture = createSelectionBridge(t, ['notes/demo.md', 'notes/demo.md']);
+  fixture.notes[1].state.text = 'second selection';
+  fixture.notes[1].state.to = 16;
+  fixture.focusNote(1);
+  fixture.focusTerminal();
+
+  assert.equal(fixture.refresh().selection?.text, 'second selection');
+});
+
+test('agent context drops the selection once its note view has closed', t => {
+  const fixture = createSelectionBridge(t);
+  fixture.focusTerminal();
+  fixture.closeNote(0);
+
+  assert.equal(fixture.refresh().selection, null);
 });

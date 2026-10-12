@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve the live note selection in `obsidian-context.json` when focus returns to a Termy terminal, including split panes showing the same note. Clear the selection when its note view closes.
+
 ## [1.5.1] - 2026-10-10
 
 Focus: **AI launcher installation and version diagnostics, Hermes / Pi / dsh-TUI integration, a public terminal API, and fixes for session recovery, keyboard input, and native server reliability**. This release includes changes since `1.4.1` and requires Obsidian `1.8.7` or later.

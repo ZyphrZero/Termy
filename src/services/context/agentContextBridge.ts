@@ -86,6 +86,7 @@ export class AgentContextBridge {
   private readonly pathToFileURL: UrlModule["pathToFileURL"];
 
   private lastSerializedSnapshotState = "";
+  private lastActiveEditor: Editor | null = null;
   private pollTimer: number | null = null;
   private refreshTimer: number | null = null;
   private started = false;
@@ -109,9 +110,8 @@ export class AgentContextBridge {
     this.refreshSnapshot(true);
 
     this.eventRefs.push(
-      this.app.workspace.on("active-leaf-change", () =>
-        this.scheduleRefreshSnapshot(),
-      ),
+      // Capture the editor before a rapid note-to-terminal switch loses it.
+      this.app.workspace.on("active-leaf-change", () => this.refreshSnapshot()),
       this.app.workspace.on("file-open", () => this.scheduleRefreshSnapshot()),
       this.app.workspace.on("layout-change", () =>
         this.scheduleRefreshSnapshot(),
@@ -152,6 +152,7 @@ export class AgentContextBridge {
     }
     this.eventRefs.length = 0;
 
+    this.lastActiveEditor = null;
     this.started = false;
   }
 
@@ -291,10 +292,21 @@ export class AgentContextBridge {
       };
     };
 
-    return {
-      editor: workspace.activeEditor?.editor ?? null,
-      file: workspace.activeEditor?.file ?? this.app.workspace.getActiveFile(),
-    };
+    const file = workspace.activeEditor?.file ?? workspace.getActiveFile();
+    const markdownViews = file
+      ? workspace.getLeavesOfType("markdown")
+          .map((leaf) => leaf.view as MarkdownView)
+          .filter((view) => view.file?.path === file.path)
+      : [];
+
+    // Terminal focus clears activeEditor, but the open note retains its live
+    // selection. Prefer the last focused editor when the same note has splits.
+    const editor = workspace.activeEditor?.editor ??
+      markdownViews.find((view) => view.editor === this.lastActiveEditor)?.editor ??
+      markdownViews[0]?.editor ?? null;
+    this.lastActiveEditor = editor;
+
+    return { editor, file };
   }
 
   private getOpenFiles(): OpenFileContext[] {
