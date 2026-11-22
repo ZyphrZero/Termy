@@ -25,6 +25,7 @@ import {
 } from './claudeCodeTuiSupport';
 import { ClaudeCodeSessionState } from './claudeCodeSessionState';
 import { TerminalTitleState } from './terminalTitleState';
+import { installCanvasFontCompat } from './canvasFontCompat';
 import { resolveTerminalContextMenuAction } from './terminalContextMenuRouter';
 import {
   extractCmdCwd,
@@ -1027,6 +1028,10 @@ export class TerminalInstance {
     this.detach();
     this.containerEl = container;
     this.hostWindow = containerWindow;
+
+    // Chromium 150 rejects canvas font strings with leading whitespace, which xterm.js emits for
+    // non-italic glyphs. Patch the realm of this container before xterm paints. See issue #32.
+    installCanvasFontCompat(containerWindow);
 
     try {
       if (this.xterm.element) {
