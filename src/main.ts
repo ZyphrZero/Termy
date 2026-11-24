@@ -30,7 +30,10 @@ import {
   getAlwaysOnTopTerminalMenuState,
 } from './services/terminal/alwaysOnTopTerminalDisplay';
 import { getLeafForTerminalRoute } from './services/terminal/terminalLeafRouting';
-import { installCanvasFontCompat } from './services/terminal/canvasFontCompat';
+import {
+  installCanvasFontCompat,
+  uninstallCanvasFontCompat,
+} from './services/terminal/canvasFontCompat';
 import {
   AI_LAUNCHER_CATALOG,
   getAiLauncherEntry,
@@ -242,7 +245,15 @@ export default class TerminalPlugin extends Plugin {
   async onload() {
     // Chromium 150 rejects canvas font strings with leading whitespace, which xterm.js emits for
     // non-italic glyphs and renders as tiny text inside full-size cells. See issue #32.
-    installCanvasFontCompat();
+    installCanvasFontCompat(window);
+    this.register(() => {
+      uninstallCanvasFontCompat();
+    });
+    this.registerEvent(
+      this.app.workspace.on('window-open', (_workspaceWindow, win) => {
+        installCanvasFontCompat(win);
+      }),
+    );
 
     // Initialize the i18n service
     i18n.initialize();
@@ -295,6 +306,12 @@ export default class TerminalPlugin extends Plugin {
 
     // Delay UI initialization until the layout is ready whenever possible
     this.app.workspace.onLayoutReady(() => {
+      this.app.workspace.iterateAllLeaves((leaf) => {
+        const leafWindow = leaf.view?.containerEl?.ownerDocument?.defaultView;
+        if (leafWindow) {
+          installCanvasFontCompat(leafWindow);
+        }
+      });
       this.initStatusBar();
       if (this.settings.visibility.showInNewTab) {
         this.registerNewTabTerminalAction();
