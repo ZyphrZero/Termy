@@ -7,10 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-11-24
+
 ### Fixed
 
 - Preserve the live note selection in `obsidian-context.json` when focus returns to a Termy terminal, including split panes showing the same note. Clear the selection when its note view closes.
-- Restore terminal glyphs on Obsidian installers that ship Electron 43 / Chromium 150. The canvas font parser rejects the leading whitespace in the font strings xterm.js builds for non-italic glyphs, so non-italic text painted at the default 10px size inside correctly sized cells. See [#32](https://github.com/ZyphrZero/Termy/issues/32).
+- Restore terminal glyphs on Obsidian installers that ship Electron 43 / Chromium 150. The canvas font parser rejects the leading whitespace in the font strings xterm.js builds for non-italic glyphs, so non-italic text painted at the default 10px size inside correctly sized cells. Probe affected realms dynamically, cover pop-out windows, and restore original canvas prototypes on plugin unload. See [#32](https://github.com/ZyphrZero/Termy/issues/32).
+- Use Obsidian's cross-window `.instanceOf(Node)` check when refreshing terminal elements so focus restoration stays accurate in pop-out windows.
 
 ## [1.5.1] - 2026-10-10
 

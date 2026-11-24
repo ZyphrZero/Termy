@@ -1,6 +1,6 @@
 {
   "name": "termy",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "type": "module",
   "description": "Terminal emulator with split panes, reusable workflows, AI CLI context handoff, and zero setup. Powered by xterm.js and a bundled Rust PTY backend.",
   "main": "main.js",
