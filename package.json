@@ -43,7 +43,7 @@
     "esbuild": "^0.28.0",
     "esbuild-compress": "^2.0.2",
     "eslint": "^9.39.4",
-    "eslint-plugin-obsidianmd": "0.4.2",
+    "eslint-plugin-obsidianmd": "0.6.0",
     "globals": "^17.6.0",
     "obsidian": "^1.14.4",
     "tslib": "2.8.1",

@@ -434,7 +434,8 @@ export class TerminalInstance {
     }
 
     const activeElement = container.ownerDocument.activeElement;
-    const wasFocused = activeElement instanceof Node
+    const wasFocused = activeElement !== null
+      && activeElement.instanceOf(Node)
       && !!this.xterm.element?.contains(activeElement);
 
     this.disposeRenderer();
